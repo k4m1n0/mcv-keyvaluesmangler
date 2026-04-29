@@ -6,10 +6,13 @@
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+
     <VersionPrefix>1.0</VersionPrefix>
-    <VersionSuffix>$([System.DateTime]::Now.ToString("yy.Mdd"))</VersionSuffix>
-    <FileVersion>$(VersionPrefix).$(VersionSuffix)</FileVersion>
-    <Version>$(FileVersion)</Version>
+    <BuildYear>$([System.DateTime]::Now.ToString("yy"))</BuildYear>
+    <BuildDate>$([System.DateTime]::Now.ToString("MMdd"))</BuildDate>
+    <Version>$(VersionPrefix).$(BuildYear).$(BuildDate)</Version>
+    <FileVersion>$(Version)</FileVersion>
+    <AssemblyVersion>$(Version)</AssemblyVersion>
   </PropertyGroup>
 
   <ItemGroup>
