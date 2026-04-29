@@ -89,16 +89,15 @@ public partial class Form1
             && NullableEquals(a.ViewSlideRecoilIronsightUp, b.ViewSlideRecoilIronsightUp)
             && NullableEquals(a.ViewSlideRecoilIronsightRight, b.ViewSlideRecoilIronsightRight)
             && string.Equals(a.FireModes, b.FireModes)
-            && a.FireRate == b.FireRate
+            && IntNullableEquals(a.FireRate, b.FireRate)
             && NullableEquals(a.RangeModifier, b.RangeModifier)
             && string.Equals(a.ClipSize, b.ClipSize)
-            && a.DefaultClip == b.DefaultClip
-            && a.ExtraBulletChamber == b.ExtraBulletChamber
-            && a.BulletsPerShot == b.BulletsPerShot
+            && IntNullableEquals(a.ExtraBulletChamber, b.ExtraBulletChamber)
+            && IntNullableEquals(a.BulletsPerShot, b.BulletsPerShot)
             && NullableEquals(a.IronsightSpeedScale, b.IronsightSpeedScale)
             && NullableEquals(a.Weight, b.Weight)
-            && a.ZMBuyPrice == b.ZMBuyPrice
-            && a.ZMWeight == b.ZMWeight
+            && IntNullableEquals(a.ZMBuyPrice, b.ZMBuyPrice)
+            && IntNullableEquals(a.ZMWeight, b.ZMWeight)
             && NullableEquals(a.MetalPenetrationDepth, b.MetalPenetrationDepth)
             && NullableEquals(a.GlassPenetrationDepth, b.GlassPenetrationDepth)
             && NullableEquals(a.ConcretePenetrationDepth, b.ConcretePenetrationDepth)
@@ -120,10 +119,16 @@ public partial class Form1
 
     private static bool NullableEquals(double? a, double? b)
     {
-        if (!a.HasValue && !b.HasValue) return true;
-        if (!a.HasValue || !b.HasValue) return false;
-        return Math.Abs(a.Value - b.Value) < 0.0001;
+        double va = a ?? 0.0;
+        double vb = b ?? 0.0;
+        return Math.Abs(va - vb) < 0.0001;
         //容差比较 防止掉精度导致误判为未保存
+    }
+
+    private static bool IntNullableEquals(int? a, int? b)
+    {
+        if (!a.HasValue || !b.HasValue) return true;
+        return a.Value == b.Value;
     }
 
     private void SliderChangedL(object? sender, EventArgs e)
