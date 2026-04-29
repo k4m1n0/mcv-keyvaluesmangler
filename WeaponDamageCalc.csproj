@@ -6,7 +6,8 @@
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-
+    
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <Version>1.0.0+$([System.DateTime]::Now.ToString("yy.MMdd"))</Version>
     <FileVersion>1.0.0</FileVersion>
   </PropertyGroup>
