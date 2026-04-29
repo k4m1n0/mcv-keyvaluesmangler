@@ -13,7 +13,6 @@ namespace WeaponDamageCalc;
 
 public partial class Form1 : Form
 {
-    private static WeaponData? copiedWeaponData = null;
     private List<WeaponData> weapons = null!;
     private WeaponData? currentWeaponLeft = null;
     private WeaponData? currentWeaponRight = null;
@@ -21,7 +20,8 @@ public partial class Form1 : Form
     #nullable disable
 
     private bool updatingControls = false;
-    
+    private bool isDirty = false;
+
     private const double SliderMin = 0.0;
     private const double SliderMax = 5.0;
     private const double SliderStep = 0.01;
@@ -54,6 +54,7 @@ public partial class Form1 : Form
 
             this.KeyPreview = true;
             this.KeyDown += Form1_KeyDown;
+            this.FormClosing += Form1_FormClosing;
 
             this.Shown += (s, e) =>
             {
@@ -120,7 +121,7 @@ public partial class Form1 : Form
         btnCopy.Click += CopyLeftToRight;
         this.Controls.Add(btnCopy);
 
-        var btnCopyR = new Button { Text = "L<R", Location = new Point(cx + 240, 620), Size = new Size(60, 24) };
+        var btnCopyR = new Button { Text = "R>L", Location = new Point(cx + 240, 620), Size = new Size(60, 24) };
         btnCopyR.Click += CopyRightToLeft;
         this.Controls.Add(btnCopyR);
     }
@@ -128,11 +129,13 @@ public partial class Form1 : Form
     #nullable enable
     private void CopyLeftToRight(object? sender, EventArgs e)
     {
-        if (currentWeaponLeft != null)
+        if (currentWeaponLeft != null && currentWeaponRight != null)
         {
-            copiedWeaponData = new WeaponData();
-            SaveControlsToWeapon(copiedWeaponData, true);
-            LoadWeaponToControls(copiedWeaponData, false);
+            SaveControlsToWeapon(currentWeaponLeft, true);
+            // Copy left weapon data into right weapon data object
+            CopyWeaponDataFields(currentWeaponLeft, currentWeaponRight);
+            LoadWeaponToControls(currentWeaponRight, false);
+            isDirty = true;
             UpdateAllDamage();
             pnlSpread.Invalidate();
             pnlRecoil.Invalidate();
@@ -141,14 +144,80 @@ public partial class Form1 : Form
 
     private void CopyRightToLeft(object? sender, EventArgs e)
     {
-        if (currentWeaponRight != null)
+        if (currentWeaponRight != null && currentWeaponLeft != null)
         {
-            copiedWeaponData = new WeaponData();
-            SaveControlsToWeapon(copiedWeaponData, false);
-            LoadWeaponToControls(copiedWeaponData, true);
+            SaveControlsToWeapon(currentWeaponRight, false);
+            CopyWeaponDataFields(currentWeaponRight, currentWeaponLeft);
+            LoadWeaponToControls(currentWeaponLeft, true);
+            isDirty = true;
             UpdateAllDamage();
             pnlSpread.Invalidate();
             pnlRecoil.Invalidate();
+        }
+    }
+
+    private static void CopyWeaponDataFields(WeaponData src, WeaponData dst)
+    {
+        dst.DamageHeadMultiplier = src.DamageHeadMultiplier;
+        dst.DamageChestMultiplier = src.DamageChestMultiplier;
+        dst.DamageStomachMultiplier = src.DamageStomachMultiplier;
+        dst.DamageLegMultiplier = src.DamageLegMultiplier;
+        dst.DamageArmMultiplier = src.DamageArmMultiplier;
+        dst.BulletSpread = src.BulletSpread;
+        dst.BulletSpreadDegreesIronsighted = src.BulletSpreadDegreesIronsighted;
+        dst.BulletSpreadDegreesBipod = src.BulletSpreadDegreesBipod;
+        dst.BulletSpreadDegreesBipodIronsighted = src.BulletSpreadDegreesBipodIronsighted;
+        dst.ViewSlideRecoilUp = src.ViewSlideRecoilUp;
+        dst.ViewSlideRecoilRight = src.ViewSlideRecoilRight;
+        dst.ViewSlideRecoilIronsightUp = src.ViewSlideRecoilIronsightUp;
+        dst.ViewSlideRecoilIronsightRight = src.ViewSlideRecoilIronsightRight;
+        dst.FireModes = src.FireModes;
+        dst.FireRate = src.FireRate;
+        dst.RangeModifier = src.RangeModifier;
+        dst.ClipSize = src.ClipSize;
+        dst.DefaultClip = src.DefaultClip;
+        dst.ExtraBulletChamber = src.ExtraBulletChamber;
+        dst.BulletsPerShot = src.BulletsPerShot;
+        dst.IronsightSpeedScale = src.IronsightSpeedScale;
+        dst.Weight = src.Weight;
+        dst.ZMBuyPrice = src.ZMBuyPrice;
+        dst.ZMWeight = src.ZMWeight;
+        dst.MetalPenetrationDepth = src.MetalPenetrationDepth;
+        dst.GlassPenetrationDepth = src.GlassPenetrationDepth;
+        dst.ConcretePenetrationDepth = src.ConcretePenetrationDepth;
+        dst.WoodPenetrationDepth = src.WoodPenetrationDepth;
+        dst.OtherPenetrationDepth = src.OtherPenetrationDepth;
+        dst.MetalDamageModifier = src.MetalDamageModifier;
+        dst.GlassDamageModifier = src.GlassDamageModifier;
+        dst.ConcreteDamageModifier = src.ConcreteDamageModifier;
+        dst.WoodDamageModifier = src.WoodDamageModifier;
+        dst.OtherDamageModifier = src.OtherDamageModifier;
+        dst.CrouchSpreadMultiplier = src.CrouchSpreadMultiplier;
+        dst.ProneSpreadMultiplier = src.ProneSpreadMultiplier;
+        dst.StandMoveSpreadMultiplier = src.StandMoveSpreadMultiplier;
+        dst.SneakMoveSpreadMultiplier = src.SneakMoveSpreadMultiplier;
+        dst.CrouchMoveSpreadMultiplier = src.CrouchMoveSpreadMultiplier;
+        dst.JumpSpreadMultiplier = src.JumpSpreadMultiplier;
+        dst.DamageGeneric = src.DamageGeneric;
+        // Copy script-relevant fields for save
+        dst.FireModes = src.FireModes;
+        dst.PrimaryAmmo = src.PrimaryAmmo;
+    }
+
+    private void Form1_FormClosing(object? sender, FormClosingEventArgs e)
+    {
+        if (isDirty)
+        {
+            var result = MessageBox.Show("Unsaved changes will be lost. Save now?",
+                "Unsaved Changes", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
+            if (result == DialogResult.Yes)
+            {
+                BtnSave_Click(this, EventArgs.Empty);
+            }
+            else if (result == DialogResult.Cancel)
+            {
+                e.Cancel = true;
+            }
         }
     }
 

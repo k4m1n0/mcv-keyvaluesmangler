@@ -1,3 +1,5 @@
+using System;
+using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using WeaponDamageCalc.Models;
 
@@ -21,11 +23,12 @@ public partial class Form1
         double vest = chkVestL.Checked ? ((currentWeaponLeft.BulletsPerShot ?? 1) > 1 ? 0.8 : 0.9) : 1.0;
         int rpm = currentWeaponLeft.FireRate ?? 600;
         int pellets = currentWeaponLeft.BulletsPerShot ?? 1;
-        UpdateDamageLabel(lblHeadDmgL, bd * hm * pellets, 100, rpm);
-        UpdateDamageLabel(lblChestDmgL, bd * cm * vest * pellets, 100, rpm);
-        UpdateDamageLabel(lblStomachDmgL, bd * sm * vest * pellets, 100, rpm);
-        UpdateDamageLabel(lblLegDmgL, bd * lm * pellets, 100, rpm);
-        UpdateDamageLabel(lblArmDmgL, bd * am * pellets, 100, rpm);
+        double burstDelay = ParseBurstDelay(currentWeaponLeft.FireModes);
+        UpdateDamageLabel(lblHeadDmgL, bd * hm * pellets, 100, rpm, burstDelay);
+        UpdateDamageLabel(lblChestDmgL, bd * cm * vest * pellets, 100, rpm, burstDelay);
+        UpdateDamageLabel(lblStomachDmgL, bd * sm * vest * pellets, 100, rpm, burstDelay);
+        UpdateDamageLabel(lblLegDmgL, bd * lm * pellets, 100, rpm, burstDelay);
+        UpdateDamageLabel(lblArmDmgL, bd * am * pellets, 100, rpm, burstDelay);
     }
 
     private void UpdateRightDamage()
@@ -38,19 +41,46 @@ public partial class Form1
         double vest = chkVestR.Checked ? ((currentWeaponRight.BulletsPerShot ?? 1) > 1 ? 0.8 : 0.9) : 1.0;
         int rpm = currentWeaponRight.FireRate ?? 600;
         int pellets = currentWeaponRight.BulletsPerShot ?? 1;
-        UpdateDamageLabel(lblHeadDmgR, bd * hm * pellets, 100, rpm);
-        UpdateDamageLabel(lblChestDmgR, bd * cm * vest * pellets, 100, rpm);
-        UpdateDamageLabel(lblStomachDmgR, bd * sm * vest * pellets, 100, rpm);
-        UpdateDamageLabel(lblLegDmgR, bd * lm * pellets, 100, rpm);
-        UpdateDamageLabel(lblArmDmgR, bd * am * pellets, 100, rpm);
+        double burstDelay = ParseBurstDelay(currentWeaponRight.FireModes);
+        UpdateDamageLabel(lblHeadDmgR, bd * hm * pellets, 100, rpm, burstDelay);
+        UpdateDamageLabel(lblChestDmgR, bd * cm * vest * pellets, 100, rpm, burstDelay);
+        UpdateDamageLabel(lblStomachDmgR, bd * sm * vest * pellets, 100, rpm, burstDelay);
+        UpdateDamageLabel(lblLegDmgR, bd * lm * pellets, 100, rpm, burstDelay);
+        UpdateDamageLabel(lblArmDmgR, bd * am * pellets, 100, rpm, burstDelay);
     }
 
-    private void UpdateDamageLabel(Label lbl, double damage, double hp, int rpm)
+    private static double ParseBurstDelay(string? fireModes)
+    {
+        if (string.IsNullOrEmpty(fireModes)) return 0;
+        // Match "N Burst" pattern where N is the burst count
+        var m = Regex.Match(fireModes, @"(\d+)\s*Burst", RegexOptions.IgnoreCase);
+        return m.Success ? 0.5 : 0; // BurstDelay = 0.5s between bursts
+    }
+
+    private void UpdateDamageLabel(Label lbl, double damage, double hp, int rpm, double burstDelay)
     {
         if (damage <= 0 || rpm <= 0) { lbl.Text = "= 0.0 | ∞shots | ∞ms"; return; }
         int shots = (int)Math.Ceiling(hp / damage);
-        double ttkMs = (shots - 1) * 60000.0 / rpm;
+        double ttkMs;
+        if (burstDelay > 0)
+        {
+            // Burst fire: each burst has effective fire rate controlled by burst delay
+            // Treat each burst as one "shot cycle" with burstDelay between cycles
+            int bursts = shots; // one shot per burst cycle for simplicity
+            ttkMs = (bursts - 1) * burstDelay * 1000.0;
+        }
+        else
+        {
+            ttkMs = (shots - 1) * 60000.0 / rpm;
+        }
         lbl.Text = $"= {damage:F1} | {shots}shots | {ttkMs:F0}ms";
+    }
+
+    private static decimal ClampNud(decimal value, NumericUpDown nud)
+    {
+        if (value < nud.Minimum) return nud.Minimum;
+        if (value > nud.Maximum) return nud.Maximum;
+        return value;
     }
 
     private void LoadWeaponToControls(WeaponData w, bool isLeft)
@@ -62,41 +92,41 @@ public partial class Form1
             SetControlsValue(trkStomachL, nudStomachL, w.DamageStomachMultiplier ?? 1.0);
             SetControlsValue(trkLegL, nudLegL, w.DamageLegMultiplier ?? 1.0);
             SetControlsValue(trkArmL, nudArmL, w.DamageArmMultiplier ?? 1.0);
-            nudHipSpreadL.Value = (decimal)(w.BulletSpread ?? 1.0);
-            nudAdsSpreadL.Value = (decimal)(w.BulletSpreadDegreesIronsighted ?? 1.0);
-            nudBipodHipSpreadL.Value = (decimal)(w.BulletSpreadDegreesBipod ?? 0);
-            nudBipodAdsSpreadL.Value = (decimal)(w.BulletSpreadDegreesBipodIronsighted ?? 0);
-            nudHipRecoilUpL.Value = (decimal)(w.ViewSlideRecoilUp ?? 0);
-            nudHipRecoilRightL.Value = (decimal)(w.ViewSlideRecoilRight ?? 0);
-            nudAdsRecoilUpL.Value = (decimal)(w.ViewSlideRecoilIronsightUp ?? 0);
-            nudAdsRecoilRightL.Value = (decimal)(w.ViewSlideRecoilIronsightRight ?? 0);
+            nudHipSpreadL.Value = ClampNud((decimal)(w.BulletSpread ?? 1.0), nudHipSpreadL);
+            nudAdsSpreadL.Value = ClampNud((decimal)(w.BulletSpreadDegreesIronsighted ?? 1.0), nudAdsSpreadL);
+            nudBipodHipSpreadL.Value = ClampNud((decimal)(w.BulletSpreadDegreesBipod ?? 0), nudBipodHipSpreadL);
+            nudBipodAdsSpreadL.Value = ClampNud((decimal)(w.BulletSpreadDegreesBipodIronsighted ?? 0), nudBipodAdsSpreadL);
+            nudHipRecoilUpL.Value = ClampNud((decimal)(w.ViewSlideRecoilUp ?? 0), nudHipRecoilUpL);
+            nudHipRecoilRightL.Value = ClampNud((decimal)(w.ViewSlideRecoilRight ?? 0), nudHipRecoilRightL);
+            nudAdsRecoilUpL.Value = ClampNud((decimal)(w.ViewSlideRecoilIronsightUp ?? 0), nudAdsRecoilUpL);
+            nudAdsRecoilRightL.Value = ClampNud((decimal)(w.ViewSlideRecoilIronsightRight ?? 0), nudAdsRecoilRightL);
             txtFireModesL.Text = w.FireModes ?? "";
-            nudFireRateL.Value = w.FireRate ?? 0;
-            nudRangeModifierL.Value = (decimal)(w.RangeModifier ?? 1.0);
+            nudFireRateL.Value = ClampNud(w.FireRate ?? 0, nudFireRateL);
+            nudRangeModifierL.Value = ClampNud((decimal)(w.RangeModifier ?? 1.0), nudRangeModifierL);
             txtCapacityL.Text = w.ClipSize ?? w.DefaultClip?.ToString() ?? "";
-            nudExtraBulletChamberL.Value = w.ExtraBulletChamber ?? 0;
-            nudBulletsPerShotL.Value = w.BulletsPerShot ?? 1;
-            nudIronsightSpeedScaleL.Value = (decimal)(w.IronsightSpeedScale ?? 1.0);
-            nudWeightL.Value = (decimal)(w.Weight ?? 0);
-            nudZMBuyPriceL.Value = w.ZMBuyPrice ?? 0;
-            nudZMWeightL.Value = w.ZMWeight ?? 0;
-            nudMetalPenL.Value = (decimal)(w.MetalPenetrationDepth ?? 0);
-            nudGlassPenL.Value = (decimal)(w.GlassPenetrationDepth ?? 0);
-            nudConcretePenL.Value = (decimal)(w.ConcretePenetrationDepth ?? 0);
-            nudWoodPenL.Value = (decimal)(w.WoodPenetrationDepth ?? 0);
-            nudOtherPenL.Value = (decimal)(w.OtherPenetrationDepth ?? 0);
-            nudMetalDmgModL.Value = (decimal)(w.MetalDamageModifier ?? 1.0);
-            nudGlassDmgModL.Value = (decimal)(w.GlassDamageModifier ?? 1.0);
-            nudConcreteDmgModL.Value = (decimal)(w.ConcreteDamageModifier ?? 1.0);
-            nudWoodDmgModL.Value = (decimal)(w.WoodDamageModifier ?? 1.0);
-            nudOtherDmgModL.Value = (decimal)(w.OtherDamageModifier ?? 1.0);
-            nudCrouchSpreadL.Value = (decimal)(w.CrouchSpreadMultiplier ?? 0);
-            nudProneSpreadL.Value = (decimal)(w.ProneSpreadMultiplier ?? 0);
-            nudStandMoveSpreadL.Value = (decimal)(w.StandMoveSpreadMultiplier ?? 0);
-            nudSneakMoveSpreadL.Value = (decimal)(w.SneakMoveSpreadMultiplier ?? 0);
-            nudCrouchMoveSpreadL.Value = (decimal)(w.CrouchMoveSpreadMultiplier ?? 0);
-            nudJumpSpreadL.Value = (decimal)(w.JumpSpreadMultiplier ?? 0);
-            nudDamageGenericL.Value = (decimal)(w.DamageGeneric ?? 0);
+            nudExtraBulletChamberL.Value = ClampNud(w.ExtraBulletChamber ?? 0, nudExtraBulletChamberL);
+            nudBulletsPerShotL.Value = ClampNud(w.BulletsPerShot ?? 1, nudBulletsPerShotL);
+            nudIronsightSpeedScaleL.Value = ClampNud((decimal)(w.IronsightSpeedScale ?? 1.0), nudIronsightSpeedScaleL);
+            nudWeightL.Value = ClampNud((decimal)(w.Weight ?? 0), nudWeightL);
+            nudZMBuyPriceL.Value = ClampNud(w.ZMBuyPrice ?? 0, nudZMBuyPriceL);
+            nudZMWeightL.Value = ClampNud(w.ZMWeight ?? 0, nudZMWeightL);
+            nudMetalPenL.Value = ClampNud((decimal)(w.MetalPenetrationDepth ?? 0), nudMetalPenL);
+            nudGlassPenL.Value = ClampNud((decimal)(w.GlassPenetrationDepth ?? 0), nudGlassPenL);
+            nudConcretePenL.Value = ClampNud((decimal)(w.ConcretePenetrationDepth ?? 0), nudConcretePenL);
+            nudWoodPenL.Value = ClampNud((decimal)(w.WoodPenetrationDepth ?? 0), nudWoodPenL);
+            nudOtherPenL.Value = ClampNud((decimal)(w.OtherPenetrationDepth ?? 0), nudOtherPenL);
+            nudMetalDmgModL.Value = ClampNud((decimal)(w.MetalDamageModifier ?? 1.0), nudMetalDmgModL);
+            nudGlassDmgModL.Value = ClampNud((decimal)(w.GlassDamageModifier ?? 1.0), nudGlassDmgModL);
+            nudConcreteDmgModL.Value = ClampNud((decimal)(w.ConcreteDamageModifier ?? 1.0), nudConcreteDmgModL);
+            nudWoodDmgModL.Value = ClampNud((decimal)(w.WoodDamageModifier ?? 1.0), nudWoodDmgModL);
+            nudOtherDmgModL.Value = ClampNud((decimal)(w.OtherDamageModifier ?? 1.0), nudOtherDmgModL);
+            nudCrouchSpreadL.Value = ClampNud((decimal)(w.CrouchSpreadMultiplier ?? 0), nudCrouchSpreadL);
+            nudProneSpreadL.Value = ClampNud((decimal)(w.ProneSpreadMultiplier ?? 0), nudProneSpreadL);
+            nudStandMoveSpreadL.Value = ClampNud((decimal)(w.StandMoveSpreadMultiplier ?? 0), nudStandMoveSpreadL);
+            nudSneakMoveSpreadL.Value = ClampNud((decimal)(w.SneakMoveSpreadMultiplier ?? 0), nudSneakMoveSpreadL);
+            nudCrouchMoveSpreadL.Value = ClampNud((decimal)(w.CrouchMoveSpreadMultiplier ?? 0), nudCrouchMoveSpreadL);
+            nudJumpSpreadL.Value = ClampNud((decimal)(w.JumpSpreadMultiplier ?? 0), nudJumpSpreadL);
+            nudDamageGenericL.Value = ClampNud((decimal)(w.DamageGeneric ?? 0), nudDamageGenericL);
         }
         else
         {
@@ -105,41 +135,41 @@ public partial class Form1
             SetControlsValue(trkStomachR, nudStomachR, w.DamageStomachMultiplier ?? 1.0);
             SetControlsValue(trkLegR, nudLegR, w.DamageLegMultiplier ?? 1.0);
             SetControlsValue(trkArmR, nudArmR, w.DamageArmMultiplier ?? 1.0);
-            nudHipSpreadR.Value = (decimal)(w.BulletSpread ?? 1.0);
-            nudAdsSpreadR.Value = (decimal)(w.BulletSpreadDegreesIronsighted ?? 1.0);
-            nudBipodHipSpreadR.Value = (decimal)(w.BulletSpreadDegreesBipod ?? 0);
-            nudBipodAdsSpreadR.Value = (decimal)(w.BulletSpreadDegreesBipodIronsighted ?? 0);
-            nudHipRecoilUpR.Value = (decimal)(w.ViewSlideRecoilUp ?? 0);
-            nudHipRecoilRightR.Value = (decimal)(w.ViewSlideRecoilRight ?? 0);
-            nudAdsRecoilUpR.Value = (decimal)(w.ViewSlideRecoilIronsightUp ?? 0);
-            nudAdsRecoilRightR.Value = (decimal)(w.ViewSlideRecoilIronsightRight ?? 0);
+            nudHipSpreadR.Value = ClampNud((decimal)(w.BulletSpread ?? 1.0), nudHipSpreadR);
+            nudAdsSpreadR.Value = ClampNud((decimal)(w.BulletSpreadDegreesIronsighted ?? 1.0), nudAdsSpreadR);
+            nudBipodHipSpreadR.Value = ClampNud((decimal)(w.BulletSpreadDegreesBipod ?? 0), nudBipodHipSpreadR);
+            nudBipodAdsSpreadR.Value = ClampNud((decimal)(w.BulletSpreadDegreesBipodIronsighted ?? 0), nudBipodAdsSpreadR);
+            nudHipRecoilUpR.Value = ClampNud((decimal)(w.ViewSlideRecoilUp ?? 0), nudHipRecoilUpR);
+            nudHipRecoilRightR.Value = ClampNud((decimal)(w.ViewSlideRecoilRight ?? 0), nudHipRecoilRightR);
+            nudAdsRecoilUpR.Value = ClampNud((decimal)(w.ViewSlideRecoilIronsightUp ?? 0), nudAdsRecoilUpR);
+            nudAdsRecoilRightR.Value = ClampNud((decimal)(w.ViewSlideRecoilIronsightRight ?? 0), nudAdsRecoilRightR);
             txtFireModesR.Text = w.FireModes ?? "";
-            nudFireRateR.Value = w.FireRate ?? 0;
-            nudRangeModifierR.Value = (decimal)(w.RangeModifier ?? 1.0);
+            nudFireRateR.Value = ClampNud(w.FireRate ?? 0, nudFireRateR);
+            nudRangeModifierR.Value = ClampNud((decimal)(w.RangeModifier ?? 1.0), nudRangeModifierR);
             txtCapacityR.Text = w.ClipSize ?? w.DefaultClip?.ToString() ?? "";
-            nudExtraBulletChamberR.Value = w.ExtraBulletChamber ?? 0;
-            nudBulletsPerShotR.Value = w.BulletsPerShot ?? 1;
-            nudIronsightSpeedScaleR.Value = (decimal)(w.IronsightSpeedScale ?? 1.0);
-            nudWeightR.Value = (decimal)(w.Weight ?? 0);
-            nudZMBuyPriceR.Value = w.ZMBuyPrice ?? 0;
-            nudZMWeightR.Value = w.ZMWeight ?? 0;
-            nudMetalPenR.Value = (decimal)(w.MetalPenetrationDepth ?? 0);
-            nudGlassPenR.Value = (decimal)(w.GlassPenetrationDepth ?? 0);
-            nudConcretePenR.Value = (decimal)(w.ConcretePenetrationDepth ?? 0);
-            nudWoodPenR.Value = (decimal)(w.WoodPenetrationDepth ?? 0);
-            nudOtherPenR.Value = (decimal)(w.OtherPenetrationDepth ?? 0);
-            nudMetalDmgModR.Value = (decimal)(w.MetalDamageModifier ?? 1.0);
-            nudGlassDmgModR.Value = (decimal)(w.GlassDamageModifier ?? 1.0);
-            nudConcreteDmgModR.Value = (decimal)(w.ConcreteDamageModifier ?? 1.0);
-            nudWoodDmgModR.Value = (decimal)(w.WoodDamageModifier ?? 1.0);
-            nudOtherDmgModR.Value = (decimal)(w.OtherDamageModifier ?? 1.0);
-            nudCrouchSpreadR.Value = (decimal)(w.CrouchSpreadMultiplier ?? 0);
-            nudProneSpreadR.Value = (decimal)(w.ProneSpreadMultiplier ?? 0);
-            nudStandMoveSpreadR.Value = (decimal)(w.StandMoveSpreadMultiplier ?? 0);
-            nudSneakMoveSpreadR.Value = (decimal)(w.SneakMoveSpreadMultiplier ?? 0);
-            nudCrouchMoveSpreadR.Value = (decimal)(w.CrouchMoveSpreadMultiplier ?? 0);
-            nudJumpSpreadR.Value = (decimal)(w.JumpSpreadMultiplier ?? 0);
-            nudDamageGenericR.Value = (decimal)(w.DamageGeneric ?? 0);
+            nudExtraBulletChamberR.Value = ClampNud(w.ExtraBulletChamber ?? 0, nudExtraBulletChamberR);
+            nudBulletsPerShotR.Value = ClampNud(w.BulletsPerShot ?? 1, nudBulletsPerShotR);
+            nudIronsightSpeedScaleR.Value = ClampNud((decimal)(w.IronsightSpeedScale ?? 1.0), nudIronsightSpeedScaleR);
+            nudWeightR.Value = ClampNud((decimal)(w.Weight ?? 0), nudWeightR);
+            nudZMBuyPriceR.Value = ClampNud(w.ZMBuyPrice ?? 0, nudZMBuyPriceR);
+            nudZMWeightR.Value = ClampNud(w.ZMWeight ?? 0, nudZMWeightR);
+            nudMetalPenR.Value = ClampNud((decimal)(w.MetalPenetrationDepth ?? 0), nudMetalPenR);
+            nudGlassPenR.Value = ClampNud((decimal)(w.GlassPenetrationDepth ?? 0), nudGlassPenR);
+            nudConcretePenR.Value = ClampNud((decimal)(w.ConcretePenetrationDepth ?? 0), nudConcretePenR);
+            nudWoodPenR.Value = ClampNud((decimal)(w.WoodPenetrationDepth ?? 0), nudWoodPenR);
+            nudOtherPenR.Value = ClampNud((decimal)(w.OtherPenetrationDepth ?? 0), nudOtherPenR);
+            nudMetalDmgModR.Value = ClampNud((decimal)(w.MetalDamageModifier ?? 1.0), nudMetalDmgModR);
+            nudGlassDmgModR.Value = ClampNud((decimal)(w.GlassDamageModifier ?? 1.0), nudGlassDmgModR);
+            nudConcreteDmgModR.Value = ClampNud((decimal)(w.ConcreteDamageModifier ?? 1.0), nudConcreteDmgModR);
+            nudWoodDmgModR.Value = ClampNud((decimal)(w.WoodDamageModifier ?? 1.0), nudWoodDmgModR);
+            nudOtherDmgModR.Value = ClampNud((decimal)(w.OtherDamageModifier ?? 1.0), nudOtherDmgModR);
+            nudCrouchSpreadR.Value = ClampNud((decimal)(w.CrouchSpreadMultiplier ?? 0), nudCrouchSpreadR);
+            nudProneSpreadR.Value = ClampNud((decimal)(w.ProneSpreadMultiplier ?? 0), nudProneSpreadR);
+            nudStandMoveSpreadR.Value = ClampNud((decimal)(w.StandMoveSpreadMultiplier ?? 0), nudStandMoveSpreadR);
+            nudSneakMoveSpreadR.Value = ClampNud((decimal)(w.SneakMoveSpreadMultiplier ?? 0), nudSneakMoveSpreadR);
+            nudCrouchMoveSpreadR.Value = ClampNud((decimal)(w.CrouchMoveSpreadMultiplier ?? 0), nudCrouchMoveSpreadR);
+            nudJumpSpreadR.Value = ClampNud((decimal)(w.JumpSpreadMultiplier ?? 0), nudJumpSpreadR);
+            nudDamageGenericR.Value = ClampNud((decimal)(w.DamageGeneric ?? 0), nudDamageGenericR);
         }
     }
 

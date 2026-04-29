@@ -9,6 +9,13 @@ public partial class Form1
 {
     private void WeaponSelectedL(object? sender, EventArgs e)
     {
+        if (isDirty)
+        {
+            var result = MessageBox.Show("Unsaved changes. Switch weapon?",
+                "Unsaved Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+            if (result != DialogResult.Yes) return;
+        }
+        isDirty = false;
         if (cmbWeaponsL.SelectedItem is WeaponData w)
         {
             currentWeaponLeft = w;
@@ -21,6 +28,13 @@ public partial class Form1
 
     private void WeaponSelectedR(object? sender, EventArgs e)
     {
+        if (isDirty)
+        {
+            var result = MessageBox.Show("Unsaved changes. Switch weapon?",
+                "Unsaved Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+            if (result != DialogResult.Yes) return;
+        }
+        isDirty = false;
         if (cmbWeaponsR.SelectedItem is WeaponData w)
         {
             currentWeaponRight = w;
@@ -38,6 +52,7 @@ public partial class Form1
         if (sender is TrackBar tb && tb.Tag is NumericUpDown nud)
             nud.Value = Math.Round((decimal)(tb.Value * SliderStep), 2);
         updatingControls = false;
+        isDirty = true;
         UpdateAllDamage();
     }
 
@@ -48,6 +63,7 @@ public partial class Form1
         if (sender is TrackBar tb && tb.Tag is NumericUpDown nud)
             nud.Value = Math.Round((decimal)(tb.Value * SliderStep), 2);
         updatingControls = false;
+        isDirty = true;
         UpdateAllDamage();
     }
 
@@ -63,6 +79,7 @@ public partial class Form1
             nud.Value = Math.Round(nud.Value, 2);
         }
         updatingControls = false;
+        isDirty = true;
         UpdateAllDamage();
     }
 
@@ -78,13 +95,35 @@ public partial class Form1
             nud.Value = Math.Round(nud.Value, 2);
         }
         updatingControls = false;
+        isDirty = true;
         UpdateAllDamage();
     }
 
-    private void SpreadRecoilChangedL(object? sender, EventArgs e) { pnlSpread.Invalidate(); pnlRecoil.Invalidate(); }
-    private void SpreadRecoilChangedR(object? sender, EventArgs e) { pnlSpread.Invalidate(); pnlRecoil.Invalidate(); }
-    private void RangeModifierChangedL(object? sender, EventArgs e) => UpdateAllDamage();
-    private void RangeModifierChangedR(object? sender, EventArgs e) => UpdateAllDamage();
+    private void SpreadRecoilChangedL(object? sender, EventArgs e)
+    {
+        isDirty = true;
+        pnlSpread.Invalidate();
+        pnlRecoil.Invalidate();
+    }
+
+    private void SpreadRecoilChangedR(object? sender, EventArgs e)
+    {
+        isDirty = true;
+        pnlSpread.Invalidate();
+        pnlRecoil.Invalidate();
+    }
+
+    private void RangeModifierChangedL(object? sender, EventArgs e)
+    {
+        isDirty = true;
+        UpdateAllDamage();
+    }
+
+    private void RangeModifierChangedR(object? sender, EventArgs e)
+    {
+        isDirty = true;
+        UpdateAllDamage();
+    }
 
     private async void BtnSave_Click(object? sender, EventArgs e)
     {
@@ -93,6 +132,7 @@ public partial class Form1
         try
         {
             CsvService.SaveWeapons(Path.Combine(AppContext.BaseDirectory, "weapons.csv"), weapons);
+            isDirty = false;
             var originalTitle = this.Text;
             this.Text = "Saved!";
             await Task.Delay(1145);
@@ -176,6 +216,32 @@ public partial class Form1
         {
             e.SuppressKeyPress = true;
             BtnSave_Click(sender, e);
+        }
+        else if (e.Control && e.KeyCode == Keys.D1)
+        {
+            e.SuppressKeyPress = true;
+            cmbWeaponsL.Focus();
+            cmbWeaponsL.DroppedDown = true;
+        }
+        else if (e.Control && e.KeyCode == Keys.D2)
+        {
+            e.SuppressKeyPress = true;
+            cmbWeaponsR.Focus();
+            cmbWeaponsR.DroppedDown = true;
+        }
+        else if (e.Control && e.KeyCode == Keys.Tab)
+        {
+            e.SuppressKeyPress = true;
+            if (cmbWeaponsL.Focused)
+            {
+                cmbWeaponsR.Focus();
+                cmbWeaponsR.DroppedDown = true;
+            }
+            else
+            {
+                cmbWeaponsL.Focus();
+                cmbWeaponsL.DroppedDown = true;
+            }
         }
     }
 }

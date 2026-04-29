@@ -63,25 +63,25 @@ public partial class Form1
         if (isLeft)
         {
             trkDistanceL = new TrackBar { Location = new Point(30, 16), Size = new Size(330, 35), Minimum = 0, Maximum = 100 };
-            trkDistanceL.ValueChanged += (s, e) => { nudDistanceL.Value = trkDistanceL.Value; UpdateAllDamage(); };
+            trkDistanceL.ValueChanged += (s, e) => { nudDistanceL.Value = trkDistanceL.Value; isDirty = true; UpdateAllDamage(); };
             gb.Controls.Add(trkDistanceL);
             nudDistanceL = new NumericUpDown { Location = new Point(365, 16), Size = new Size(45, 22), DecimalPlaces = 0, Increment = 1, Minimum = 0, Maximum = 100 };
-            nudDistanceL.ValueChanged += (s, e) => { trkDistanceL.Value = (int)nudDistanceL.Value; UpdateAllDamage(); };
+            nudDistanceL.ValueChanged += (s, e) => { trkDistanceL.Value = Math.Max(0, Math.Min(100, (int)nudDistanceL.Value)); isDirty = true; UpdateAllDamage(); };
             gb.Controls.Add(nudDistanceL);
             chkVestL = new CheckBox { Text = "Vest", Location = new Point(420, 18), Size = new Size(55, 22) };
-            chkVestL.CheckedChanged += (s, e) => UpdateAllDamage();
+            chkVestL.CheckedChanged += (s, e) => { isDirty = true; UpdateAllDamage(); };
             gb.Controls.Add(chkVestL);
         }
         else
         {
             trkDistanceR = new TrackBar { Location = new Point(30, 16), Size = new Size(330, 35), Minimum = 0, Maximum = 100 };
-            trkDistanceR.ValueChanged += (s, e) => { nudDistanceR.Value = trkDistanceR.Value; UpdateAllDamage(); };
+            trkDistanceR.ValueChanged += (s, e) => { nudDistanceR.Value = trkDistanceR.Value; isDirty = true; UpdateAllDamage(); };
             gb.Controls.Add(trkDistanceR);
             nudDistanceR = new NumericUpDown { Location = new Point(365, 16), Size = new Size(45, 22), DecimalPlaces = 0, Increment = 1, Minimum = 0, Maximum = 100 };
-            nudDistanceR.ValueChanged += (s, e) => { trkDistanceR.Value = (int)nudDistanceR.Value; UpdateAllDamage(); };
+            nudDistanceR.ValueChanged += (s, e) => { trkDistanceR.Value = Math.Max(0, Math.Min(100, (int)nudDistanceR.Value)); isDirty = true; UpdateAllDamage(); };
             gb.Controls.Add(nudDistanceR);
             chkVestR = new CheckBox { Text = "Vest", Location = new Point(420, 18), Size = new Size(55, 22) };
-            chkVestR.CheckedChanged += (s, e) => UpdateAllDamage();
+            chkVestR.CheckedChanged += (s, e) => { isDirty = true; UpdateAllDamage(); };
             gb.Controls.Add(chkVestR);
         }
         this.Controls.Add(gb);
@@ -203,7 +203,7 @@ public partial class Form1
             nudDamageGenericL = CreateNullableNumericRow(gb, "Dmg", 188, y, 999m);
             nudDamageGenericL.DecimalPlaces = 1;
             nudDamageGenericL.Increment = 1m;
-            nudDamageGenericL.ValueChanged += (s, e) => { currentWeaponLeft!.DamageGeneric = (double)nudDamageGenericL.Value; UpdateAllDamage(); };
+            nudDamageGenericL.ValueChanged += (s, e) => { currentWeaponLeft!.DamageGeneric = (double)nudDamageGenericL.Value; isDirty = true; UpdateAllDamage(); };
         }
         else
         {
@@ -231,7 +231,7 @@ public partial class Form1
             nudDamageGenericR = CreateNullableNumericRow(gb, "Dmg", 188, y, 999m);
             nudDamageGenericR.DecimalPlaces = 1;
             nudDamageGenericR.Increment = 1m;
-            nudDamageGenericR.ValueChanged += (s, e) => { currentWeaponRight!.DamageGeneric = (double)nudDamageGenericR.Value; UpdateAllDamage(); };
+            nudDamageGenericR.ValueChanged += (s, e) => { currentWeaponRight!.DamageGeneric = (double)nudDamageGenericR.Value; isDirty = true; UpdateAllDamage(); };
         }
         this.Controls.Add(gb);
     }
