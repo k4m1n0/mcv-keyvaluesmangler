@@ -24,8 +24,8 @@ public partial class Form1
     private void InitRightPanel(List<WeaponData> weapons)
     {
         int x = 825;
-        this.Controls.Add(new Label { Text = "WeaponR", Location = new Point(x + 5, 8), Size = new Size(65, 20) });
-        cmbWeaponsR = new ComboBox { Location = new Point(x + 70, 6), Size = new Size(180, 23), AutoCompleteMode = AutoCompleteMode.SuggestAppend, AutoCompleteSource = AutoCompleteSource.ListItems, DisplayMember = "PrintName" };
+        this.Controls.Add(new Label { Text = "WeaponR", Location = new Point(x + 190, 8), Size = new Size(65, 20) });
+        cmbWeaponsR = new ComboBox { Location = new Point(x + 5, 6), Size = new Size(180, 23), AutoCompleteMode = AutoCompleteMode.SuggestAppend, AutoCompleteSource = AutoCompleteSource.ListItems, DisplayMember = "PrintName" };
         cmbWeaponsR.SelectedIndexChanged += WeaponSelectedR;
         this.Controls.Add(cmbWeaponsR);
 

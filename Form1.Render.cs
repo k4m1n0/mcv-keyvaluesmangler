@@ -109,14 +109,14 @@ public class PanelRenderer
         using var hipBrush = new SolidBrush(hipColor);
         using var bipodBrush = new SolidBrush(bipodColor);
         float y = rightY - 56;
-        g.DrawString("━ Hip", font, hipBrush,
-            rightX - g.MeasureString("━ Hip", font).Width, y);
-        g.DrawString("┅ ADS", font, hipBrush,
-            rightX - g.MeasureString("┅ ADS", font).Width, y + 14);
-        g.DrawString("━ Bipod", font, bipodBrush,
-            rightX - g.MeasureString("━ Bipod", font).Width, y + 28);
-        g.DrawString("┅ Bipod ADS", font, bipodBrush,
-            rightX - g.MeasureString("┅ Bipod ADS", font).Width, y + 42);
+        g.DrawString("Hip ━", font, hipBrush,
+            rightX - g.MeasureString("Hip ━", font).Width, y);
+        g.DrawString("ADS ┅", font, hipBrush,
+            rightX - g.MeasureString("ADS ┅", font).Width, y + 14);
+        g.DrawString("Bipod ━", font, bipodBrush,
+            rightX - g.MeasureString("Bipod ━", font).Width, y + 28);
+        g.DrawString("Bipod ADS ┅", font, bipodBrush,
+            rightX - g.MeasureString("Bipod ADS ┅", font).Width, y + 42);
     }
 
     private void DrawSector(Graphics g, int cx, int cy,

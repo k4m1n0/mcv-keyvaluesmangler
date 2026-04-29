@@ -120,7 +120,7 @@ public partial class Form1 : Form
         btnCopy.Click += CopyLeftToRight;
         this.Controls.Add(btnCopy);
 
-        var btnCopyR = new Button { Text = "R>L", Location = new Point(cx + 240, 620), Size = new Size(60, 24) };
+        var btnCopyR = new Button { Text = "L<R", Location = new Point(cx + 240, 620), Size = new Size(60, 24) };
         btnCopyR.Click += CopyRightToLeft;
         this.Controls.Add(btnCopyR);
     }
