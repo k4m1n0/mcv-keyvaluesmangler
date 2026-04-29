@@ -7,12 +7,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
 
-    <VersionPrefix>1.0</VersionPrefix>
-    <BuildYear>$([System.DateTime]::Now.ToString("yy"))</BuildYear>
-    <BuildDate>$([System.DateTime]::Now.ToString("MMdd"))</BuildDate>
-    <Version>$(VersionPrefix).$(BuildYear).$(BuildDate)</Version>
-    <FileVersion>$(Version)</FileVersion>
-    <AssemblyVersion>$(Version)</AssemblyVersion>
+    <Version>1.0.0+$([System.DateTime]::Now.ToString("yy.MMdd"))</Version>
+    <FileVersion>1.0.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
