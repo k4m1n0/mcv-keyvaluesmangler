@@ -1,5 +1,4 @@
 using System;
-using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using WeaponDamageCalc.Models;
 
@@ -19,16 +18,16 @@ public partial class Form1
         double hm = trkHeadL.Value * SliderStep, cm = trkChestL.Value * SliderStep, sm = trkStomachL.Value * SliderStep;
         double lm = trkLegL.Value * SliderStep, am = trkArmL.Value * SliderStep;
         double dist = trkDistanceL.Value, dg = currentWeaponLeft.DamageGeneric ?? 0, rm = (double)nudRangeModifierL.Value;
-        double bd = dg * Math.Pow(rm, dist / DistanceDivisor);
-        double vest = chkVestL.Checked ? ((currentWeaponLeft.BulletsPerShot ?? 1) > 1 ? 0.8 : 0.9) : 1.0;
+        double bd = dg * Math.Pow(rm, dist / DistanceDivisor);//基伤*衰减^(距离/9.525)
+        double vest = chkVestL.Checked ? ((currentWeaponLeft.BulletsPerShot ?? 1) > 1 ? 0.8 : 0.9) : 1.0;//普通0.9x 霰弹0.8x
         int rpm = currentWeaponLeft.FireRate ?? 600;
         int pellets = currentWeaponLeft.BulletsPerShot ?? 1;
-        double burstDelay = ParseBurstDelay(currentWeaponLeft.FireModes);
-        UpdateDamageLabel(lblHeadDmgL, bd * hm * pellets, 100, rpm, burstDelay);
-        UpdateDamageLabel(lblChestDmgL, bd * cm * vest * pellets, 100, rpm, burstDelay);
-        UpdateDamageLabel(lblStomachDmgL, bd * sm * vest * pellets, 100, rpm, burstDelay);
-        UpdateDamageLabel(lblLegDmgL, bd * lm * pellets, 100, rpm, burstDelay);
-        UpdateDamageLabel(lblArmDmgL, bd * am * pellets, 100, rpm, burstDelay);
+        var (burstCount, burstInterval) = ParseBurstInfo(currentWeaponLeft.FireModes);
+        UpdateDamageLabel(lblHeadDmgL, bd * hm * pellets, 100, rpm, burstCount, burstInterval);
+        UpdateDamageLabel(lblChestDmgL, bd * cm * vest * pellets, 100, rpm, burstCount, burstInterval);
+        UpdateDamageLabel(lblStomachDmgL, bd * sm * vest * pellets, 100, rpm, burstCount, burstInterval);
+        UpdateDamageLabel(lblLegDmgL, bd * lm * pellets, 100, rpm, burstCount, burstInterval);
+        UpdateDamageLabel(lblArmDmgL, bd * am * pellets, 100, rpm, burstCount, burstInterval);
     }
 
     private void UpdateRightDamage()
@@ -41,33 +40,31 @@ public partial class Form1
         double vest = chkVestR.Checked ? ((currentWeaponRight.BulletsPerShot ?? 1) > 1 ? 0.8 : 0.9) : 1.0;
         int rpm = currentWeaponRight.FireRate ?? 600;
         int pellets = currentWeaponRight.BulletsPerShot ?? 1;
-        double burstDelay = ParseBurstDelay(currentWeaponRight.FireModes);
-        UpdateDamageLabel(lblHeadDmgR, bd * hm * pellets, 100, rpm, burstDelay);
-        UpdateDamageLabel(lblChestDmgR, bd * cm * vest * pellets, 100, rpm, burstDelay);
-        UpdateDamageLabel(lblStomachDmgR, bd * sm * vest * pellets, 100, rpm, burstDelay);
-        UpdateDamageLabel(lblLegDmgR, bd * lm * pellets, 100, rpm, burstDelay);
-        UpdateDamageLabel(lblArmDmgR, bd * am * pellets, 100, rpm, burstDelay);
+        var (burstCount, burstInterval) = ParseBurstInfo(currentWeaponRight.FireModes);
+        UpdateDamageLabel(lblHeadDmgR, bd * hm * pellets, 100, rpm, burstCount, burstInterval);
+        UpdateDamageLabel(lblChestDmgR, bd * cm * vest * pellets, 100, rpm, burstCount, burstInterval);
+        UpdateDamageLabel(lblStomachDmgR, bd * sm * vest * pellets, 100, rpm, burstCount, burstInterval);
+        UpdateDamageLabel(lblLegDmgR, bd * lm * pellets, 100, rpm, burstCount, burstInterval);
+        UpdateDamageLabel(lblArmDmgR, bd * am * pellets, 100, rpm, burstCount, burstInterval);
     }
 
-    private static double ParseBurstDelay(string? fireModes)
+    private static (int burstCount, double burstInterval) ParseBurstInfo(string? fireModes)
     {
-        if (string.IsNullOrEmpty(fireModes)) return 0;
-        // Match "N Burst" pattern where N is the burst count
-        var m = Regex.Match(fireModes, @"(\d+)\s*Burst", RegexOptions.IgnoreCase);
-        return m.Success ? 0.5 : 0; // BurstDelay = 0.5s between bursts
+        if (string.IsNullOrEmpty(fireModes)) return (0, 0);
+        if (fireModes.Contains("Burst", StringComparison.OrdinalIgnoreCase))
+            return (3, 1.0);//每个点射间隔1s
+        return (0, 0);
     }
 
-    private void UpdateDamageLabel(Label lbl, double damage, double hp, int rpm, double burstDelay)
+    private void UpdateDamageLabel(Label lbl, double damage, double hp, int rpm, int burstCount, double burstInterval)
     {
         if (damage <= 0 || rpm <= 0) { lbl.Text = "= 0.0 | ∞shots | ∞ms"; return; }
         int shots = (int)Math.Ceiling(hp / damage);
         double ttkMs;
-        if (burstDelay > 0)
+        if (burstCount > 0 && burstInterval > 0)
         {
-            // Burst fire: each burst has effective fire rate controlled by burst delay
-            // Treat each burst as one "shot cycle" with burstDelay between cycles
-            int bursts = shots; // one shot per burst cycle for simplicity
-            ttkMs = (bursts - 1) * burstDelay * 1000.0;
+            int bursts = (int)Math.Ceiling((double)shots / burstCount);
+            ttkMs = (bursts - 1) * burstInterval * 1000.0;
         }
         else
         {
@@ -77,6 +74,7 @@ public partial class Form1
     }
 
     private static decimal ClampNud(decimal value, NumericUpDown nud)
+    //防止数值超出范围抛异常
     {
         if (value < nud.Minimum) return nud.Minimum;
         if (value > nud.Maximum) return nud.Maximum;
@@ -87,7 +85,7 @@ public partial class Form1
     {
         if (isLeft)
         {
-            SetControlsValue(trkHeadL, nudHeadL, w.DamageHeadMultiplier ?? 1.0);
+            SetControlsValue(trkHeadL, nudHeadL, w.DamageHeadMultiplier ?? 1.0);//伤倍率走滑块 双向绑定 其余字段直接赋值
             SetControlsValue(trkChestL, nudChestL, w.DamageChestMultiplier ?? 1.0);
             SetControlsValue(trkStomachL, nudStomachL, w.DamageStomachMultiplier ?? 1.0);
             SetControlsValue(trkLegL, nudLegL, w.DamageLegMultiplier ?? 1.0);
@@ -202,7 +200,7 @@ public partial class Form1
             w.FireRate = (int)nudFireRateL.Value;
             w.RangeModifier = (double)nudRangeModifierL.Value;
             w.ClipSize = txtCapacityL.Text;
-            var clipParts = txtCapacityL.Text.Split('/');
+            var clipParts = txtCapacityL.Text.Split('/');//从字段拆分出DefaultClip 如30/120取30
             if (clipParts.Length > 0 && int.TryParse(clipParts[0], out int firstNum)) w.DefaultClip = firstNum;
             w.ExtraBulletChamber = (int)nudExtraBulletChamberL.Value;
             w.BulletsPerShot = (int)nudBulletsPerShotL.Value;

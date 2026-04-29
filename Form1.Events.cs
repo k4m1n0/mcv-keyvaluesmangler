@@ -9,13 +9,22 @@ public partial class Form1
 {
     private void WeaponSelectedL(object? sender, EventArgs e)
     {
-        if (isDirty)
+        if (initializing)
         {
-            var result = MessageBox.Show("Unsaved changes. Switch weapon?",
+            if (cmbWeaponsL.SelectedItem is WeaponData initW)
+            {
+                currentWeaponLeft = initW;
+                LoadWeaponToControls(initW, true);
+            }
+            return;
+            //初始化阶段直接加载不检查
+        }
+        if (currentWeaponLeft != null && HasUnsavedChanges(true))
+        {
+            var result = MessageBox.Show("Unsaved changes to left weapon. Discard?",
                 "Unsaved Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
             if (result != DialogResult.Yes) return;
         }
-        isDirty = false;
         if (cmbWeaponsL.SelectedItem is WeaponData w)
         {
             currentWeaponLeft = w;
@@ -28,13 +37,21 @@ public partial class Form1
 
     private void WeaponSelectedR(object? sender, EventArgs e)
     {
-        if (isDirty)
+        if (initializing)
         {
-            var result = MessageBox.Show("Unsaved changes. Switch weapon?",
+            if (cmbWeaponsR.SelectedItem is WeaponData initW)
+            {
+                currentWeaponRight = initW;
+                LoadWeaponToControls(initW, false);
+            }
+            return;
+        }
+        if (currentWeaponRight != null && HasUnsavedChanges(false))
+        {
+            var result = MessageBox.Show("Unsaved changes to right weapon. Discard?",
                 "Unsaved Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
             if (result != DialogResult.Yes) return;
         }
-        isDirty = false;
         if (cmbWeaponsR.SelectedItem is WeaponData w)
         {
             currentWeaponRight = w;
@@ -45,14 +62,77 @@ public partial class Form1
         }
     }
 
+    private bool HasUnsavedChanges(bool isLeft)
+    {
+        var original = isLeft ? currentWeaponLeft : currentWeaponRight;
+        if (original == null) return false;
+
+        var temp = new WeaponData();
+        SaveControlsToWeapon(temp, isLeft);
+        return !WeaponDataEquals(temp, original);
+        //控件值写入临时对象与原始武器逐字段比对
+    }
+
+    private static bool WeaponDataEquals(WeaponData a, WeaponData b)//双浮点比对容忍0.0001误差 防止SaveControlsToWeapon的SliderStep浮点往返造成假阳性
+    {
+        return NullableEquals(a.DamageHeadMultiplier, b.DamageHeadMultiplier)
+            && NullableEquals(a.DamageChestMultiplier, b.DamageChestMultiplier)
+            && NullableEquals(a.DamageStomachMultiplier, b.DamageStomachMultiplier)
+            && NullableEquals(a.DamageLegMultiplier, b.DamageLegMultiplier)
+            && NullableEquals(a.DamageArmMultiplier, b.DamageArmMultiplier)
+            && NullableEquals(a.BulletSpread, b.BulletSpread)
+            && NullableEquals(a.BulletSpreadDegreesIronsighted, b.BulletSpreadDegreesIronsighted)
+            && NullableEquals(a.BulletSpreadDegreesBipod, b.BulletSpreadDegreesBipod)
+            && NullableEquals(a.BulletSpreadDegreesBipodIronsighted, b.BulletSpreadDegreesBipodIronsighted)
+            && NullableEquals(a.ViewSlideRecoilUp, b.ViewSlideRecoilUp)
+            && NullableEquals(a.ViewSlideRecoilRight, b.ViewSlideRecoilRight)
+            && NullableEquals(a.ViewSlideRecoilIronsightUp, b.ViewSlideRecoilIronsightUp)
+            && NullableEquals(a.ViewSlideRecoilIronsightRight, b.ViewSlideRecoilIronsightRight)
+            && string.Equals(a.FireModes, b.FireModes)
+            && a.FireRate == b.FireRate
+            && NullableEquals(a.RangeModifier, b.RangeModifier)
+            && string.Equals(a.ClipSize, b.ClipSize)
+            && a.DefaultClip == b.DefaultClip
+            && a.ExtraBulletChamber == b.ExtraBulletChamber
+            && a.BulletsPerShot == b.BulletsPerShot
+            && NullableEquals(a.IronsightSpeedScale, b.IronsightSpeedScale)
+            && NullableEquals(a.Weight, b.Weight)
+            && a.ZMBuyPrice == b.ZMBuyPrice
+            && a.ZMWeight == b.ZMWeight
+            && NullableEquals(a.MetalPenetrationDepth, b.MetalPenetrationDepth)
+            && NullableEquals(a.GlassPenetrationDepth, b.GlassPenetrationDepth)
+            && NullableEquals(a.ConcretePenetrationDepth, b.ConcretePenetrationDepth)
+            && NullableEquals(a.WoodPenetrationDepth, b.WoodPenetrationDepth)
+            && NullableEquals(a.OtherPenetrationDepth, b.OtherPenetrationDepth)
+            && NullableEquals(a.MetalDamageModifier, b.MetalDamageModifier)
+            && NullableEquals(a.GlassDamageModifier, b.GlassDamageModifier)
+            && NullableEquals(a.ConcreteDamageModifier, b.ConcreteDamageModifier)
+            && NullableEquals(a.WoodDamageModifier, b.WoodDamageModifier)
+            && NullableEquals(a.OtherDamageModifier, b.OtherDamageModifier)
+            && NullableEquals(a.CrouchSpreadMultiplier, b.CrouchSpreadMultiplier)
+            && NullableEquals(a.ProneSpreadMultiplier, b.ProneSpreadMultiplier)
+            && NullableEquals(a.StandMoveSpreadMultiplier, b.StandMoveSpreadMultiplier)
+            && NullableEquals(a.SneakMoveSpreadMultiplier, b.SneakMoveSpreadMultiplier)
+            && NullableEquals(a.CrouchMoveSpreadMultiplier, b.CrouchMoveSpreadMultiplier)
+            && NullableEquals(a.JumpSpreadMultiplier, b.JumpSpreadMultiplier)
+            && NullableEquals(a.DamageGeneric, b.DamageGeneric);
+    }
+
+    private static bool NullableEquals(double? a, double? b)
+    {
+        if (!a.HasValue && !b.HasValue) return true;
+        if (!a.HasValue || !b.HasValue) return false;
+        return Math.Abs(a.Value - b.Value) < 0.0001;
+        //容差比较 防止掉精度导致误判为未保存
+    }
+
     private void SliderChangedL(object? sender, EventArgs e)
     {
         if (updatingControls) return;
-        updatingControls = true;
+        updatingControls = true;//都是防止滑块和数字框互相触发死循环
         if (sender is TrackBar tb && tb.Tag is NumericUpDown nud)
             nud.Value = Math.Round((decimal)(tb.Value * SliderStep), 2);
         updatingControls = false;
-        isDirty = true;
         UpdateAllDamage();
     }
 
@@ -63,7 +143,6 @@ public partial class Form1
         if (sender is TrackBar tb && tb.Tag is NumericUpDown nud)
             nud.Value = Math.Round((decimal)(tb.Value * SliderStep), 2);
         updatingControls = false;
-        isDirty = true;
         UpdateAllDamage();
     }
 
@@ -79,7 +158,6 @@ public partial class Form1
             nud.Value = Math.Round(nud.Value, 2);
         }
         updatingControls = false;
-        isDirty = true;
         UpdateAllDamage();
     }
 
@@ -95,33 +173,28 @@ public partial class Form1
             nud.Value = Math.Round(nud.Value, 2);
         }
         updatingControls = false;
-        isDirty = true;
         UpdateAllDamage();
     }
 
     private void SpreadRecoilChangedL(object? sender, EventArgs e)
     {
-        isDirty = true;
         pnlSpread.Invalidate();
         pnlRecoil.Invalidate();
     }
 
     private void SpreadRecoilChangedR(object? sender, EventArgs e)
     {
-        isDirty = true;
         pnlSpread.Invalidate();
         pnlRecoil.Invalidate();
     }
 
     private void RangeModifierChangedL(object? sender, EventArgs e)
     {
-        isDirty = true;
         UpdateAllDamage();
     }
 
     private void RangeModifierChangedR(object? sender, EventArgs e)
     {
-        isDirty = true;
         UpdateAllDamage();
     }
 
@@ -132,7 +205,6 @@ public partial class Form1
         try
         {
             CsvService.SaveWeapons(Path.Combine(AppContext.BaseDirectory, "weapons.csv"), weapons);
-            isDirty = false;
             var originalTitle = this.Text;
             this.Text = "Saved!";
             await Task.Delay(1145);
@@ -194,7 +266,8 @@ public partial class Form1
                 var newWeapons = CsvService.LoadWeapons(csv);
                 this.Invoke(() =>
                 {
-                    weapons = newWeapons;
+                    //DataSource设为null再赋值新列表 触发重新绑定
+                    cmbWeaponsL.DataSource = null;
                     cmbWeaponsL.DataSource = null;
                     cmbWeaponsL.DataSource = new List<WeaponData>(weapons);
                     cmbWeaponsL.DisplayMember = "PrintName";
@@ -228,20 +301,6 @@ public partial class Form1
             e.SuppressKeyPress = true;
             cmbWeaponsR.Focus();
             cmbWeaponsR.DroppedDown = true;
-        }
-        else if (e.Control && e.KeyCode == Keys.Tab)
-        {
-            e.SuppressKeyPress = true;
-            if (cmbWeaponsL.Focused)
-            {
-                cmbWeaponsR.Focus();
-                cmbWeaponsR.DroppedDown = true;
-            }
-            else
-            {
-                cmbWeaponsL.Focus();
-                cmbWeaponsL.DroppedDown = true;
-            }
         }
     }
 }

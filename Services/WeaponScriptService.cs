@@ -206,6 +206,7 @@ public static class WeaponScriptService
         return string.Join("\n", log);
     }
 
+    //正则地狱
     public static string ImportScriptsToCsv(string scriptsDir, string outputCsvPath)
     {
         var log = new List<string>();
@@ -320,11 +321,12 @@ public static class WeaponScriptService
         return true;
     }
 
+    //先尝试带引号的值 再尝试不带引号的裸值
     private static string? ExtractValue(string content, string key)
     {
-        var m = Regex.Match(content, $@"""{Regex.Escape(key)}""\s+""([^""]*)""");
+        var m = Regex.Match(content, $@"""{Regex.Escape(key)}""\s+""([^""]*)""");//key后面至少一个空白 捕获双引号内的值
         if (m.Success) return m.Groups[1].Value;
-        m = Regex.Match(content, $@"""{Regex.Escape(key)}""\s+(\S+)");
+        m = Regex.Match(content, $@"""{Regex.Escape(key)}""\s+(\S+)");//回退匹配"abc" 123这种不带引号的裸值
         if (m.Success)
         {
             string v = m.Groups[1].Value;
@@ -337,9 +339,10 @@ public static class WeaponScriptService
     private static bool TryParseDouble(string v, out double r) =>
         double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out r);
 
+    //解析后座块 用Singleline跨越换行
     private static double? ParseRecoilBlock(string content, string block, string key)
     {
-        var m = Regex.Match(content, $@"{Regex.Escape(block)}\s*\{{[^}}]*""{Regex.Escape(key)}""\s+""([^""]*)""", RegexOptions.Singleline);
+        var m = Regex.Match(content, $@"{Regex.Escape(block)}\s*\{{[^}}]*""{Regex.Escape(key)}""\s+""([^""]*)""", RegexOptions.Singleline);//匹配block名后紧跟的大括号内容 取指定key的双引号
         if (m.Success && double.TryParse(m.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double r))
             return r;
         return null;
@@ -402,13 +405,14 @@ public static class WeaponScriptService
 
     private static string? F(double? v) => v.HasValue ? v.Value.ToString("0.#####", CultureInfo.InvariantCulture) : null;
 
+    //替换脚本中的键值对 第一优先级匹配带注释行
     private static string ReplaceKeyValue(string c, string k, string v)
     {
-        string p = $@"(""{Regex.Escape(k)}""\s+)"".*?""(\s*(?://.*)?)";
+        string p = $@"(""{Regex.Escape(k)}""\s+)"".*?""(\s*(?://.*)?)";//捕获key和空白 替换双引号内的旧值并保留行尾注释
         if (Regex.IsMatch(c, p))
             return Regex.Replace(c, p, $@"$1""{v}""$2");
 
-        p = $@"(""{Regex.Escape(k)}""\s+)""[^""]*""";
+        p = $@"(""{Regex.Escape(k)}""\s+)""[^""]*""";//回退匹配不带注释的行
         if (Regex.IsMatch(c, p))
             return Regex.Replace(c, p, $@"$1""{v}""");
 
@@ -417,15 +421,15 @@ public static class WeaponScriptService
 
     private static string ReplaceRecoilBlock(string c, string block, string? up, string? right)
     {
-        string p = $@"({Regex.Escape(block)}\s*\{{[^}}]*)}}";
+        string p = $@"({Regex.Escape(block)}\s*\{{[^}}]*)}}";//捕获block名到倒数第二个} 不含最后的}
         var m = Regex.Match(c, p, RegexOptions.Singleline);
         if (!m.Success) return c;
         string b = m.Groups[1].Value;
 
         if (up != null)
-            b = Regex.Replace(b, $@"(""Up""\s+)""[^""]*""", $@"$1""{up}""");
+            b = Regex.Replace(b, $@"(""Up""\s+)""[^""]*""", $@"$1""{up}""");//匹配Up后面引号内的旧值替换为新值
         if (right != null)
-            b = Regex.Replace(b, $@"(""Right""\s+)""[^""]*""", $@"$1""{right}""");
+            b = Regex.Replace(b, $@"(""Right""\s+)""[^""]*""", $@"$1""{right}""");//Right同上
 
         return c.Replace(m.Value, b + "}");
     }

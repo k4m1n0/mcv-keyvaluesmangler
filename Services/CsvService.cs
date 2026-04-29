@@ -18,7 +18,7 @@ public static class CsvService
             HasHeaderRecord = true,
             MissingFieldFound = null,
             HeaderValidated = null,
-            ShouldSkipRecord = args =>
+            ShouldSkipRecord = args =>//跳过排版用空行 首字段为空则整行忽略
             {
                 var firstField = args.Row.GetField(0);
                 return string.IsNullOrWhiteSpace(firstField);
@@ -29,6 +29,7 @@ public static class CsvService
         using var reader = new StreamReader(filePath, Encoding.UTF8);
         using var csv = new CsvReader(reader, config);
 
+        //空字符串视为null 否则空字段解析会抛异常
         csv.Context.TypeConverterOptionsCache.GetOptions<double?>().NullValues.Add(string.Empty);
         csv.Context.TypeConverterOptionsCache.GetOptions<int?>().NullValues.Add(string.Empty);
         csv.Context.TypeConverterOptionsCache.GetOptions<double>().NullValues.Add(string.Empty);
@@ -40,7 +41,7 @@ public static class CsvService
 
     public static void SaveWeapons(string filePath, List<WeaponData> weapons)
     {
-        var config = new CsvConfiguration(CultureInfo.InvariantCulture)
+        var config = new CsvConfiguration(CultureInfo.InvariantCulture)//所有字段都加引号 防止特殊字符破坏CSV格式
         {
             HasHeaderRecord = true,
             ShouldQuote = args => true

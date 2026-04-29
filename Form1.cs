@@ -2,9 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
-using System.Linq;
 using System.Reflection;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 using WeaponDamageCalc.Models;
 using WeaponDamageCalc.Services;
@@ -18,14 +16,15 @@ public partial class Form1 : Form
     private WeaponData? currentWeaponRight = null;
 
     #nullable disable
+    //放上面会爆warn
 
     private bool updatingControls = false;
-    private bool isDirty = false;
+    private bool initializing = true;
 
     private const double SliderMin = 0.0;
     private const double SliderMax = 5.0;
     private const double SliderStep = 0.01;
-    private const double DistanceDivisor = 9.525;
+    private const double DistanceDivisor = 9.525;//500HU=31.25英尺 sb英制单位
 
     private string lastScriptsDir = "";
     private bool refreshing = false;
@@ -72,6 +71,7 @@ public partial class Form1 : Form
 
                     UpdateC64Labels(true);
                 }
+                initializing = false;
             };
         }
         catch (Exception ex)
@@ -121,21 +121,21 @@ public partial class Form1 : Form
         btnCopy.Click += CopyLeftToRight;
         this.Controls.Add(btnCopy);
 
-        var btnCopyR = new Button { Text = "R>L", Location = new Point(cx + 240, 620), Size = new Size(60, 24) };
+        var btnCopyR = new Button { Text = "L<R", Location = new Point(cx + 240, 620), Size = new Size(60, 24) };
         btnCopyR.Click += CopyRightToLeft;
         this.Controls.Add(btnCopyR);
     }
 
     #nullable enable
+    //放下面也会爆warn
+
     private void CopyLeftToRight(object? sender, EventArgs e)
     {
         if (currentWeaponLeft != null && currentWeaponRight != null)
         {
             SaveControlsToWeapon(currentWeaponLeft, true);
-            // Copy left weapon data into right weapon data object
             CopyWeaponDataFields(currentWeaponLeft, currentWeaponRight);
             LoadWeaponToControls(currentWeaponRight, false);
-            isDirty = true;
             UpdateAllDamage();
             pnlSpread.Invalidate();
             pnlRecoil.Invalidate();
@@ -149,13 +149,13 @@ public partial class Form1 : Form
             SaveControlsToWeapon(currentWeaponRight, false);
             CopyWeaponDataFields(currentWeaponRight, currentWeaponLeft);
             LoadWeaponToControls(currentWeaponLeft, true);
-            isDirty = true;
             UpdateAllDamage();
             pnlSpread.Invalidate();
             pnlRecoil.Invalidate();
         }
     }
 
+    //不拷贝ScriptName和PrintName防止覆盖武器身份
     private static void CopyWeaponDataFields(WeaponData src, WeaponData dst)
     {
         dst.DamageHeadMultiplier = src.DamageHeadMultiplier;
@@ -199,14 +199,14 @@ public partial class Form1 : Form
         dst.CrouchMoveSpreadMultiplier = src.CrouchMoveSpreadMultiplier;
         dst.JumpSpreadMultiplier = src.JumpSpreadMultiplier;
         dst.DamageGeneric = src.DamageGeneric;
-        // Copy script-relevant fields for save
-        dst.FireModes = src.FireModes;
         dst.PrimaryAmmo = src.PrimaryAmmo;
     }
 
     private void Form1_FormClosing(object? sender, FormClosingEventArgs e)
     {
-        if (isDirty)
+        bool leftDirty = currentWeaponLeft != null && HasUnsavedChanges(true);
+        bool rightDirty = currentWeaponRight != null && HasUnsavedChanges(false);
+        if (leftDirty || rightDirty)
         {
             var result = MessageBox.Show("Unsaved changes will be lost. Save now?",
                 "Unsaved Changes", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
@@ -227,6 +227,8 @@ public partial class Form1 : Form
             BindingFlags.SetProperty | BindingFlags.Instance | BindingFlags.NonPublic,
             null, control, new object[] { true });
     }
+
+    //虽然拆分了下面这些还是没必要单独建个文件
 
     private void PnlSpread_Paint(object? sender, PaintEventArgs e)
     {
