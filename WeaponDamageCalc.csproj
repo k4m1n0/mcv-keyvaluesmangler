@@ -13,6 +13,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="mcv-keyvaluesmangler\**" />
+    <None Remove="mcv-keyvaluesmangler\**" />
+    <EmbeddedResource Remove="mcv-keyvaluesmangler\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Update="weapons.csv">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
