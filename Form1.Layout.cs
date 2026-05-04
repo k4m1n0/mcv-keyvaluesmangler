@@ -62,24 +62,24 @@ public partial class Form1
         gb.Controls.Add(new Label { Text = "0", Location = new Point(8, 20), Size = new Size(20, 18) });
         if (isLeft)
         {
-            trkDistanceL = new TrackBar { Location = new Point(30, 16), Size = new Size(330, 35), Minimum = 0, Maximum = 100 };
+            trkDistanceL = new TrackBar { Location = new Point(30, 16), Size = new Size(380, 35), Minimum = 0, Maximum = 100 };
             trkDistanceL.ValueChanged += (s, e) => { nudDistanceL.Value = trkDistanceL.Value; UpdateAllDamage(); };
             gb.Controls.Add(trkDistanceL);
-            nudDistanceL = new NumericUpDown { Location = new Point(365, 16), Size = new Size(45, 22), DecimalPlaces = 0, Increment = 1, Minimum = 0, Maximum = 100 };
+            nudDistanceL = new NumericUpDown { Location = new Point(415, 16), Size = new Size(45, 22), DecimalPlaces = 0, Increment = 1, Minimum = 0, Maximum = 100 };
             nudDistanceL.ValueChanged += (s, e) => { trkDistanceL.Value = Math.Max(0, Math.Min(100, (int)nudDistanceL.Value)); UpdateAllDamage(); };            gb.Controls.Add(nudDistanceL);
-            chkVestL = new CheckBox { Text = "Vest", Location = new Point(420, 18), Size = new Size(55, 22) };
+            chkVestL = new CheckBox { Text = "Vest", Location = new Point(465, 18), Size = new Size(55, 22) };
             chkVestL.CheckedChanged += (s, e) => { UpdateAllDamage(); };
             gb.Controls.Add(chkVestL);
         }
         else
         {
-            trkDistanceR = new TrackBar { Location = new Point(30, 16), Size = new Size(330, 35), Minimum = 0, Maximum = 100 };
+            trkDistanceR = new TrackBar { Location = new Point(30, 16), Size = new Size(380, 35), Minimum = 0, Maximum = 100 };
             trkDistanceR.ValueChanged += (s, e) => { nudDistanceR.Value = trkDistanceR.Value; UpdateAllDamage(); };
             gb.Controls.Add(trkDistanceR);
-            nudDistanceR = new NumericUpDown { Location = new Point(365, 16), Size = new Size(45, 22), DecimalPlaces = 0, Increment = 1, Minimum = 0, Maximum = 100 };
+            nudDistanceR = new NumericUpDown { Location = new Point(415, 16), Size = new Size(45, 22), DecimalPlaces = 0, Increment = 1, Minimum = 0, Maximum = 100 };
             nudDistanceR.ValueChanged += (s, e) => { trkDistanceR.Value = Math.Max(0, Math.Min(100, (int)nudDistanceR.Value)); UpdateAllDamage(); };
             gb.Controls.Add(nudDistanceR);
-            chkVestR = new CheckBox { Text = "Vest", Location = new Point(420, 18), Size = new Size(55, 22) };
+            chkVestR = new CheckBox { Text = "Vest", Location = new Point(465, 18), Size = new Size(55, 22) };
             chkVestR.CheckedChanged += (s, e) => { UpdateAllDamage(); };
             gb.Controls.Add(chkVestR);
         }
@@ -199,10 +199,6 @@ public partial class Form1
             nudWoodDmgModL = CreateNullableNumericRow(gb, "Wood Mod", 368, y, 100m);
             y += 26;
             nudOtherDmgModL = CreateNullableNumericRow(gb, "Other Mod", 8, y, 100m);
-            nudDamageGenericL = CreateNullableNumericRow(gb, "Dmg", 188, y, 999m);
-            nudDamageGenericL.DecimalPlaces = 1;
-            nudDamageGenericL.Increment = 1m;
-            nudDamageGenericL.ValueChanged += (s, e) => { currentWeaponLeft!.DamageGeneric = (double)nudDamageGenericL.Value; UpdateAllDamage(); };//DamageGeneric直接回写currentWeapon确保伤害计算的dg字段和NUD同步
         }
         else
         {
@@ -227,10 +223,6 @@ public partial class Form1
             nudWoodDmgModR = CreateNullableNumericRow(gb, "Wood Mod", 368, y, 100m);
             y += 26;
             nudOtherDmgModR = CreateNullableNumericRow(gb, "Other Mod", 8, y, 100m);
-            nudDamageGenericR = CreateNullableNumericRow(gb, "Dmg", 188, y, 999m);
-            nudDamageGenericR.DecimalPlaces = 1;
-            nudDamageGenericR.Increment = 1m;
-            nudDamageGenericR.ValueChanged += (s, e) => { currentWeaponRight!.DamageGeneric = (double)nudDamageGenericR.Value; UpdateAllDamage(); };//同上
         }
         this.Controls.Add(gb);
     }
@@ -238,9 +230,9 @@ public partial class Form1
     private (TrackBar, NumericUpDown, Label) CreateSliderRow(Control parent, string text, ref int y, bool isLeft)
     {
         parent.Controls.Add(new Label { Text = text, Location = new Point(8, y + 8), Size = new Size(35, 18), TextAlign = ContentAlignment.MiddleLeft });
-        var tb = new TrackBar { Location = new Point(45, y + 2), Size = new Size(230, 34), Minimum = (int)(SliderMin / SliderStep), Maximum = (int)(SliderMax / SliderStep), TickFrequency = (int)(0.5 / SliderStep), Value = (int)(1.0 / SliderStep) };
-        var nud = new NumericUpDown { Location = new Point(280, y + 7), Size = new Size(55, 22), DecimalPlaces = 2, Increment = 0.01m, Minimum = (decimal)SliderMin, Maximum = 1000m, Value = 1.00m };
-        var lbl = new Label { Text = "= 0.0 | ∞shots | ∞ms", Location = new Point(340, y + 9), AutoSize = true, TextAlign = ContentAlignment.MiddleLeft, ForeColor = Color.DarkRed, Font = new Font("Arial", 8, FontStyle.Bold) };
+        var tb = new TrackBar { Location = new Point(45, y + 2), Size = new Size(270, 34), Minimum = (int)(SliderMin / SliderStep), Maximum = (int)(SliderMax / SliderStep), TickFrequency = (int)(0.5 / SliderStep), Value = (int)(1.0 / SliderStep) };
+        var nud = new NumericUpDown { Location = new Point(320, y + 7), Size = new Size(55, 22), DecimalPlaces = 2, Increment = 0.01m, Minimum = (decimal)SliderMin, Maximum = 1000m, Value = 1.00m };
+        var lbl = new Label { Text = "= 0.0 | ∞shots | ∞ms", Location = new Point(380, y + 9), AutoSize = true, TextAlign = ContentAlignment.MiddleLeft, ForeColor = Color.DarkRed, Font = new Font("Arial", 8, FontStyle.Bold) };
         parent.Controls.Add(tb);
         parent.Controls.Add(nud);
         parent.Controls.Add(lbl);

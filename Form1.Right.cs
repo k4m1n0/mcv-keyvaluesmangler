@@ -28,6 +28,10 @@ public partial class Form1
         cmbWeaponsR = new ComboBox { Location = new Point(x + 5, 6), Size = new Size(180, 23), AutoCompleteMode = AutoCompleteMode.SuggestAppend, AutoCompleteSource = AutoCompleteSource.ListItems, DisplayMember = "PrintName" };
         cmbWeaponsR.SelectedIndexChanged += WeaponSelectedR;
         this.Controls.Add(cmbWeaponsR);
+        nudDamageGenericR = new NumericUpDown { Location = new Point(x + 417, 6), Size = new Size(65, 23), DecimalPlaces = 1, Increment = 1m, Minimum = 0m, Maximum = 999m, Value = 0m };
+        nudDamageGenericR.ValueChanged += (s, e) => { currentWeaponRight!.DamageGeneric = (double)nudDamageGenericR.Value; UpdateAllDamage(); };
+        this.Controls.Add(nudDamageGenericR);
+        this.Controls.Add(new Label { Text = "Dmg", Location = new Point(x + 485, 8), AutoSize = true });
 
         CreateDamageMultiplierGroup(x, false);
         CreateRangeGroup(x, false);
