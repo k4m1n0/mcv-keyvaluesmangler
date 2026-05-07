@@ -23,7 +23,13 @@ public partial class Form1
         {
             var result = MessageBox.Show("Unsaved changes to left weapon. Discard?",
                 "Unsaved Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-            if (result != DialogResult.Yes) return;
+            if (result != DialogResult.Yes)
+            {
+                cmbWeaponsL.SelectedIndexChanged -= WeaponSelectedL;
+                cmbWeaponsL.SelectedItem = currentWeaponLeft;
+                cmbWeaponsL.SelectedIndexChanged += WeaponSelectedL;
+                return;
+            }
         }
         if (cmbWeaponsL.SelectedItem is WeaponData w)
         {
@@ -50,7 +56,13 @@ public partial class Form1
         {
             var result = MessageBox.Show("Unsaved changes to right weapon. Discard?",
                 "Unsaved Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-            if (result != DialogResult.Yes) return;
+            if (result != DialogResult.Yes)
+            {
+                cmbWeaponsR.SelectedIndexChanged -= WeaponSelectedR;
+                cmbWeaponsR.SelectedItem = currentWeaponRight;
+                cmbWeaponsR.SelectedIndexChanged += WeaponSelectedR;
+                return;
+            }
         }
         if (cmbWeaponsR.SelectedItem is WeaponData w)
         {
@@ -205,6 +217,13 @@ public partial class Form1
 
     private async void BtnSave_Click(object? sender, EventArgs e)
     {
+        //强制提交活跃控件的待定输入 防止NUD焦点未移走导致值未更新
+        var active = this.ActiveControl;
+        if (active != null)
+        {
+            this.ActiveControl = null;
+            active.Focus();
+        }
         if (currentWeaponLeft != null) SaveControlsToWeapon(currentWeaponLeft, true);
         if (currentWeaponRight != null) SaveControlsToWeapon(currentWeaponRight, false);
         try

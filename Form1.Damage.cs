@@ -17,7 +17,7 @@ public partial class Form1
         if (currentWeaponLeft == null) return;
         double hm = trkHeadL.Value * SliderStep, cm = trkChestL.Value * SliderStep, sm = trkStomachL.Value * SliderStep;
         double lm = trkLegL.Value * SliderStep, am = trkArmL.Value * SliderStep;
-        double dist = trkDistanceL.Value, dg = currentWeaponLeft.DamageGeneric ?? 0, rm = (double)nudRangeModifierL.Value;
+        double dist = trkDistanceL.Value, dg = (double)nudDamageGenericL.Value, rm = (double)nudRangeModifierL.Value;
         double bd = dg * Math.Pow(rm, dist / DistanceDivisor);//基伤*衰减^(距离/9.525)
         double vest = chkVestL.Checked ? ((currentWeaponLeft.BulletsPerShot ?? 1) > 1 ? 0.8 : 0.9) : 1.0;//普通0.9x 霰弹0.8x
         int rpm = currentWeaponLeft.FireRate ?? 600;
@@ -35,7 +35,7 @@ public partial class Form1
         if (currentWeaponRight == null) return;
         double hm = trkHeadR.Value * SliderStep, cm = trkChestR.Value * SliderStep, sm = trkStomachR.Value * SliderStep;
         double lm = trkLegR.Value * SliderStep, am = trkArmR.Value * SliderStep;
-        double dist = trkDistanceR.Value, dg = currentWeaponRight.DamageGeneric ?? 0, rm = (double)nudRangeModifierR.Value;
+        double dist = trkDistanceR.Value, dg = (double)nudDamageGenericR.Value, rm = (double)nudRangeModifierR.Value;
         double bd = dg * Math.Pow(rm, dist / DistanceDivisor);
         double vest = chkVestR.Checked ? ((currentWeaponRight.BulletsPerShot ?? 1) > 1 ? 0.8 : 0.9) : 1.0;
         int rpm = currentWeaponRight.FireRate ?? 600;
