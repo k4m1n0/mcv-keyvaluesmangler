@@ -128,17 +128,35 @@ public partial class Form1 : Form
             }
             else if (isTopmost)
             {
-                this.WindowState = FormWindowState.Minimized;
-                isTopmost = false;
-                this.Text = "Keyvalues Mangler™ 5000";
+                if (IsMcvForeground() || GetForegroundWindow() == this.Handle)
+                {
+                    SetWindowPos(this.Handle, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+                    this.WindowState = FormWindowState.Minimized;
+                    isTopmost = false;
+                    this.Text = "Keyvalues Mangler™ 5000";
+                }
+                else
+                {
+                    SetWindowPos(this.Handle, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+                    isTopmost = false;
+                    this.Text = "Keyvalues Mangler™ 5000";
+                }
             }
             else
             {
-                if (!IsMcvForeground()) return;
-                SetWindowPos(this.Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-                isTopmost = true;
-                this.Text = "Keyvalues Mangler™ 5000 [Topmost]";
-                this.Activate();
+                if (IsMcvForeground() || GetForegroundWindow() == this.Handle)
+                {
+                    this.WindowState = FormWindowState.Minimized;
+                    isTopmost = false;
+                    this.Text = "Keyvalues Mangler™ 5000";
+                }
+                else
+                {
+                    SetWindowPos(this.Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+                    isTopmost = true;
+                    this.Text = "Keyvalues Mangler™ 5000 [Topmost]";
+                    this.Activate();
+                }
             }
         }
         base.WndProc(ref m);
@@ -184,6 +202,7 @@ public partial class Form1 : Form
         btnCopy.Click += CopyLeftToRight;
         this.Controls.Add(btnCopy);
 
+        //glory to our coders all i dont need to write a hook myself but just call a cvar
         var btnCopyCvar= new Button { Text = "wpn_reload_script all", Location = new Point(cx + 73, 620), Size = new Size(154, 24) };
         btnCopyCvar.Tag = false;
         btnCopyCvar.Click += BtnQuickExport_Click;
@@ -215,7 +234,6 @@ public partial class Form1 : Form
     {
         if (currentWeaponLeft != null && currentWeaponRight != null)
         {
-            SaveControlsToWeapon(currentWeaponLeft, true);
             CopyWeaponDataFields(currentWeaponLeft, currentWeaponRight);
             LoadWeaponToControls(currentWeaponRight, false);
             UpdateAllDamage();
@@ -223,12 +241,10 @@ public partial class Form1 : Form
             pnlRecoil.Invalidate();
         }
     }
-
     private void CopyRightToLeft(object? sender, EventArgs e)
     {
         if (currentWeaponRight != null && currentWeaponLeft != null)
         {
-            SaveControlsToWeapon(currentWeaponRight, false);
             CopyWeaponDataFields(currentWeaponRight, currentWeaponLeft);
             LoadWeaponToControls(currentWeaponLeft, true);
             UpdateAllDamage();
@@ -281,7 +297,6 @@ public partial class Form1 : Form
         dst.CrouchMoveSpreadMultiplier = src.CrouchMoveSpreadMultiplier;
         dst.JumpSpreadMultiplier = src.JumpSpreadMultiplier;
         dst.DamageGeneric = src.DamageGeneric;
-        dst.PrimaryAmmo = src.PrimaryAmmo;
     }
 
     private void Form1_FormClosing(object? sender, FormClosingEventArgs e)
