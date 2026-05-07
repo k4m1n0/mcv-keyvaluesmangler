@@ -26,7 +26,7 @@ public partial class Form1 : Form
     private const double SliderMin = 0.0;
     private const double SliderMax = 5.0;
     private const double SliderStep = 0.01;
-    private const double DistanceDivisor = 9.525;//500HU=31.25英尺 sb英制单位
+    private const double DistanceDivisor = 12.7;//本来500HU=31.25英尺 但MCV的好像不一样 sb英制单位
 
     private string lastScriptsDir = "";
     private bool refreshing = false;
