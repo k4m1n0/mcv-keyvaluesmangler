@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Reflection;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using WeaponDamageCalc.Models;
 using WeaponDamageCalc.Services;
@@ -28,9 +30,34 @@ public partial class Form1 : Form
 
     private string lastScriptsDir = "";
     private bool refreshing = false;
+    private bool isTopmost = false;
 
     private PanelRenderer spreadRenderer = null!;
     private PanelRenderer recoilRenderer = null!;
+
+    private int hotkeyId = 9001;
+    [DllImport("user32.dll")]
+    private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+    [DllImport("user32.dll")]
+    private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+    private const uint MOD_CONTROL = 0x0002;
+    private const uint VK_T = 0x54;
+
+    [DllImport("user32.dll")]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+    private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+    private static readonly IntPtr HWND_NOTOPMOST = new IntPtr(-2);
+    private const uint SWP_NOMOVE = 0x0002;
+    private const uint SWP_NOSIZE = 0x0001;
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    private const int SW_MINIMIZE = 6;
+    private const int SW_RESTORE = 9;
 
     public Form1()
     {
@@ -72,13 +99,50 @@ public partial class Form1 : Form
                     UpdateC64Labels(true);
                 }
                 initializing = false;
+                RegisterHotKey(this.Handle, hotkeyId, MOD_CONTROL, VK_T);
             };
+
+            this.FormClosed += (s, e) => UnregisterHotKey(this.Handle, hotkeyId);
         }
         catch (Exception ex)
         {
             MessageBox.Show($"Launch failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             Application.Exit();
         }
+    }
+
+    protected override void WndProc(ref Message m)
+    {
+        const int WM_HOTKEY = 0x0312;
+        if (m.Msg == WM_HOTKEY && m.WParam.ToInt32() == hotkeyId)
+        {
+            if (this.WindowState == FormWindowState.Minimized || !this.Visible)
+            {
+                if (!IsMcvForeground()) return;
+                this.Visible = true;
+                this.WindowState = FormWindowState.Normal;
+                ShowWindow(this.Handle, SW_RESTORE);
+                SetWindowPos(this.Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+                isTopmost = true;
+                this.Text = "Keyvalues Mangler™ 5000 [Topmost]";
+                this.Activate();
+            }
+            else if (isTopmost)
+            {
+                this.WindowState = FormWindowState.Minimized;
+                isTopmost = false;
+                this.Text = "Keyvalues Mangler™ 5000";
+            }
+            else
+            {
+                if (!IsMcvForeground()) return;
+                SetWindowPos(this.Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+                isTopmost = true;
+                this.Text = "Keyvalues Mangler™ 5000 [Topmost]";
+                this.Activate();
+            }
+        }
+        base.WndProc(ref m);
     }
 
     private void InitCenterPanels()
@@ -117,11 +181,15 @@ public partial class Form1 : Form
         btnRefresh.Click += BtnRefresh_Click;
         this.Controls.Add(btnRefresh);
 
-        var btnCopy = new Button { Text = "L>R", Location = new Point(cx, 620), Size = new Size(60, 24) };
+        var btnCopy = new Button { Text = "L>R", Location = new Point(cx + 22, 620), Size = new Size(48, 24) };
         btnCopy.Click += CopyLeftToRight;
         this.Controls.Add(btnCopy);
 
-        var btnCopyR = new Button { Text = "L<R", Location = new Point(cx + 240, 620), Size = new Size(60, 24) };
+        var btnCopyCmd = new Button { Text = "wpn_reload_script all", Location = new Point(cx + 73, 620), Size = new Size(154, 24) };
+        btnCopyCmd.Click += (s, e) => { Clipboard.SetText("wpn_reload_script all"); };
+        this.Controls.Add(btnCopyCmd);
+
+        var btnCopyR = new Button { Text = "L<R", Location = new Point(cx + 230, 620), Size = new Size(48, 24) };
         btnCopyR.Click += CopyRightToLeft;
         this.Controls.Add(btnCopyR);
     }
@@ -221,6 +289,19 @@ public partial class Form1 : Form
         }
     }
 
+    private static bool IsMcvForeground()
+    {
+        IntPtr fgw = GetForegroundWindow();
+        if (fgw == IntPtr.Zero) return false;
+        GetWindowThreadProcessId(fgw, out uint pid);
+        try
+        {
+            using var p = Process.GetProcessById((int)pid);
+            return p.ProcessName.Equals("mcv_x64", StringComparison.OrdinalIgnoreCase);
+        }
+        catch { return false; }
+    }
+    
     private static void EnableDoubleBuffering(Control control)
     {
         typeof(Control).InvokeMember("DoubleBuffered",
@@ -262,6 +343,7 @@ public partial class Form1 : Form
             this.FormBorderStyle = FormBorderStyle.Sizable;
             this.MinimizeBox = false;
             this.MaximizeBox = false;
+            this.TopMost = true;
             var txt = new TextBox { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Dock = DockStyle.Fill, Font = new Font("Consolas", 9), Text = logText };
             this.Controls.Add(txt);
         }
