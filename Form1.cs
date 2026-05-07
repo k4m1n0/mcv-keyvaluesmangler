@@ -186,7 +186,7 @@ public partial class Form1 : Form
         this.Controls.Add(btnCopy);
 
         var btnCopyCmd = new Button { Text = "wpn_reload_script all", Location = new Point(cx + 73, 620), Size = new Size(154, 24) };
-        btnCopyCmd.Click += (s, e) => { Clipboard.SetText("wpn_reload_script all"); };
+        btnCopyCmd.Click += BtnQuickExport_Click;
         this.Controls.Add(btnCopyCmd);
 
         var btnCopyR = new Button { Text = "L<R", Location = new Point(cx + 230, 620), Size = new Size(48, 24) };

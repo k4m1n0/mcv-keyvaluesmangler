@@ -257,6 +257,39 @@ public partial class Form1
         });
     }
 
+    private async void BtnQuickExport_Click(object? sender, EventArgs e)
+    {
+        if (string.IsNullOrEmpty(lastScriptsDir))
+        {
+            string initialDir = AppContext.BaseDirectory;
+            using var dlg = new FolderBrowserDialog { Description = "Select the folder containing weapon scripts (will be overwritten)", UseDescriptionForTitle = true, InitialDirectory = initialDir };
+            if (dlg.ShowDialog() != DialogResult.OK) return;
+            lastScriptsDir = dlg.SelectedPath;
+        }
+        if (MessageBox.Show($"Save CSV and overwrite all scripts in\n\n{lastScriptsDir}\n\nthen copy wpn_reload_script all to clipboard?",
+            "Quick Export", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+        //强制提交活跃控件输入
+        var active = this.ActiveControl;
+        if (active != null) { this.ActiveControl = null; active.Focus(); }
+        if (currentWeaponLeft != null) SaveControlsToWeapon(currentWeaponLeft, true);
+        if (currentWeaponRight != null) SaveControlsToWeapon(currentWeaponRight, false);
+        try
+        {
+            CsvService.SaveWeapons(Path.Combine(AppContext.BaseDirectory, "weapons.csv"), weapons);
+            string csv = Path.Combine(AppContext.BaseDirectory, "weapons.csv");
+            await Task.Run(() =>
+            {
+                WeaponScriptService.ExportCsvToScripts(csv, lastScriptsDir);
+            });
+            Clipboard.SetText("wpn_reload_script all");
+            var originalTitle = this.Text;
+            this.Text = "Exported!";
+            await Task.Delay(1145);
+            this.Text = originalTitle;
+        }
+        catch (Exception ex) { MessageBox.Show($"Quick export failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+    }
+    
     private void BtnScriptsToCsv_Click(object? sender, EventArgs e)
     {
         string initialDir = string.IsNullOrEmpty(lastScriptsDir) ? AppContext.BaseDirectory : lastScriptsDir;
