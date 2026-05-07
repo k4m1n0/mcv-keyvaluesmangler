@@ -63,8 +63,11 @@ public partial class Form1
         double ttkMs;
         if (burstCount > 0 && burstInterval > 0)
         {
-            int bursts = (int)Math.Ceiling((double)shots / burstCount);
-            ttkMs = (bursts - 1) * burstInterval * 1000.0;
+            int fullBursts = (shots - 1) / burstCount;
+            int remainingShots = shots - fullBursts * burstCount;
+            double shotInterval = 60000.0 / rpm;
+            ttkMs = fullBursts * ((burstCount - 1) * shotInterval + burstInterval * 1000.0);
+            ttkMs += (remainingShots - 1) * shotInterval;
         }
         else
         {
