@@ -56,7 +56,6 @@ public partial class Form1 : Form
 
     [DllImport("user32.dll")]
     private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-    private const int SW_MINIMIZE = 6;
     private const int SW_RESTORE = 9;
 
     public Form1()
@@ -185,9 +184,15 @@ public partial class Form1 : Form
         btnCopy.Click += CopyLeftToRight;
         this.Controls.Add(btnCopy);
 
-        var btnCopyCmd = new Button { Text = "wpn_reload_script all", Location = new Point(cx + 73, 620), Size = new Size(154, 24) };
-        btnCopyCmd.Click += BtnQuickExport_Click;
-        this.Controls.Add(btnCopyCmd);
+        var btnCopyCvar= new Button { Text = "wpn_reload_script all", Location = new Point(cx + 73, 620), Size = new Size(154, 24) };
+        btnCopyCvar.Tag = false;
+        btnCopyCvar.Click += BtnQuickExport_Click;
+        btnCopyCvar.MouseLeave += (s, e) => CancelConfirm(btnCopyCvar);
+        btnCopyCvar.MouseUp += (s, e) =>
+        {
+            if (e.Button == MouseButtons.Right) CancelConfirm(btnCopyCvar);
+        };
+        this.Controls.Add(btnCopyCvar);
 
         var btnCopyR = new Button { Text = "L<R", Location = new Point(cx + 230, 620), Size = new Size(48, 24) };
         btnCopyR.Click += CopyRightToLeft;
@@ -196,6 +201,15 @@ public partial class Form1 : Form
 
     #nullable enable
     //放下面也会爆warn
+
+    private static void CancelConfirm(Button btn)
+    {
+        if (btn.Tag is true)
+        {
+            btn.Text = "wpn_reload_script all";
+            btn.Tag = false;
+        }
+    }
 
     private void CopyLeftToRight(object? sender, EventArgs e)
     {
