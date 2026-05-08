@@ -18,7 +18,7 @@ public partial class Form1
         double hm = trkHeadL.Value * SliderStep, cm = trkChestL.Value * SliderStep, sm = trkStomachL.Value * SliderStep;
         double lm = trkLegL.Value * SliderStep, am = trkArmL.Value * SliderStep;
         double dist = trkDistanceL.Value, dg = (double)nudDamageGenericL.Value, rm = (double)nudRangeModifierL.Value;
-        double bd = dg * Math.Pow(rm, dist / DistanceDivisor);//基伤*衰减^(距离/9.525)
+        double bd = dg * Math.Pow(rm, dist / DistanceDivisor);//基伤*衰减^(距离/12.7)
         double vest = chkVestL.Checked ? ((currentWeaponLeft.BulletsPerShot ?? 1) > 1 ? 0.8 : 0.9) : 1.0;//普通0.9x 霰弹0.8x
         int rpm = currentWeaponLeft.FireRate ?? 600;
         int pellets = currentWeaponLeft.BulletsPerShot ?? 1;

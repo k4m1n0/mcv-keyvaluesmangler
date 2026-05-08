@@ -78,7 +78,13 @@ public partial class Form1
     {
         var original = isLeft ? currentWeaponLeft : currentWeaponRight;
         if (original == null) return false;
-
+        //同一武器时只检查焦点侧 因为保存时也只保存焦点侧
+        if (currentWeaponLeft != null && currentWeaponRight != null
+            && ReferenceEquals(currentWeaponLeft, currentWeaponRight))
+        {
+            bool focusLeft = IsControlOnLeft(this.ActiveControl);
+            if (isLeft != focusLeft) return false;
+        }
         var temp = new WeaponData();
         SaveControlsToWeapon(temp, isLeft);
         return !WeaponDataEquals(temp, original);
@@ -217,15 +223,28 @@ public partial class Form1
 
     private async void BtnSave_Click(object? sender, EventArgs e)
     {
-        //强制提交活跃控件的待定输入 防止NUD焦点未移走导致值未更新
         var active = this.ActiveControl;
         if (active != null)
         {
             this.ActiveControl = null;
             active.Focus();
         }
-        if (currentWeaponLeft != null) SaveControlsToWeapon(currentWeaponLeft, true);
-        if (currentWeaponRight != null) SaveControlsToWeapon(currentWeaponRight, false);
+        bool sameWeapon = currentWeaponLeft != null && currentWeaponRight != null
+            && ReferenceEquals(currentWeaponLeft, currentWeaponRight);
+        if (sameWeapon)
+        {
+            //同一武器时只保存焦点所在侧 防止后保存的一侧覆盖前一侧
+            bool focusLeft = IsControlOnLeft(active);
+            if (focusLeft)
+                SaveControlsToWeapon(currentWeaponLeft!, true);
+            else
+                SaveControlsToWeapon(currentWeaponRight!, false);
+        }
+        else
+        {
+            if (currentWeaponLeft != null) SaveControlsToWeapon(currentWeaponLeft, true);
+            if (currentWeaponRight != null) SaveControlsToWeapon(currentWeaponRight, false);
+        }
         try
         {
             CsvService.SaveWeapons(Path.Combine(AppContext.BaseDirectory, "weapons.csv"), weapons);

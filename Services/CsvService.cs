@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using CsvHelper;
 using CsvHelper.Configuration;
+using CsvHelper.TypeConversion;
 using WeaponDamageCalc.Models;
 
 namespace WeaponDamageCalc.Services;
@@ -49,6 +50,10 @@ public static class CsvService
 
         using var writer = new StreamWriter(filePath, false, Encoding.UTF8);
         using var csv = new CsvWriter(writer, config);
+
+        var doubleOptions = new TypeConverterOptions { Formats = new[] { "0.####" } };
+        csv.Context.TypeConverterOptionsCache.AddOptions<double>(doubleOptions);
+        csv.Context.TypeConverterOptionsCache.AddOptions<double?>(doubleOptions);
 
         csv.WriteHeader<WeaponData>();
         csv.NextRecord();

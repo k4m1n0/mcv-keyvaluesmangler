@@ -115,9 +115,10 @@ public partial class Form1 : Form
         const int WM_HOTKEY = 0x0312;
         if (m.Msg == WM_HOTKEY && m.WParam.ToInt32() == hotkeyId)
         {
+            bool mcvOrSelf = IsMcvForeground() || GetForegroundWindow() == this.Handle;
             if (this.WindowState == FormWindowState.Minimized || !this.Visible)
             {
-                if (!IsMcvForeground()) return;
+                if (!mcvOrSelf) return;
                 this.Visible = true;
                 this.WindowState = FormWindowState.Normal;
                 ShowWindow(this.Handle, SW_RESTORE);
@@ -128,23 +129,15 @@ public partial class Form1 : Form
             }
             else if (isTopmost)
             {
-                if (IsMcvForeground() || GetForegroundWindow() == this.Handle)
-                {
-                    SetWindowPos(this.Handle, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+                SetWindowPos(this.Handle, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+                if (mcvOrSelf)
                     this.WindowState = FormWindowState.Minimized;
-                    isTopmost = false;
-                    this.Text = "Keyvalues Mangler™ 5000";
-                }
-                else
-                {
-                    SetWindowPos(this.Handle, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-                    isTopmost = false;
-                    this.Text = "Keyvalues Mangler™ 5000";
-                }
+                isTopmost = false;
+                this.Text = "Keyvalues Mangler™ 5000";
             }
             else
             {
-                if (IsMcvForeground() || GetForegroundWindow() == this.Handle)
+                if (mcvOrSelf)
                 {
                     this.WindowState = FormWindowState.Minimized;
                     isTopmost = false;
@@ -331,6 +324,17 @@ public partial class Form1 : Form
         catch { return false; }
     }
     
+    private bool IsControlOnLeft(Control? ctrl)
+    {
+        if (ctrl == null) return false;
+        while (ctrl != null)
+        {
+            if (ctrl == cmbWeaponsL || ctrl == pnlSpread) return true;
+            if (ctrl == cmbWeaponsR) return false;
+            ctrl = ctrl.Parent;
+        }
+        return false;
+    }
     private static void EnableDoubleBuffering(Control control)
     {
         typeof(Control).InvokeMember("DoubleBuffered",
