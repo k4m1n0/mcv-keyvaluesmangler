@@ -235,6 +235,7 @@ public partial class Form1 : Form
             pnlRecoil.Invalidate();
         }
     }
+
     private void CopyRightToLeft(object? sender, EventArgs e)
     {
         if (currentWeaponRight != null && currentWeaponLeft != null)

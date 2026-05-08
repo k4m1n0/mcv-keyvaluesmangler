@@ -66,7 +66,8 @@ public partial class Form1
             trkDistanceL.ValueChanged += (s, e) => { nudDistanceL.Value = trkDistanceL.Value; UpdateAllDamage(); };
             gb.Controls.Add(trkDistanceL);
             nudDistanceL = new NumericUpDown { Location = new Point(415, 16), Size = new Size(45, 22), DecimalPlaces = 0, Increment = 1, Minimum = 0, Maximum = 100 };
-            nudDistanceL.ValueChanged += (s, e) => { trkDistanceL.Value = Math.Max(0, Math.Min(100, (int)nudDistanceL.Value)); UpdateAllDamage(); };            gb.Controls.Add(nudDistanceL);
+            nudDistanceL.ValueChanged += (s, e) => { trkDistanceL.Value = Math.Max(0, Math.Min(100, (int)nudDistanceL.Value)); UpdateAllDamage(); };
+            gb.Controls.Add(nudDistanceL);
             chkVestL = new CheckBox { Text = "Vest", Location = new Point(465, 18), Size = new Size(55, 22) };
             chkVestL.CheckedChanged += (s, e) => { UpdateAllDamage(); };
             gb.Controls.Add(chkVestL);
