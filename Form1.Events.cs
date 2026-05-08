@@ -311,6 +311,7 @@ public partial class Form1
             if (currentWeaponLeft != null) SaveControlsToWeapon(currentWeaponLeft, true);
             if (currentWeaponRight != null) SaveControlsToWeapon(currentWeaponRight, false);
         }
+        var originalTitle = this.Text;
         try
         {
             CsvService.SaveWeapons(Path.Combine(AppContext.BaseDirectory, "weapons.csv"), weapons);
@@ -322,7 +323,6 @@ public partial class Form1
             Clipboard.SetText("wpn_reload_script all");
             btn.Text = "wpn_reload_script all";
             btn.Tag = false;
-            var originalTitle = this.Text;
             this.Text = "Exported!";
             await Task.Delay(1145);
             this.Text = originalTitle;
@@ -331,6 +331,7 @@ public partial class Form1
         {
             btn.Text = "wpn_reload_script all";
             btn.Tag = false;
+            this.Text = originalTitle;
             MessageBox.Show($"Quick export failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
