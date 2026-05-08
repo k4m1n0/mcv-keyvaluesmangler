@@ -227,6 +227,7 @@ public partial class Form1 : Form
     {
         if (currentWeaponLeft != null && currentWeaponRight != null)
         {
+            SaveControlsToWeapon(currentWeaponLeft, true);
             CopyWeaponDataFields(currentWeaponLeft, currentWeaponRight);
             LoadWeaponToControls(currentWeaponRight, false);
             UpdateAllDamage();
@@ -238,6 +239,7 @@ public partial class Form1 : Form
     {
         if (currentWeaponRight != null && currentWeaponLeft != null)
         {
+            SaveControlsToWeapon(currentWeaponRight, false);
             CopyWeaponDataFields(currentWeaponRight, currentWeaponLeft);
             LoadWeaponToControls(currentWeaponLeft, true);
             UpdateAllDamage();
@@ -335,6 +337,7 @@ public partial class Form1 : Form
         }
         return false;
     }
+
     private static void EnableDoubleBuffering(Control control)
     {
         typeof(Control).InvokeMember("DoubleBuffered",

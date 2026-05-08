@@ -296,8 +296,21 @@ public partial class Form1
         //强制提交活跃控件输入
         var active = this.ActiveControl;
         if (active != null) { this.ActiveControl = null; active.Focus(); }
-        if (currentWeaponLeft != null) SaveControlsToWeapon(currentWeaponLeft, true);
-        if (currentWeaponRight != null) SaveControlsToWeapon(currentWeaponRight, false);
+        bool sameWeapon = currentWeaponLeft != null && currentWeaponRight != null
+            && ReferenceEquals(currentWeaponLeft, currentWeaponRight);
+        if (sameWeapon)
+        {
+            bool focusLeft = IsControlOnLeft(active);
+            if (focusLeft)
+                SaveControlsToWeapon(currentWeaponLeft!, true);
+            else
+                SaveControlsToWeapon(currentWeaponRight!, false);
+        }
+        else
+        {
+            if (currentWeaponLeft != null) SaveControlsToWeapon(currentWeaponLeft, true);
+            if (currentWeaponRight != null) SaveControlsToWeapon(currentWeaponRight, false);
+        }
         try
         {
             CsvService.SaveWeapons(Path.Combine(AppContext.BaseDirectory, "weapons.csv"), weapons);
@@ -352,11 +365,10 @@ public partial class Form1
             await Task.Run(() =>
             {
                 string csv = Path.Combine(AppContext.BaseDirectory, "weapons.csv");
-                var newWeapons = CsvService.LoadWeapons(csv);
+                weapons = CsvService.LoadWeapons(csv);
                 this.Invoke(() =>
                 {
                     //DataSource设为null再赋值新列表 触发重新绑定
-                    cmbWeaponsL.DataSource = null;
                     cmbWeaponsL.DataSource = null;
                     cmbWeaponsL.DataSource = new List<WeaponData>(weapons);
                     cmbWeaponsL.DisplayMember = "PrintName";

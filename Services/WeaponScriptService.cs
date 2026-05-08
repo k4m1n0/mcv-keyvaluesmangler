@@ -403,7 +403,7 @@ public static class WeaponScriptService
         _ => null
     };
 
-    private static string? F(double? v) => v.HasValue ? v.Value.ToString("0.#####", CultureInfo.InvariantCulture) : null;
+    private static string? F(double? v) => v.HasValue ? v.Value.ToString("0.####", CultureInfo.InvariantCulture) : null;
 
     //替换脚本中的键值对 第一优先级匹配带注释行
     private static string ReplaceKeyValue(string c, string k, string v)
