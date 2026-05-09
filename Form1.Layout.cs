@@ -129,16 +129,24 @@ public partial class Form1
         y = 20;
         if (isLeft)
         {
-            txtFireModesL = CreateTextBoxRow(gbProp, "Fire Mode", 8, y); y += 24;
-            nudFireRateL = CreateNullableIntNumericRow(gbProp, "ROF", 8, y, 10000m); y += 24;
+            txtFireModesL = CreateTextBoxRow(gbProp, "Fire Mode", 8, y);
+            txtFireModesL.TextChanged += (s, e) => { if (!updatingControls) UpdateAllDamage(); };
+            y += 24;
+            nudFireRateL = CreateNullableIntNumericRow(gbProp, "ROF", 8, y, 10000m);
+            nudFireRateL.ValueChanged += (s, e) => { UpdateAllDamage(); };
+            y += 24;
             nudRangeModifierL = CreateNullableNumericRow(gbProp, "Range Mod", 8, y, 10m);
             nudRangeModifierL.DecimalPlaces = 3; nudRangeModifierL.Increment = 0.001m; nudRangeModifierL.ValueChanged += RangeModifierChangedL; y += 24;
             txtCapacityL = CreateTextBoxRow(gbProp, "Capacity", 8, y);
         }
         else
         {
-            txtFireModesR = CreateTextBoxRow(gbProp, "Fire Mode", 8, y); y += 24;
-            nudFireRateR = CreateNullableIntNumericRow(gbProp, "ROF", 8, y, 10000m); y += 24;
+            txtFireModesR = CreateTextBoxRow(gbProp, "Fire Mode", 8, y);
+            txtFireModesR.TextChanged += (s, e) => { if (!updatingControls) UpdateAllDamage(); };
+            y += 24;
+            nudFireRateR = CreateNullableIntNumericRow(gbProp, "ROF", 8, y, 10000m);
+            nudFireRateR.ValueChanged += (s, e) => { UpdateAllDamage(); };
+            y += 24;
             nudRangeModifierR = CreateNullableNumericRow(gbProp, "Range Mod", 8, y, 10m);
             nudRangeModifierR.DecimalPlaces = 3; nudRangeModifierR.Increment = 0.001m; nudRangeModifierR.ValueChanged += RangeModifierChangedR; y += 24;
             txtCapacityR = CreateTextBoxRow(gbProp, "Capacity", 8, y);
@@ -181,6 +189,7 @@ public partial class Form1
         {
             nudExtraBulletChamberL = CreateNullableIntNumericRow(gb, "Chamber", 8, y, 1000m);
             nudBulletsPerShotL = CreateNullableIntNumericRow(gb, "Pellets", 188, y, 100m);
+            nudBulletsPerShotL.ValueChanged += (s, e) => { UpdateAllDamage(); };
             nudIronsightSpeedScaleL = CreateNullableNumericRow(gb, "ADS Spd", 368, y, 10m);
             y += 26;
             nudWeightL = CreateNullableNumericRow(gb, "Weight", 8, y, 100m);
@@ -205,6 +214,7 @@ public partial class Form1
         {
             nudExtraBulletChamberR = CreateNullableIntNumericRow(gb, "Chamber", 8, y, 1000m);
             nudBulletsPerShotR = CreateNullableIntNumericRow(gb, "Pellets", 188, y, 100m);
+            nudBulletsPerShotR.ValueChanged += (s, e) => { UpdateAllDamage(); };
             nudIronsightSpeedScaleR = CreateNullableNumericRow(gb, "ADS Spd", 368, y, 10m);
             y += 26;
             nudWeightR = CreateNullableNumericRow(gb, "Weight", 8, y, 100m);
@@ -238,7 +248,6 @@ public partial class Form1
         parent.Controls.Add(nud);
         parent.Controls.Add(lbl);
 
-        //用Tag互相引用 事件处理时通过sender.Tag找到对方控件同步值
         tb.Tag = nud;
         nud.Tag = tb;
         if (isLeft)
