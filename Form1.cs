@@ -35,6 +35,8 @@ public partial class Form1 : Form
     private PanelRenderer spreadRenderer = null!;
     private PanelRenderer recoilRenderer = null!;
 
+    private bool lastFocusLeft = true;
+
     private int hotkeyId = 9001;
     [DllImport("user32.dll")]
     private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
@@ -76,6 +78,7 @@ public partial class Form1 : Form
             InitCenterPanels();
             InitC64Labels();
             InitTopButtons();
+            MarkPanelControls();
 
             this.KeyPreview = true;
             this.KeyDown += Form1_KeyDown;
@@ -108,6 +111,48 @@ public partial class Form1 : Form
             MessageBox.Show($"Launch failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             Application.Exit();
         }
+    }
+
+    private void MarkPanelControls()
+    {
+        foreach (Control c in GetAllDescendants(this))
+        {
+            if (c is TextBox || c is NumericUpDown || c is TrackBar || c is CheckBox || c is ComboBox)
+            {
+                c.Enter += MarkFocusSide;
+            }
+        }
+    }
+
+    private void MarkFocusSide(object? sender, EventArgs e)
+    {
+        if (sender is Control c)
+        {
+            var screenX = c.PointToScreen(Point.Empty).X;
+            var formX = this.PointToClient(new Point(screenX, 0)).X;
+            lastFocusLeft = formX < 525;
+        }
+    }
+
+    private static IEnumerable<Control> GetAllDescendants(Control parent)
+    {
+        foreach (Control c in parent.Controls)
+        {
+            yield return c;
+            foreach (Control child in GetAllDescendants(c))
+                yield return child;
+        }
+    }
+
+    private bool IsControlOnLeft(Control? ctrl)
+    {
+        if (ctrl != null)
+        {
+            var screenX = ctrl.PointToScreen(Point.Empty).X;
+            var formX = this.PointToClient(new Point(screenX, 0)).X;
+            lastFocusLeft = formX < 525;
+        }
+        return lastFocusLeft;
     }
 
     protected override void WndProc(ref Message m)
@@ -195,7 +240,6 @@ public partial class Form1 : Form
         btnCopy.Click += CopyLeftToRight;
         this.Controls.Add(btnCopy);
 
-        //glory to our coders all i dont need to write a hook myself but just call a cvar
         var btnCopyCvar= new Button { Text = "wpn_reload_script all", Location = new Point(cx + 73, 620), Size = new Size(154, 24) };
         btnCopyCvar.Tag = false;
         btnCopyCvar.Click += BtnQuickExport_Click;
@@ -326,18 +370,6 @@ public partial class Form1 : Form
         }
         catch { return false; }
     }
-    
-    private bool IsControlOnLeft(Control? ctrl)
-    {
-        if (ctrl == null) return false;
-        while (ctrl != null)
-        {
-            if (ctrl == cmbWeaponsL || ctrl == pnlSpread) return true;
-            if (ctrl == cmbWeaponsR) return false;
-            ctrl = ctrl.Parent;
-        }
-        return false;
-    }
 
     private static void EnableDoubleBuffering(Control control)
     {
@@ -345,8 +377,6 @@ public partial class Form1 : Form
             BindingFlags.SetProperty | BindingFlags.Instance | BindingFlags.NonPublic,
             null, control, new object[] { true });
     }
-
-    //虽然拆分了下面这些还是没必要单独建个文件
 
     private void PnlSpread_Paint(object? sender, PaintEventArgs e)
     {
