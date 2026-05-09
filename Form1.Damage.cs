@@ -18,11 +18,11 @@ public partial class Form1
         double hm = trkHeadL.Value * SliderStep, cm = trkChestL.Value * SliderStep, sm = trkStomachL.Value * SliderStep;
         double lm = trkLegL.Value * SliderStep, am = trkArmL.Value * SliderStep;
         double dist = trkDistanceL.Value, dg = (double)nudDamageGenericL.Value, rm = (double)nudRangeModifierL.Value;
-        double bd = dg * Math.Pow(rm, dist / DistanceDivisor);//基伤*衰减^(距离/12.7)
-        double vest = chkVestL.Checked ? ((currentWeaponLeft.BulletsPerShot ?? 1) > 1 ? 0.8 : 0.9) : 1.0;//普通0.9x 霰弹0.8x
-        int rpm = currentWeaponLeft.FireRate ?? 600;
-        int pellets = currentWeaponLeft.BulletsPerShot ?? 1;
-        var (burstCount, burstInterval) = ParseBurstInfo(currentWeaponLeft.FireModes);
+        double bd = dg * Math.Pow(rm, dist / DistanceDivisor);
+        int pellets = (int)nudBulletsPerShotL.Value;
+        double vest = chkVestL.Checked ? (pellets > 1 ? 0.8 : 0.9) : 1.0;
+        int rpm = (int)nudFireRateL.Value;
+        var (burstCount, burstInterval) = ParseBurstInfo(txtFireModesL.Text);
         UpdateDamageLabel(lblHeadDmgL, bd * hm * pellets, 100, rpm, burstCount, burstInterval);
         UpdateDamageLabel(lblChestDmgL, bd * cm * vest * pellets, 100, rpm, burstCount, burstInterval);
         UpdateDamageLabel(lblStomachDmgL, bd * sm * vest * pellets, 100, rpm, burstCount, burstInterval);
@@ -37,10 +37,10 @@ public partial class Form1
         double lm = trkLegR.Value * SliderStep, am = trkArmR.Value * SliderStep;
         double dist = trkDistanceR.Value, dg = (double)nudDamageGenericR.Value, rm = (double)nudRangeModifierR.Value;
         double bd = dg * Math.Pow(rm, dist / DistanceDivisor);
-        double vest = chkVestR.Checked ? ((currentWeaponRight.BulletsPerShot ?? 1) > 1 ? 0.8 : 0.9) : 1.0;
-        int rpm = currentWeaponRight.FireRate ?? 600;
-        int pellets = currentWeaponRight.BulletsPerShot ?? 1;
-        var (burstCount, burstInterval) = ParseBurstInfo(currentWeaponRight.FireModes);
+        int pellets = (int)nudBulletsPerShotR.Value;
+        double vest = chkVestR.Checked ? (pellets > 1 ? 0.8 : 0.9) : 1.0;
+        int rpm = (int)nudFireRateR.Value;
+        var (burstCount, burstInterval) = ParseBurstInfo(txtFireModesR.Text);
         UpdateDamageLabel(lblHeadDmgR, bd * hm * pellets, 100, rpm, burstCount, burstInterval);
         UpdateDamageLabel(lblChestDmgR, bd * cm * vest * pellets, 100, rpm, burstCount, burstInterval);
         UpdateDamageLabel(lblStomachDmgR, bd * sm * vest * pellets, 100, rpm, burstCount, burstInterval);
@@ -52,7 +52,7 @@ public partial class Form1
     {
         if (string.IsNullOrEmpty(fireModes)) return (0, 0);
         if (fireModes.Contains("Burst", StringComparison.OrdinalIgnoreCase))
-            return (3, 1.0);//每个点射间隔1s
+            return (3, 1.0);
         return (0, 0);
     }
 
@@ -77,7 +77,6 @@ public partial class Form1
     }
 
     private static decimal ClampNud(decimal value, NumericUpDown nud)
-    //防止数值超出范围抛异常
     {
         if (value < nud.Minimum) return nud.Minimum;
         if (value > nud.Maximum) return nud.Maximum;
@@ -88,7 +87,7 @@ public partial class Form1
     {
         if (isLeft)
         {
-            SetControlsValue(trkHeadL, nudHeadL, w.DamageHeadMultiplier ?? 1.0);//伤倍率走滑块 双向绑定 其余字段直接赋值
+            SetControlsValue(trkHeadL, nudHeadL, w.DamageHeadMultiplier ?? 1.0);
             SetControlsValue(trkChestL, nudChestL, w.DamageChestMultiplier ?? 1.0);
             SetControlsValue(trkStomachL, nudStomachL, w.DamageStomachMultiplier ?? 1.0);
             SetControlsValue(trkLegL, nudLegL, w.DamageLegMultiplier ?? 1.0);
@@ -203,7 +202,7 @@ public partial class Form1
             w.FireRate = (int)nudFireRateL.Value;
             w.RangeModifier = (double)nudRangeModifierL.Value;
             w.ClipSize = txtCapacityL.Text;
-            var clipParts = txtCapacityL.Text.Split('/');//从字段拆分出DefaultClip 如30/120取30
+            var clipParts = txtCapacityL.Text.Split('/');
             if (clipParts.Length > 0 && int.TryParse(clipParts[0], out int firstNum)) w.DefaultClip = firstNum;
             w.ExtraBulletChamber = (int)nudExtraBulletChamberL.Value;
             w.BulletsPerShot = (int)nudBulletsPerShotL.Value;
