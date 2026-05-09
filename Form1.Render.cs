@@ -15,6 +15,7 @@ public class PanelRenderer
         this.panel = panel;
     }
 
+    #region 公开绘图入口
     public void DrawSpread(Graphics g, WeaponData? left, WeaponData? right,
         double hipL, double adsL, double bipodHipL, double bipodAdsL,
         double hipR, double adsR, double bipodHipR, double bipodAdsR)
@@ -24,7 +25,6 @@ public class PanelRenderer
         int cx = panel.Width / 2, cy = panel.Height / 2;
         float r = Math.Min(cx, cy) - 20;
         float s = r / 15f;
-        //s是每度散布对应的像素半径 15度对应最大可用半径
 
         DrawCircle(g, cx, cy, (float)(hipL * s), Color.Red, DashStyle.Solid);
         DrawCircle(g, cx, cy, (float)(adsL * s), Color.Red, DashStyle.Dash);
@@ -71,7 +71,6 @@ public class PanelRenderer
         int cy = panel.Height - 30;
         int shots = 30;
         float s = Math.Min(2.5f, (float)((panel.Height - 40) / (Math.Max(hipUpL, 0.01) * shots)));
-        //scale钳制到2.5 防止低后座时扇形过大 用hipUpL防除零
 
         DrawSector(g, cx, cy, (float)hipUpL, (float)hipRtL, shots, s,
             Color.FromArgb(80, 255, 0, 0), Color.Red, "L Hip", "left");
@@ -86,6 +85,9 @@ public class PanelRenderer
                 Color.FromArgb(40, 255, 165, 0), Color.Yellow, "R ADS", "right");
         }
     }
+
+    #endregion
+    #region 绘图辅助
 
     private void DrawCircle(Graphics g, int cx, int cy, float radius, Color color, DashStyle dashStyle)
     {
@@ -130,7 +132,6 @@ public class PanelRenderer
         float radius = totalUp;
         if (radius <= 0) return;
 
-        //以正上方270度为基准 左右扩展halfAngle
         float halfAngle = (float)Math.Atan2(totalRight, totalUp);
         float startAngle = 270f - halfAngle * 180f / (float)Math.PI;
         float sweepAngle = 2f * halfAngle * 180f / (float)Math.PI;
@@ -149,4 +150,5 @@ public class PanelRenderer
             : cx + totalRight + 4;
         g.DrawString(label, labelFont, labelBrush, labelX, cy - totalUp - textSize.Height);
     }
+    #endregion
 }

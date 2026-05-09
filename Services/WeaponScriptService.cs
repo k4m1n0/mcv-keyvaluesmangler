@@ -11,6 +11,7 @@ namespace WeaponDamageCalc.Services;
 
 public static class WeaponScriptService
 {
+    #region 字段映射表
     private static readonly HashSet<string> NonFirearmTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "GrenadeLauncher", "RocketLauncher", "Melee", "Equipment",
@@ -135,6 +136,9 @@ public static class WeaponScriptService
         catch { }
         return map;
     }
+
+    #endregion
+    #region 导出导入
 
     public static string ExportCsvToScripts(string csvFilePath, string scriptsDir)
     {
@@ -310,6 +314,9 @@ public static class WeaponScriptService
         return string.Join("\n", log);
     }
 
+    #endregion
+    #region 脚本解析
+
     private static bool IsStandardFirearm(string name, string content)
     {
         if (name.Contains("_zombie", StringComparison.OrdinalIgnoreCase)) return false;
@@ -347,6 +354,10 @@ public static class WeaponScriptService
             return r;
         return null;
     }
+
+    #endregion
+    #region 字段读写与替换
+
 
     private static string? GetCsvFieldValue(WeaponData w, string h) => h switch
     {
@@ -433,4 +444,5 @@ public static class WeaponScriptService
 
         return c.Replace(m.Value, b + "}");
     }
+    #endregion
 }

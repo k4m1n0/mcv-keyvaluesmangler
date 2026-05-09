@@ -38,6 +38,7 @@ public partial class Form1 : Form
     private bool lastFocusLeft = true;
 
     private int hotkeyId = 9001;
+
     [DllImport("user32.dll")]
     private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
     [DllImport("user32.dll")]
@@ -59,6 +60,8 @@ public partial class Form1 : Form
     [DllImport("user32.dll")]
     private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     private const int SW_RESTORE = 9;
+
+    #region 初始化
 
     public Form1()
     {
@@ -113,6 +116,92 @@ public partial class Form1 : Form
         }
     }
 
+    private void InitCenterPanels()
+    {
+        int cx = 525;
+        pnlSpread = new Panel { Location = new Point(cx, 38), Size = new Size(300, 300), BorderStyle = BorderStyle.FixedSingle, BackColor = Color.Black };
+        EnableDoubleBuffering(pnlSpread);
+        pnlSpread.Paint += PnlSpread_Paint;
+        this.Controls.Add(pnlSpread);
+
+        pnlRecoil = new Panel { Location = new Point(cx, 313), Size = new Size(300, 300), BorderStyle = BorderStyle.FixedSingle, BackColor = Color.Black };
+        EnableDoubleBuffering(pnlRecoil);
+        pnlRecoil.Paint += PnlRecoil_Paint;
+        this.Controls.Add(pnlRecoil);
+
+        spreadRenderer = new PanelRenderer(pnlSpread);
+        recoilRenderer = new PanelRenderer(pnlRecoil);
+    }
+
+    private void InitTopButtons()
+    {
+        int cx = 525;
+        btnSave = new Button { Text = "Save", Location = new Point(cx, 6), Size = new Size(59, 26) };
+        btnSave.Click += BtnSave_Click;
+        this.Controls.Add(btnSave);
+
+        btnCsvToScripts = new Button { Text = "CSV>Scripts", Location = new Point(cx + 61, 6), Size = new Size(88, 26) };
+        btnCsvToScripts.Click += BtnCsvToScripts_Click;
+        this.Controls.Add(btnCsvToScripts);
+
+        btnScriptsToCsv = new Button { Text = "Scripts>CSV", Location = new Point(cx + 151, 6), Size = new Size(88, 26) };
+        btnScriptsToCsv.Click += BtnScriptsToCsv_Click;
+        this.Controls.Add(btnScriptsToCsv);
+
+        var btnRefresh = new Button { Text = "Rfsh", Location = new Point(cx + 241, 6), Size = new Size(59, 26) };
+        btnRefresh.Click += BtnRefresh_Click;
+        this.Controls.Add(btnRefresh);
+
+        var btnCopy = new Button { Text = "L>R", Location = new Point(cx + 22, 620), Size = new Size(48, 24) };
+        btnCopy.Click += CopyLeftToRight;
+        this.Controls.Add(btnCopy);
+
+        var btnCopyCvar = new Button { Text = "wpn_reload_script all", Location = new Point(cx + 73, 620), Size = new Size(154, 24) };
+        btnCopyCvar.Tag = false;
+        btnCopyCvar.Click += BtnQuickExport_Click;
+        btnCopyCvar.MouseLeave += (s, e) => CancelConfirm(btnCopyCvar);
+        btnCopyCvar.MouseUp += (s, e) =>
+        {
+            if (e.Button == MouseButtons.Right) CancelConfirm(btnCopyCvar);
+        };
+        this.Controls.Add(btnCopyCvar);
+
+        var btnCopyR = new Button { Text = "L<R", Location = new Point(cx + 230, 620), Size = new Size(48, 24) };
+        btnCopyR.Click += CopyRightToLeft;
+        this.Controls.Add(btnCopyR);
+    }
+
+    private static void CancelConfirm(Button btn)
+    {
+        if (btn.Tag is true)
+        {
+            btn.Text = "wpn_reload_script all";
+            btn.Tag = false;
+        }
+    }
+
+    private void Form1_FormClosing(object sender, FormClosingEventArgs e)
+    {
+        bool leftDirty = currentWeaponLeft != null && HasUnsavedChanges(true);
+        bool rightDirty = currentWeaponRight != null && HasUnsavedChanges(false);
+        if (leftDirty || rightDirty)
+        {
+            var result = MessageBox.Show("Unsaved changes will be lost. Save now?",
+                "Unsaved Changes", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
+            if (result == DialogResult.Yes)
+            {
+                BtnSave_Click(this, EventArgs.Empty);
+            }
+            else if (result == DialogResult.Cancel)
+            {
+                e.Cancel = true;
+            }
+        }
+    }
+
+    #endregion
+    #region 窗口交互
+
     private void MarkPanelControls()
     {
         foreach (Control c in GetAllDescendants(this))
@@ -121,16 +210,6 @@ public partial class Form1 : Form
             {
                 c.Enter += MarkFocusSide;
             }
-        }
-    }
-
-    private void MarkFocusSide(object? sender, EventArgs e)
-    {
-        if (sender is Control c)
-        {
-            var screenX = c.PointToScreen(Point.Empty).X;
-            var formX = this.PointToClient(new Point(screenX, 0)).X;
-            lastFocusLeft = formX < 525;
         }
     }
 
@@ -144,12 +223,20 @@ public partial class Form1 : Form
         }
     }
 
-    private bool IsControlOnLeft(Control? ctrl)
+    private void MarkFocusSide(object sender, EventArgs e)
+    {
+        if (sender is Control c)
+        {
+            var formX = this.PointToClient(c.PointToScreen(Point.Empty)).X;
+            lastFocusLeft = formX < 525;
+        }
+    }
+    
+    private bool IsControlOnLeft(Control ctrl)
     {
         if (ctrl != null)
         {
-            var screenX = ctrl.PointToScreen(Point.Empty).X;
-            var formX = this.PointToClient(new Point(screenX, 0)).X;
+            var formX = this.PointToClient(ctrl.PointToScreen(Point.Empty)).X;
             lastFocusLeft = formX < 525;
         }
         return lastFocusLeft;
@@ -200,74 +287,23 @@ public partial class Form1 : Form
         base.WndProc(ref m);
     }
 
-    private void InitCenterPanels()
+    private static bool IsMcvForeground()
     {
-        int cx = 525;
-        pnlSpread = new Panel { Location = new Point(cx, 38), Size = new Size(300, 300), BorderStyle = BorderStyle.FixedSingle, BackColor = Color.Black };
-        EnableDoubleBuffering(pnlSpread);
-        pnlSpread.Paint += PnlSpread_Paint;
-        this.Controls.Add(pnlSpread);
-
-        pnlRecoil = new Panel { Location = new Point(cx, 313), Size = new Size(300, 300), BorderStyle = BorderStyle.FixedSingle, BackColor = Color.Black };
-        EnableDoubleBuffering(pnlRecoil);
-        pnlRecoil.Paint += PnlRecoil_Paint;
-        this.Controls.Add(pnlRecoil);
-
-        spreadRenderer = new PanelRenderer(pnlSpread);
-        recoilRenderer = new PanelRenderer(pnlRecoil);
-    }
-
-    private void InitTopButtons()
-    {
-        int cx = 525;
-        btnSave = new Button { Text = "Save", Location = new Point(cx, 6), Size = new Size(59, 26) };
-        btnSave.Click += BtnSave_Click;
-        this.Controls.Add(btnSave);
-
-        btnCsvToScripts = new Button { Text = "CSV>Scripts", Location = new Point(cx + 61, 6), Size = new Size(88, 26) };
-        btnCsvToScripts.Click += BtnCsvToScripts_Click;
-        this.Controls.Add(btnCsvToScripts);
-
-        btnScriptsToCsv = new Button { Text = "Scripts>CSV", Location = new Point(cx + 151, 6), Size = new Size(88, 26) };
-        btnScriptsToCsv.Click += BtnScriptsToCsv_Click;
-        this.Controls.Add(btnScriptsToCsv);
-
-        var btnRefresh = new Button { Text = "Rfsh", Location = new Point(cx + 241, 6), Size = new Size(59, 26) };
-        btnRefresh.Click += BtnRefresh_Click;
-        this.Controls.Add(btnRefresh);
-
-        var btnCopy = new Button { Text = "L>R", Location = new Point(cx + 22, 620), Size = new Size(48, 24) };
-        btnCopy.Click += CopyLeftToRight;
-        this.Controls.Add(btnCopy);
-
-        var btnCopyCvar= new Button { Text = "wpn_reload_script all", Location = new Point(cx + 73, 620), Size = new Size(154, 24) };
-        btnCopyCvar.Tag = false;
-        btnCopyCvar.Click += BtnQuickExport_Click;
-        btnCopyCvar.MouseLeave += (s, e) => CancelConfirm(btnCopyCvar);
-        btnCopyCvar.MouseUp += (s, e) =>
+        IntPtr fgw = GetForegroundWindow();
+        if (fgw == IntPtr.Zero) return false;
+        GetWindowThreadProcessId(fgw, out uint pid);
+        try
         {
-            if (e.Button == MouseButtons.Right) CancelConfirm(btnCopyCvar);
-        };
-        this.Controls.Add(btnCopyCvar);
-
-        var btnCopyR = new Button { Text = "L<R", Location = new Point(cx + 230, 620), Size = new Size(48, 24) };
-        btnCopyR.Click += CopyRightToLeft;
-        this.Controls.Add(btnCopyR);
-    }
-
-    #nullable enable
-    //放下面也会爆warn
-
-    private static void CancelConfirm(Button btn)
-    {
-        if (btn.Tag is true)
-        {
-            btn.Text = "wpn_reload_script all";
-            btn.Tag = false;
+            using var p = Process.GetProcessById((int)pid);
+            return p.ProcessName.Equals("mcv_x64", StringComparison.OrdinalIgnoreCase);
         }
+        catch { return false; }
     }
 
-    private void CopyLeftToRight(object? sender, EventArgs e)
+    #endregion
+    #region 复制
+
+    private void CopyLeftToRight(object sender, EventArgs e)
     {
         if (currentWeaponLeft != null && currentWeaponRight != null)
         {
@@ -280,7 +316,7 @@ public partial class Form1 : Form
         }
     }
 
-    private void CopyRightToLeft(object? sender, EventArgs e)
+    private void CopyRightToLeft(object sender, EventArgs e)
     {
         if (currentWeaponRight != null && currentWeaponLeft != null)
         {
@@ -293,7 +329,6 @@ public partial class Form1 : Form
         }
     }
 
-    //不拷贝ScriptName和PrintName防止覆盖武器身份
     private static void CopyWeaponDataFields(WeaponData src, WeaponData dst)
     {
         dst.DamageHeadMultiplier = src.DamageHeadMultiplier;
@@ -339,37 +374,8 @@ public partial class Form1 : Form
         dst.DamageGeneric = src.DamageGeneric;
     }
 
-    private void Form1_FormClosing(object? sender, FormClosingEventArgs e)
-    {
-        bool leftDirty = currentWeaponLeft != null && HasUnsavedChanges(true);
-        bool rightDirty = currentWeaponRight != null && HasUnsavedChanges(false);
-        if (leftDirty || rightDirty)
-        {
-            var result = MessageBox.Show("Unsaved changes will be lost. Save now?",
-                "Unsaved Changes", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
-            if (result == DialogResult.Yes)
-            {
-                BtnSave_Click(this, EventArgs.Empty);
-            }
-            else if (result == DialogResult.Cancel)
-            {
-                e.Cancel = true;
-            }
-        }
-    }
-
-    private static bool IsMcvForeground()
-    {
-        IntPtr fgw = GetForegroundWindow();
-        if (fgw == IntPtr.Zero) return false;
-        GetWindowThreadProcessId(fgw, out uint pid);
-        try
-        {
-            using var p = Process.GetProcessById((int)pid);
-            return p.ProcessName.Equals("mcv_x64", StringComparison.OrdinalIgnoreCase);
-        }
-        catch { return false; }
-    }
+    #endregion
+    #region 杂项
 
     private static void EnableDoubleBuffering(Control control)
     {
@@ -377,6 +383,9 @@ public partial class Form1 : Form
             BindingFlags.SetProperty | BindingFlags.Instance | BindingFlags.NonPublic,
             null, control, new object[] { true });
     }
+
+    #nullable enable
+    //放下面也会爆warn
 
     private void PnlSpread_Paint(object? sender, PaintEventArgs e)
     {
@@ -415,4 +424,5 @@ public partial class Form1 : Form
             this.Controls.Add(txt);
         }
     }
+    #endregion
 }

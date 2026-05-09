@@ -7,6 +7,7 @@ namespace WeaponDamageCalc;
 
 public partial class Form1
 {
+    #region 选择保存检测
     private void WeaponSelectedL(object? sender, EventArgs e)
     {
         if (initializing)
@@ -149,6 +150,9 @@ public partial class Form1
         return a.Value == b.Value;
     }
 
+    #endregion
+    #region 联动刷新
+
     private void SliderChangedL(object? sender, EventArgs e)
     {
         if (updatingControls) return;
@@ -220,6 +224,9 @@ public partial class Form1
     {
         UpdateAllDamage();
     }
+
+    #endregion
+    #region 保存导入导出
 
     private async void BtnSave_Click(object? sender, EventArgs e)
     {
@@ -405,4 +412,5 @@ public partial class Form1
             cmbWeaponsR.DroppedDown = true;
         }
     }
+    #endregion
 }

@@ -6,6 +6,7 @@ namespace WeaponDamageCalc;
 
 public partial class Form1
 {
+    #region 伤害计算
     private void UpdateAllDamage()
     {
         UpdateLeftDamage();
@@ -75,6 +76,9 @@ public partial class Form1
         }
         lbl.Text = $"= {damage:F1} | {shots}shots | {ttkMs:F0}ms";
     }
+
+    #endregion
+    #region 控件值加载与保存
 
     private static decimal ClampNud(decimal value, NumericUpDown nud)
     {
@@ -274,4 +278,5 @@ public partial class Form1
             w.DamageGeneric = (double)nudDamageGenericR.Value;
         }
     }
+    #endregion
 }

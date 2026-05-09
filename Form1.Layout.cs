@@ -33,6 +33,8 @@ public partial class Form1
         lblC64_3.Text = hasData ? "READY." : "";
     }
 
+    #region 伤害倍率和衰减
+
     private void CreateDamageMultiplierGroup(int x, bool isLeft)
     {
         var gb = new GroupBox { Text = "Damage Multiplier", Location = new Point(x, 38), Size = new Size(520, 215) };
@@ -86,6 +88,9 @@ public partial class Form1
         }
         this.Controls.Add(gb);
     }
+
+    #endregion
+    #region 散布后座主属性
 
     private void CreateSpreadRecoilAndPropertiesGroups(int x, bool isLeft)
     {
@@ -154,6 +159,9 @@ public partial class Form1
         this.Controls.Add(gbProp);
     }
 
+    #endregion
+    #region 散布倍率
+
     private void CreateSpreadMultiplierGroup(int x, bool isLeft)
     {
         var gb = new GroupBox { Text = "Spread Multiplier", Location = new Point(x, 453), Size = new Size(520, 75) };
@@ -180,6 +188,9 @@ public partial class Form1
         }
         this.Controls.Add(gb);
     }
+
+    #endregion
+    #region 其它属性
 
     private void CreateOtherStatsGroup(int x, bool isLeft)
     {
@@ -238,6 +249,9 @@ public partial class Form1
         this.Controls.Add(gb);
     }
 
+    #endregion
+    #region 控件工厂
+
     private (TrackBar, NumericUpDown, Label) CreateSliderRow(Control parent, string text, ref int y, bool isLeft)
     {
         parent.Controls.Add(new Label { Text = text, Location = new Point(8, y + 8), Size = new Size(35, 18), TextAlign = ContentAlignment.MiddleLeft });
@@ -288,4 +302,5 @@ public partial class Form1
         parent.Controls.Add(tb);
         return tb;
     }
+    #endregion
 }
