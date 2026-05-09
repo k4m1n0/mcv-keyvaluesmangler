@@ -156,6 +156,7 @@ public partial class Form1 : Form
         btnCopy.Click += CopyLeftToRight;
         this.Controls.Add(btnCopy);
 
+        //glory to our coders all i dont need to write a hook myself but just call a cvar
         var btnCopyCvar = new Button { Text = "wpn_reload_script all", Location = new Point(cx + 73, 620), Size = new Size(154, 24) };
         btnCopyCvar.Tag = false;
         btnCopyCvar.Click += BtnQuickExport_Click;
@@ -202,6 +203,7 @@ public partial class Form1 : Form
     #endregion
     #region 窗口交互
 
+    //给所有可交互控件绑Enter事件 追踪最后焦点所在面板侧
     private void MarkPanelControls()
     {
         foreach (Control c in GetAllDescendants(this))
@@ -223,6 +225,7 @@ public partial class Form1 : Form
         }
     }
 
+    //控件获得焦点时记录其在左半还是右半
     private void MarkFocusSide(object sender, EventArgs e)
     {
         if (sender is Control c)
@@ -232,6 +235,7 @@ public partial class Form1 : Form
         }
     }
     
+    //无焦点控件时回退到lastFocusLeft 有控件时先更新再返回
     private bool IsControlOnLeft(Control ctrl)
     {
         if (ctrl != null)
@@ -329,6 +333,7 @@ public partial class Form1 : Form
         }
     }
 
+    //不拷贝ScriptName和PrintName防止覆盖武器身份
     private static void CopyWeaponDataFields(WeaponData src, WeaponData dst)
     {
         dst.DamageHeadMultiplier = src.DamageHeadMultiplier;
@@ -385,7 +390,7 @@ public partial class Form1 : Form
     }
 
     #nullable enable
-    //放下面也会爆warn
+    //放下面也会爆warn 还有虽然拆分了 下面这些还是没必要单独建个文件
 
     private void PnlSpread_Paint(object? sender, PaintEventArgs e)
     {
