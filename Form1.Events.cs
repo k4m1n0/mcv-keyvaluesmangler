@@ -230,6 +230,7 @@ public partial class Form1
 
     private async void BtnSave_Click(object? sender, EventArgs e)
     {
+        //强制提交活跃控件的待定输入 防止NUD焦点未移走导致值未更新
         var active = this.ActiveControl;
         if (active != null)
         {

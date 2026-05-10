@@ -21,7 +21,7 @@ public partial class Form1
         double dist = trkDistanceL.Value, dg = (double)nudDamageGenericL.Value, rm = (double)nudRangeModifierL.Value;
         double bd = dg * Math.Pow(rm, dist / DistanceDivisor);
         int pellets = (int)nudBulletsPerShotL.Value;
-        double vest = chkVestL.Checked ? (pellets > 1 ? 0.8 : 0.9) : 1.0;
+        double vest = chkVestL.Checked ? (pellets > 1 ? 0.8 : 0.9) : 1.0;//普通0.9x 霰弹0.8x
         int rpm = (int)nudFireRateL.Value;
         var (burstCount, burstInterval) = ParseBurstInfo(txtFireModesL.Text);
         UpdateDamageLabel(lblHeadDmgL, bd * hm * pellets, 100, rpm, burstCount, burstInterval);
@@ -37,7 +37,7 @@ public partial class Form1
         double hm = trkHeadR.Value * SliderStep, cm = trkChestR.Value * SliderStep, sm = trkStomachR.Value * SliderStep;
         double lm = trkLegR.Value * SliderStep, am = trkArmR.Value * SliderStep;
         double dist = trkDistanceR.Value, dg = (double)nudDamageGenericR.Value, rm = (double)nudRangeModifierR.Value;
-        double bd = dg * Math.Pow(rm, dist / DistanceDivisor);
+        double bd = dg * Math.Pow(rm, dist / DistanceDivisor);//基伤*衰减^(距离/12.7)
         int pellets = (int)nudBulletsPerShotR.Value;
         double vest = chkVestR.Checked ? (pellets > 1 ? 0.8 : 0.9) : 1.0;
         int rpm = (int)nudFireRateR.Value;
@@ -206,7 +206,7 @@ public partial class Form1
             w.FireRate = (int)nudFireRateL.Value;
             w.RangeModifier = (double)nudRangeModifierL.Value;
             w.ClipSize = txtCapacityL.Text;
-            var clipParts = txtCapacityL.Text.Split('/');
+            var clipParts = txtCapacityL.Text.Split('/');//从字段拆分出DefaultClip 如30/120取30
             if (clipParts.Length > 0 && int.TryParse(clipParts[0], out int firstNum)) w.DefaultClip = firstNum;
             w.ExtraBulletChamber = (int)nudExtraBulletChamberL.Value;
             w.BulletsPerShot = (int)nudBulletsPerShotL.Value;
