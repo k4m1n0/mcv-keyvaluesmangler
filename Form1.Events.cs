@@ -369,6 +369,8 @@ public partial class Form1
     {
         if (refreshing) return;
         refreshing = true;
+        string leftName = currentWeaponLeft?.ScriptName ?? "";
+        string rightName = currentWeaponRight?.ScriptName ?? "";
         try
         {
             await Task.Run(() =>
@@ -384,13 +386,31 @@ public partial class Form1
                     cmbWeaponsR.DataSource = null;
                     cmbWeaponsR.DataSource = new List<WeaponData>(weapons);
                     cmbWeaponsR.DisplayMember = "PrintName";
-                    if (weapons.Count > 0) { cmbWeaponsL.SelectedIndex = 0; cmbWeaponsR.SelectedIndex = 0; }
+                    if (weapons.Count > 0)
+                    {
+                        RestoreComboSelection(cmbWeaponsL, leftName);
+                        RestoreComboSelection(cmbWeaponsR, rightName);
+                    }
                     UpdateC64Labels(weapons.Count > 0);
                 });
             });
         }
         catch (Exception ex) { this.Invoke(() => MessageBox.Show($"Refresh failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error)); }
         finally { refreshing = false; }
+    }
+
+    private static void RestoreComboSelection(ComboBox cmb, string scriptName)
+    {
+        if (string.IsNullOrEmpty(scriptName)) { cmb.SelectedIndex = 0; return; }
+        foreach (WeaponData w in cmb.Items)
+        {
+            if (string.Equals(w.ScriptName, scriptName, StringComparison.OrdinalIgnoreCase))
+            {
+                cmb.SelectedItem = w;
+                return;
+            }
+        }
+        cmb.SelectedIndex = 0;
     }
 
     private void Form1_KeyDown(object? sender, KeyEventArgs e)
