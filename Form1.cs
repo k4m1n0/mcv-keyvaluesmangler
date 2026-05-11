@@ -16,6 +16,8 @@ public partial class Form1 : Form
     private List<WeaponData> weapons = null!;
     private WeaponData? currentWeaponLeft = null;
     private WeaponData? currentWeaponRight = null;
+    private WeaponData? snapshotLeft = null;
+    private WeaponData? snapshotRight = null;
 
     #nullable disable
     //放上面会爆warn
@@ -304,6 +306,27 @@ public partial class Form1 : Form
         catch { return false; }
     }
 
+        private void StoreSnapshot(bool isLeft)
+    {
+        var src = isLeft ? currentWeaponLeft : currentWeaponRight;
+        if (src == null) return;
+        var snap = new WeaponData();
+        CopyWeaponDataFields(src, snap);
+        if (isLeft) snapshotLeft = snap; else snapshotRight = snap;
+    }
+
+    private void RestoreSnapshot(bool isLeft)
+    {
+        var snap = isLeft ? snapshotLeft : snapshotRight;
+        if (snap == null) return;
+        var temp = new WeaponData();
+        CopyWeaponDataFields(snap, temp);
+        LoadWeaponToControls(temp, isLeft);
+        UpdateAllDamage();
+        pnlSpread.Invalidate();
+        pnlRecoil.Invalidate();
+    }
+
     #endregion
     #region 复制
 
@@ -317,6 +340,7 @@ public partial class Form1 : Form
             UpdateAllDamage();
             pnlSpread.Invalidate();
             pnlRecoil.Invalidate();
+            StoreSnapshot(true);
         }
     }
 
@@ -330,6 +354,7 @@ public partial class Form1 : Form
             UpdateAllDamage();
             pnlSpread.Invalidate();
             pnlRecoil.Invalidate();
+            StoreSnapshot(true);
         }
     }
 

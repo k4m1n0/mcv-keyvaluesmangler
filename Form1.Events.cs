@@ -253,15 +253,15 @@ public partial class Form1
             if (currentWeaponLeft != null) SaveControlsToWeapon(currentWeaponLeft, true);
             if (currentWeaponRight != null) SaveControlsToWeapon(currentWeaponRight, false);
         }
+        var savedOriginalTitle = this.Text;
+        this.Text = "Saved!";
         try
         {
             CsvService.SaveWeapons(Path.Combine(AppContext.BaseDirectory, "weapons.csv"), weapons);
-            var originalTitle = this.Text;
-            this.Text = "Saved!";
             await Task.Delay(1145);
-            this.Text = originalTitle;
         }
         catch (Exception ex) { MessageBox.Show($"Save failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        finally { this.Text = savedOriginalTitle; }
     }
 
     private void BtnCsvToScripts_Click(object? sender, EventArgs e)
@@ -431,6 +431,16 @@ public partial class Form1
             e.SuppressKeyPress = true;
             cmbWeaponsR.Focus();
             cmbWeaponsR.DroppedDown = true;
+        }
+        else if (e.Control && e.KeyCode == Keys.Z)
+        {
+            e.SuppressKeyPress = true;
+            RestoreSnapshot(IsControlOnLeft(this.ActiveControl));
+        }
+        else if (e.Control && e.KeyCode == Keys.R)
+        {
+            e.SuppressKeyPress = true;
+            RefreshWeaponList();
         }
     }
     #endregion
