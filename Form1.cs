@@ -334,13 +334,12 @@ public partial class Form1 : Form
     {
         if (currentWeaponLeft != null && currentWeaponRight != null)
         {
-            SaveControlsToWeapon(currentWeaponLeft, true);
-            CopyWeaponDataFields(currentWeaponLeft, currentWeaponRight);
-            LoadWeaponToControls(currentWeaponRight, false);
+            var temp = new WeaponData();
+            SaveControlsToWeapon(temp, true);
+            LoadWeaponToControls(temp, false);
             UpdateAllDamage();
             pnlSpread.Invalidate();
             pnlRecoil.Invalidate();
-            StoreSnapshot(true);
         }
     }
 
@@ -348,13 +347,12 @@ public partial class Form1 : Form
     {
         if (currentWeaponRight != null && currentWeaponLeft != null)
         {
-            SaveControlsToWeapon(currentWeaponRight, false);
-            CopyWeaponDataFields(currentWeaponRight, currentWeaponLeft);
-            LoadWeaponToControls(currentWeaponLeft, true);
+            var temp = new WeaponData();
+            SaveControlsToWeapon(temp, false);
+            LoadWeaponToControls(temp, true);
             UpdateAllDamage();
             pnlSpread.Invalidate();
             pnlRecoil.Invalidate();
-            StoreSnapshot(true);
         }
     }
 
