@@ -8,8 +8,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
-    <Version>1.0.0.5</Version>
-    <FileVersion>1.0.0.5</FileVersion>
+    <Version>1.0.0.6</Version>
+    <FileVersion>1.0.0.6</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
