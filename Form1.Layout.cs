@@ -172,8 +172,8 @@ public partial class Form1
             nudProneSpreadL = CreateNullableNumericRow(gb, "Prone", 188, y, 100m);
             nudStandMoveSpreadL = CreateNullableNumericRow(gb, "Move", 368, y, 100m);
             y += 26;
-            nudSneakMoveSpreadL = CreateNullableNumericRow(gb, "SneakMove", 8, y, 100m);
-            nudCrouchMoveSpreadL = CreateNullableNumericRow(gb, "CrouchMove", 188, y, 100m);
+            nudSneakMoveSpreadL = CreateNullableNumericRow(gb, "SneakMov", 8, y, 100m);
+            nudCrouchMoveSpreadL = CreateNullableNumericRow(gb, "DuckMov", 188, y, 100m);
             nudJumpSpreadL = CreateNullableNumericRow(gb, "Jump", 368, y, 100m);
         }
         else
@@ -182,8 +182,8 @@ public partial class Form1
             nudProneSpreadR = CreateNullableNumericRow(gb, "Prone", 188, y, 100m);
             nudStandMoveSpreadR = CreateNullableNumericRow(gb, "Move", 368, y, 100m);
             y += 26;
-            nudSneakMoveSpreadR = CreateNullableNumericRow(gb, "SneakMove", 8, y, 100m);
-            nudCrouchMoveSpreadR = CreateNullableNumericRow(gb, "CrouchMove", 188, y, 100m);
+            nudSneakMoveSpreadR = CreateNullableNumericRow(gb, "SneakMov", 8, y, 100m);
+            nudCrouchMoveSpreadR = CreateNullableNumericRow(gb, "DuckMov", 188, y, 100m);
             nudJumpSpreadR = CreateNullableNumericRow(gb, "Jump", 368, y, 100m);
         }
         this.Controls.Add(gb);
@@ -207,19 +207,19 @@ public partial class Form1
             nudZMBuyPriceL = CreateNullableIntNumericRow(gb, "ZM Price", 188, y, 1000000m);
             nudZMWeightL = CreateNullableIntNumericRow(gb, "ZM Block", 368, y, 100m);
             y += 26;
-            nudMetalPenL = CreateNullableNumericRow(gb, "Metal Pen", 8, y, 10000m);
-            nudGlassPenL = CreateNullableNumericRow(gb, "Glass Pen", 188, y, 10000m);
-            nudConcretePenL = CreateNullableNumericRow(gb, "Concr Pen", 368, y, 10000m);
+            nudMetalPenL = CreateNullableNumericRow(gb, "MetalPen", 8, y, 10000m);
+            nudGlassPenL = CreateNullableNumericRow(gb, "GlassPen", 188, y, 10000m);
+            nudConcretePenL = CreateNullableNumericRow(gb, "ConcrPen", 368, y, 10000m);
             y += 26;
-            nudWoodPenL = CreateNullableNumericRow(gb, "Wood Pen", 8, y, 10000m);
-            nudOtherPenL = CreateNullableNumericRow(gb, "Other Pen", 188, y, 10000m);
+            nudWoodPenL = CreateNullableNumericRow(gb, "WoodPen", 8, y, 10000m);
+            nudOtherPenL = CreateNullableNumericRow(gb, "OtherPen", 188, y, 10000m);
             nudConcreteDmgModL = CreateNullableNumericRow(gb, "Concr Mod", 368, y, 100m);
             y += 26;
-            nudMetalDmgModL = CreateNullableNumericRow(gb, "Metal Mod", 8, y, 100m);
-            nudGlassDmgModL = CreateNullableNumericRow(gb, "Glass Mod", 188, y, 100m);
-            nudWoodDmgModL = CreateNullableNumericRow(gb, "Wood Mod", 368, y, 100m);
+            nudMetalDmgModL = CreateNullableNumericRow(gb, "MetalMod", 8, y, 100m);
+            nudGlassDmgModL = CreateNullableNumericRow(gb, "GlassMod", 188, y, 100m);
+            nudWoodDmgModL = CreateNullableNumericRow(gb, "WoodMod", 368, y, 100m);
             y += 26;
-            nudOtherDmgModL = CreateNullableNumericRow(gb, "Other Mod", 8, y, 100m);
+            nudOtherDmgModL = CreateNullableNumericRow(gb, "OtherMod", 8, y, 100m);
         }
         else
         {
@@ -232,19 +232,19 @@ public partial class Form1
             nudZMBuyPriceR = CreateNullableIntNumericRow(gb, "ZM Price", 188, y, 1000000m);
             nudZMWeightR = CreateNullableIntNumericRow(gb, "ZM Block", 368, y, 100m);
             y += 26;
-            nudMetalPenR = CreateNullableNumericRow(gb, "Metal Pen", 8, y, 10000m);
-            nudGlassPenR = CreateNullableNumericRow(gb, "Glass Pen", 188, y, 10000m);
-            nudConcretePenR = CreateNullableNumericRow(gb, "Concr Pen", 368, y, 10000m);
+            nudMetalPenR = CreateNullableNumericRow(gb, "MetalPen", 8, y, 10000m);
+            nudGlassPenR = CreateNullableNumericRow(gb, "GlassPen", 188, y, 10000m);
+            nudConcretePenR = CreateNullableNumericRow(gb, "ConcrPen", 368, y, 10000m);
             y += 26;
-            nudWoodPenR = CreateNullableNumericRow(gb, "Wood Pen", 8, y, 10000m);
-            nudOtherPenR = CreateNullableNumericRow(gb, "Other Pen", 188, y, 10000m);
-            nudConcreteDmgModR = CreateNullableNumericRow(gb, "Concr Mod", 368, y, 100m);
+            nudWoodPenR = CreateNullableNumericRow(gb, "WoodPen", 8, y, 10000m);
+            nudOtherPenR = CreateNullableNumericRow(gb, "OtherPen", 188, y, 10000m);
+            nudConcreteDmgModR = CreateNullableNumericRow(gb, "ConcrMod", 368, y, 100m);
             y += 26;
-            nudMetalDmgModR = CreateNullableNumericRow(gb, "Metal Mod", 8, y, 100m);
-            nudGlassDmgModR = CreateNullableNumericRow(gb, "Glass Mod", 188, y, 100m);
-            nudWoodDmgModR = CreateNullableNumericRow(gb, "Wood Mod", 368, y, 100m);
+            nudMetalDmgModR = CreateNullableNumericRow(gb, "MetalMod", 8, y, 100m);
+            nudGlassDmgModR = CreateNullableNumericRow(gb, "GlassMod", 188, y, 100m);
+            nudWoodDmgModR = CreateNullableNumericRow(gb, "WoodMod", 368, y, 100m);
             y += 26;
-            nudOtherDmgModR = CreateNullableNumericRow(gb, "Other Mod", 8, y, 100m);
+            nudOtherDmgModR = CreateNullableNumericRow(gb, "OtherMod", 8, y, 100m);
         }
         this.Controls.Add(gb);
     }

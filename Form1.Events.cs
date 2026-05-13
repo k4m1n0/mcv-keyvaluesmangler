@@ -230,38 +230,43 @@ public partial class Form1
 
     private async void BtnSave_Click(object? sender, EventArgs e)
     {
-        //强制提交活跃控件的待定输入 防止NUD焦点未移走导致值未更新
-        var active = this.ActiveControl;
-        if (active != null)
-        {
-            this.ActiveControl = null;
-            active.Focus();
-        }
-        bool sameWeapon = currentWeaponLeft != null && currentWeaponRight != null
-            && ReferenceEquals(currentWeaponLeft, currentWeaponRight);
-        if (sameWeapon)
-        {
-            //同一武器时只保存焦点所在侧 防止后保存的一侧覆盖前一侧
-            bool focusLeft = IsControlOnLeft(active);
-            if (focusLeft)
-                SaveControlsToWeapon(currentWeaponLeft!, true);
-            else
-                SaveControlsToWeapon(currentWeaponRight!, false);
-        }
-        else
-        {
-            if (currentWeaponLeft != null) SaveControlsToWeapon(currentWeaponLeft, true);
-            if (currentWeaponRight != null) SaveControlsToWeapon(currentWeaponRight, false);
-        }
-        var savedOriginalTitle = this.Text;
-        this.Text = "Saved!";
+        if (System.Threading.Interlocked.Exchange(ref saveLock, 1) != 0) return;
         try
         {
-            CsvService.SaveWeapons(Path.Combine(AppContext.BaseDirectory, "weapons.csv"), weapons);
-            await Task.Delay(1145);
+            //强制提交活跃控件的待定输入 防止NUD焦点未移走导致值未更新
+            var active = this.ActiveControl;
+            if (active != null)
+            {
+                this.ActiveControl = null;
+                active.Focus();
+            }
+            bool sameWeapon = currentWeaponLeft != null && currentWeaponRight != null
+                && ReferenceEquals(currentWeaponLeft, currentWeaponRight);
+            if (sameWeapon)
+            {
+                //同一武器时只保存焦点所在侧 防止后保存的一侧覆盖前一侧
+                bool focusLeft = IsControlOnLeft(active);
+                if (focusLeft)
+                    SaveControlsToWeapon(currentWeaponLeft!, true);
+                else
+                    SaveControlsToWeapon(currentWeaponRight!, false);
+            }
+            else
+            {
+                if (currentWeaponLeft != null) SaveControlsToWeapon(currentWeaponLeft, true);
+                if (currentWeaponRight != null) SaveControlsToWeapon(currentWeaponRight, false);
+            }
+            var savedOriginalTitle = this.Text;
+            this.Text = "Saved!";
+            try
+            {
+                CsvService.SaveWeapons(Path.Combine(AppContext.BaseDirectory, "weapons.csv"), weapons);
+                await Task.Delay(1145);
+            }
+            catch (Exception ex) { MessageBox.Show($"Save failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+            finally { this.Text = savedOriginalTitle; }
         }
-        catch (Exception ex) { MessageBox.Show($"Save failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
-        finally { this.Text = savedOriginalTitle; }
+        finally { System.Threading.Interlocked.Exchange(ref saveLock, 0); }
     }
 
     private void BtnCsvToScripts_Click(object? sender, EventArgs e)
@@ -286,62 +291,66 @@ public partial class Form1
 
     private async void BtnQuickExport_Click(object? sender, EventArgs e)
     {
-        if (sender is not Button btn) return;
-        bool confirmed = btn.Tag is true;
-        if (!confirmed)
-        {
-            if (string.IsNullOrEmpty(lastScriptsDir))
-            {
-                string initialDir = AppContext.BaseDirectory;
-                using var dlg = new FolderBrowserDialog { Description = "Select the folder containing weapon scripts (will be overwritten)", UseDescriptionForTitle = true, InitialDirectory = initialDir };
-                if (dlg.ShowDialog() != DialogResult.OK) return;
-                lastScriptsDir = dlg.SelectedPath;
-            }
-            btn.Text = "confirm";
-            btn.Tag = true;
-            return;
-        }
-        //强制提交活跃控件输入
-        var active = this.ActiveControl;
-        if (active != null) { this.ActiveControl = null; active.Focus(); }
-        bool sameWeapon = currentWeaponLeft != null && currentWeaponRight != null
-            && ReferenceEquals(currentWeaponLeft, currentWeaponRight);
-        if (sameWeapon)
-        {
-            bool focusLeft = IsControlOnLeft(active);
-            if (focusLeft)
-                SaveControlsToWeapon(currentWeaponLeft!, true);
-            else
-                SaveControlsToWeapon(currentWeaponRight!, false);
-        }
-        else
-        {
-            if (currentWeaponLeft != null) SaveControlsToWeapon(currentWeaponLeft, true);
-            if (currentWeaponRight != null) SaveControlsToWeapon(currentWeaponRight, false);
-        }
-        var originalTitle = this.Text;
+        if (System.Threading.Interlocked.Exchange(ref saveLock, 1) != 0) return;
         try
         {
-            CsvService.SaveWeapons(Path.Combine(AppContext.BaseDirectory, "weapons.csv"), weapons);
-            string csv = Path.Combine(AppContext.BaseDirectory, "weapons.csv");
-            await Task.Run(() =>
+            if (sender is not Button btn) return;
+            bool confirmed = btn.Tag is true;
+            if (!confirmed)
             {
-                WeaponScriptService.ExportCsvToScripts(csv, lastScriptsDir);
-            });
-            Clipboard.SetText("wpn_reload_script all");
-            btn.Text = "wpn_reload_script all";
-            btn.Tag = false;
-            this.Text = "Exported!";
-            await Task.Delay(1145);
-            this.Text = originalTitle;
+                if (string.IsNullOrEmpty(lastScriptsDir))
+                {
+                    string initialDir = AppContext.BaseDirectory;
+                    using var dlg = new FolderBrowserDialog { Description = "Select the folder containing weapon scripts (will be overwritten)", UseDescriptionForTitle = true, InitialDirectory = initialDir };
+                    if (dlg.ShowDialog() != DialogResult.OK) return;
+                    lastScriptsDir = dlg.SelectedPath;
+                }
+                btn.Text = "confirm";
+                btn.Tag = true;
+                return;
+            }
+            //强制提交活跃控件输入
+            var active = this.ActiveControl;
+            if (active != null) { this.ActiveControl = null; active.Focus(); }
+            bool sameWeapon = currentWeaponLeft != null && currentWeaponRight != null
+                && ReferenceEquals(currentWeaponLeft, currentWeaponRight);
+            if (sameWeapon)
+            {
+                bool focusLeft = IsControlOnLeft(active);
+                if (focusLeft)
+                    SaveControlsToWeapon(currentWeaponLeft!, true);
+                else
+                    SaveControlsToWeapon(currentWeaponRight!, false);
+            }
+            else
+            {
+                if (currentWeaponLeft != null) SaveControlsToWeapon(currentWeaponLeft, true);
+                if (currentWeaponRight != null) SaveControlsToWeapon(currentWeaponRight, false);
+            }
+            var originalTitle = this.Text;
+            try
+            {
+                CsvService.SaveWeapons(Path.Combine(AppContext.BaseDirectory, "weapons.csv"), weapons);
+                string csv = Path.Combine(AppContext.BaseDirectory, "weapons.csv");
+                await Task.Run(() =>
+                {
+                    WeaponScriptService.ExportCsvToScripts(csv, lastScriptsDir);
+                });
+                Clipboard.SetText("wpn_reload_script all");
+                btn.Text = "wpn_reload_script all";
+                btn.Tag = false;
+                this.Text = "Exported!";
+                await Task.Delay(1145);
+            }
+            catch (Exception ex)
+            {
+                btn.Text = "wpn_reload_script all";
+                btn.Tag = false;
+                MessageBox.Show($"Quick export failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally { this.Text = originalTitle; }
         }
-        catch (Exception ex)
-        {
-            btn.Text = "wpn_reload_script all";
-            btn.Tag = false;
-            this.Text = originalTitle;
-            MessageBox.Show($"Quick export failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
+        finally { System.Threading.Interlocked.Exchange(ref saveLock, 0); }
     }
     
     private void BtnScriptsToCsv_Click(object? sender, EventArgs e)

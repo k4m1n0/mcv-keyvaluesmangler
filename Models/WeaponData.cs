@@ -16,9 +16,6 @@ public class WeaponData
     [Name("default_clip")]
     public int? DefaultClip { get; set; }
 
-    [Name("Surplus Ammo")]
-    public int? SurplusAmmo { get; set; }
-
     [Name("ExtraBulletChamber")]
     public int? ExtraBulletChamber { get; set; }
 

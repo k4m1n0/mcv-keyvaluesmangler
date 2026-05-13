@@ -32,6 +32,7 @@ public partial class Form1 : Form
 
     private string lastScriptsDir = "";
     private bool refreshing = false;
+    private int saveLock = 0;
     private bool isTopmost = false;
 
     private PanelRenderer spreadRenderer = null!;
