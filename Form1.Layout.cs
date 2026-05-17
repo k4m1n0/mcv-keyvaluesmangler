@@ -256,8 +256,7 @@ public partial class Form1
     {
         parent.Controls.Add(new Label { Text = text, Location = new Point(8, y + 8), Size = new Size(35, 18), TextAlign = ContentAlignment.MiddleLeft });
         var tb = new TrackBar { Location = new Point(45, y + 2), Size = new Size(270, 34), Minimum = (int)(SliderMin / SliderStep), Maximum = (int)(SliderMax / SliderStep), TickFrequency = (int)(0.5 / SliderStep), Value = (int)(1.0 / SliderStep) };
-        var nud = new NumericUpDown { Location = new Point(320, y + 7), Size = new Size(55, 22), DecimalPlaces = 2, Increment = 0.01m, Minimum = (decimal)SliderMin, Maximum = 1000m, Value = 1.00m };
-        var lbl = new Label { Text = "= 0.0 | ∞shots | ∞ms", Location = new Point(380, y + 9), AutoSize = true, TextAlign = ContentAlignment.MiddleLeft, ForeColor = Color.DarkRed, Font = new Font("Arial", 8, FontStyle.Bold) };
+        var nud = new NumericUpDown { Location = new Point(320, y + 7), Size = new Size(55, 22), DecimalPlaces = 2, Increment = 0.01m, Minimum = (decimal)SliderMin, Maximum = 7.5m, Value = 1.00m };        var lbl = new Label { Text = "= 0.0 | ∞shots | ∞ms", Location = new Point(380, y + 9), AutoSize = true, TextAlign = ContentAlignment.MiddleLeft, ForeColor = Color.DarkRed, Font = new Font("Arial", 8, FontStyle.Bold) };
         parent.Controls.Add(tb);
         parent.Controls.Add(nud);
         parent.Controls.Add(lbl);
