@@ -69,7 +69,7 @@ public static class WeaponScriptService
         ["clip_size"] = "clip_size",
     };
 
-    private static readonly Dictionary<string, Action<WeaponData, string>> FieldSetters = new(StringComparer.OrdinalIgnoreCase)
+    internal static readonly Dictionary<string, Action<WeaponData, string>> FieldSetters = new(StringComparer.OrdinalIgnoreCase)
     {
         ["SupportedFireModes"] = (w, v) => w.FireModes = v,
         ["default_clip"] = (w, v) => { if (int.TryParse(v, out int r)) w.DefaultClip = r; },
@@ -178,22 +178,22 @@ public static class WeaponScriptService
 
             foreach (var map in CsvToScriptMap)
             {
-                string? csvValue = GetCsvFieldValue(weapon, map.Key);
+                string? csvValue = GetFieldValue(weapon, map.Key, false);
                 if (csvValue == null) continue;
                 string newContent = ReplaceKeyValue(content, map.Value, csvValue);
                 if (newContent != content) { content = newContent; updated++; }
             }
 
-            string? ru = GetCsvFieldValue(weapon, "ViewSlideRecoil.Up");
-            string? rr = GetCsvFieldValue(weapon, "ViewSlideRecoil.Right");
+            string? ru = GetFieldValue(weapon, "ViewSlideRecoil.Up", false);
+            string? rr = GetFieldValue(weapon, "ViewSlideRecoil.Right", false);
             if (ru != null || rr != null)
             {
                 content = ReplaceRecoilBlock(content, "ViewSlideRecoil", ru, rr);
                 updated++;
             }
 
-            string? au = GetCsvFieldValue(weapon, "ViewSlideRecoilIronsight.Up");
-            string? ar = GetCsvFieldValue(weapon, "ViewSlideRecoilIronsight.Right");
+            string? au = GetFieldValue(weapon, "ViewSlideRecoilIronsight.Up", false);
+            string? ar = GetFieldValue(weapon, "ViewSlideRecoilIronsight.Right", false);
             if (au != null || ar != null)
             {
                 content = ReplaceRecoilBlock(content, "ViewSlideRecoilIronsight", au, ar);
@@ -208,6 +208,34 @@ public static class WeaponScriptService
         log.Add(new string('-', 50));
         log.Add($"完成: 成功 {success}, 跳过 {skipped}, 总计 {total}");
         return string.Join("\n", log);
+    }
+
+    public static void ExportDovToScripts(string csvFilePath, string scriptsDir)
+    {
+        var weapons = CsvService.LoadWeapons(csvFilePath);
+        foreach (var weapon in weapons)
+        {
+            if (string.IsNullOrEmpty(weapon.ScriptName)) continue;
+            string scriptPath = Path.Combine(scriptsDir, weapon.ScriptName);
+            if (!File.Exists(scriptPath)) continue;
+            string content = File.ReadAllText(scriptPath);
+            if (!content.Contains("dov_stats")) continue;
+            foreach (var map in CsvToScriptMap)
+            {
+                string? csvValue = GetFieldValue(weapon, map.Key, true);
+                if (csvValue == null) continue;
+                content = WriteDovBlockValue(content, map.Value, csvValue);
+            }
+            string? ru = GetFieldValue(weapon, "ViewSlideRecoil.Up", true);
+            string? rr = GetFieldValue(weapon, "ViewSlideRecoil.Right", true);
+            if (ru != null || rr != null)
+                content = WriteDovRecoilBlock(content, "ViewSlideRecoil", ru, rr);
+            string? au = GetFieldValue(weapon, "ViewSlideRecoilIronsight.Up", true);
+            string? ar = GetFieldValue(weapon, "ViewSlideRecoilIronsight.Right", true);
+            if (au != null || ar != null)
+                content = WriteDovRecoilBlock(content, "ViewSlideRecoilIronsight", au, ar);
+            File.WriteAllText(scriptPath, content, new UTF8Encoding(false));
+        }
     }
 
     //正则地狱
@@ -270,6 +298,8 @@ public static class WeaponScriptService
                 weapon.ViewSlideRecoilIronsightUp = ParseRecoilBlock(content, "ViewSlideRecoilIronsight", "Up");
                 weapon.ViewSlideRecoilIronsightRight = ParseRecoilBlock(content, "ViewSlideRecoilIronsight", "Right");
 
+                ImportDovBlock(weapon, content);
+
                 list.Add(weapon);
                 success++;
                 log.Add($"[{i + 1}/{total}] {name} ({read} 字段)");
@@ -314,6 +344,33 @@ public static class WeaponScriptService
         return string.Join("\n", log);
     }
 
+    public static string? ReadDovBlockValue(string content, string key)
+    {
+        var blockMatch = Regex.Match(content, @"dov_stats\s*\{([^}]*(?:\{[^}]*\}[^}]*)*)\}", RegexOptions.Singleline);
+        if (!blockMatch.Success) return null;
+        return ExtractValue(blockMatch.Groups[1].Value, key);
+    }
+
+    public static string WriteDovBlockValue(string content, string key, string value)
+    {
+        var blockMatch = Regex.Match(content, @"dov_stats\s*\{([^}]*(?:\{[^}]*\}[^}]*)*)\}", RegexOptions.Singleline);
+        if (!blockMatch.Success) return content;
+        string block = blockMatch.Groups[1].Value;
+        string newBlock = ReplaceKeyValue(block, key, value);
+        if (newBlock == block) return content;
+        return content.Replace(block, newBlock);
+    }
+
+    public static string WriteDovRecoilBlock(string content, string recoilBlock, string? up, string? right)
+    {
+        var dovMatch = Regex.Match(content, @"dov_stats\s*\{([^}]*(?:\{[^}]*\}[^}]*)*)\}", RegexOptions.Singleline);
+        if (!dovMatch.Success) return content;
+        string dovBlock = dovMatch.Groups[1].Value;
+        string newDovBlock = ReplaceRecoilBlock(dovBlock, recoilBlock, up, right);
+        if (newDovBlock == dovBlock) return content;
+        return content.Replace(dovBlock, newDovBlock);
+    }
+
     #endregion
     #region 脚本解析
 
@@ -347,7 +404,7 @@ public static class WeaponScriptService
         double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out r);
 
     //解析后座块 用Singleline跨越换行
-    private static double? ParseRecoilBlock(string content, string block, string key)
+    internal static double? ParseRecoilBlock(string content, string block, string key)
     {
         var m = Regex.Match(content, $@"{Regex.Escape(block)}\s*\{{[^}}]*""{Regex.Escape(key)}""\s+""([^""]*)""", RegexOptions.Singleline);//匹配block名后紧跟的大括号内容 取指定key的双引号
         if (m.Success && double.TryParse(m.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double r))
@@ -355,43 +412,112 @@ public static class WeaponScriptService
         return null;
     }
 
-    #endregion
-    #region 字段读写与替换
-
-
-    private static string? GetCsvFieldValue(WeaponData w, string h) => h switch
+    private static double? ParseRecoilBlockInDov(string dovBlock, string blockName, string key)
     {
-        "SupportedFireModes" => w.FireModes,
+        int idx = dovBlock.IndexOf(blockName, StringComparison.Ordinal);
+        if (idx < 0) return null;
+        int braceStart = dovBlock.IndexOf('{', idx);
+        if (braceStart < 0) return null;
+        int depth = 1;
+        int i = braceStart + 1;
+        while (i < dovBlock.Length && depth > 0)
+        {
+            if (dovBlock[i] == '{') depth++;
+            else if (dovBlock[i] == '}') depth--;
+            i++;
+        }
+        string blockContent = dovBlock.Substring(braceStart + 1, i - braceStart - 2);
+        var m = Regex.Match(blockContent, $@"""{Regex.Escape(key)}""\s+""([^""]*)""");
+        if (m.Success && double.TryParse(m.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double r))
+            return r;
+        return null;
+    }
+
+    private static void ImportDovBlock(WeaponData w, string content)
+    {
+        int dovIdx = content.IndexOf("dov_stats", StringComparison.Ordinal);
+        if (dovIdx < 0) return;
+        int braceStart = content.IndexOf('{', dovIdx);
+        if (braceStart < 0) return;
+        int depth = 1;
+        int i = braceStart + 1;
+        while (i < content.Length && depth > 0)
+        {
+            if (content[i] == '{') depth++;
+            else if (content[i] == '}') depth--;
+            i++;
+        }
+        string block = content.Substring(braceStart + 1, i - braceStart - 2);
+
+        TrySetInt(block, "ExtraBulletChamber", out int? i1); w.DovExtraBulletChamber = i1;
+        TrySetInt(block, "FireRate", out int? i2); w.DovFireRate = i2;
+        TrySetDouble(block, "BulletSpreadDegrees", out double? d1); w.DovBulletSpread = d1;
+        TrySetDouble(block, "BulletSpreadDegreesIronsighted", out double? d2); w.DovBulletSpreadDegreesIronsighted = d2;
+        TrySetDouble(block, "rangemodifier", out double? d3); w.DovRangeModifier = d3;
+        TrySetDouble(block, "IronsightSpeedScale", out double? d4); w.DovIronsightSpeedScale = d4;
+        TrySetDouble(block, "CrouchSpreadMultiplier", out double? d5); w.DovCrouchSpreadMultiplier = d5;
+        TrySetDouble(block, "ProneSpreadMultiplier", out double? d6); w.DovProneSpreadMultiplier = d6;
+        TrySetDouble(block, "StandMoveSpreadMultiplier", out double? d7); w.DovStandMoveSpreadMultiplier = d7;
+        TrySetDouble(block, "SneakMoveSpreadMultiplier", out double? d8); w.DovSneakMoveSpreadMultiplier = d8;
+        TrySetDouble(block, "CrouchMoveSpreadMultiplier", out double? d9); w.DovCrouchMoveSpreadMultiplier = d9;
+        TrySetDouble(block, "JumpSpreadMultiplier", out double? d10); w.DovJumpSpreadMultiplier = d10;
+        TrySetDouble(block, "DamageHeadMultiplier", out double? d11); w.DovDamageHeadMultiplier = d11;
+        TrySetDouble(block, "DamageChestMultiplier", out double? d12); w.DovDamageChestMultiplier = d12;
+        TrySetDouble(block, "DamageStomachMultiplier", out double? d13); w.DovDamageStomachMultiplier = d13;
+        TrySetDouble(block, "DamageLegMultiplier", out double? d14); w.DovDamageLegMultiplier = d14;
+        TrySetDouble(block, "DamageArmMultiplier", out double? d15); w.DovDamageArmMultiplier = d15;
+        TrySetDouble(block, "DamageGeneric", out double? d16); w.DovDamageGeneric = d16;
+        TrySetInt(block, "CrosshairMinDistance", out int? i3); w.DovCrosshairMinDistance = i3;
+        TrySetInt(block, "CrosshairDeltaDistance", out int? i4); w.DovCrosshairDeltaDistance = i4;
+        TrySetDouble(block, "weight", out double? d17); w.DovWeight = d17;
+        TrySetInt(block, "ZMBuyPrice", out int? i5); w.DovZMBuyPrice = i5;
+        TrySetInt(block, "ZMWeight", out int? i6); w.DovZMWeight = i6;
+        TrySetDouble(block, "BulletSpreadDegreesBipod", out double? d18); w.DovBulletSpreadDegreesBipod = d18;
+        TrySetDouble(block, "BulletSpreadDegreesBipodIronsighted", out double? d19); w.DovBulletSpreadDegreesBipodIronsighted = d19;
+        w.DovFireModes = ExtractValue(block, "SupportedFireModes") ?? "";        
+        w.DovClipSize = ExtractValue(block, "clip_size") ?? "";
+        w.DovViewSlideRecoilUp = ParseRecoilBlockInDov(block, "ViewSlideRecoil", "Up");
+        w.DovViewSlideRecoilRight = ParseRecoilBlockInDov(block, "ViewSlideRecoil", "Right");
+        w.DovViewSlideRecoilIronsightUp = ParseRecoilBlockInDov(block, "ViewSlideRecoilIronsight", "Up");
+        w.DovViewSlideRecoilIronsightRight = ParseRecoilBlockInDov(block, "ViewSlideRecoilIronsight", "Right");
+    }
+
+    #endregion
+    #region 字段读写替换
+
+    private static string? GetFieldValue(WeaponData w, string h, bool isDov) => h switch
+    {
+        "SupportedFireModes" => isDov ? (string.IsNullOrEmpty(w.DovFireModes) ? null : w.DovFireModes) : w.FireModes,
         "default_clip" => w.DefaultClip?.ToString(),
-        "ExtraBulletChamber" => w.ExtraBulletChamber?.ToString(),
+        "ExtraBulletChamber" => isDov ? w.DovExtraBulletChamber?.ToString() : w.ExtraBulletChamber?.ToString(),
         "bullets_per_shot" => w.BulletsPerShot?.ToString(),
-        "FireRate" => w.FireRate?.ToString(),
-        "BulletSpreadDegrees" => F(w.BulletSpread),
-        "BulletSpreadDegreesIronsighted" => F(w.BulletSpreadDegreesIronsighted),
-        "BulletSpreadDegreesBipod" => F(w.BulletSpreadDegreesBipod),
-        "BulletSpreadDegreesBipodIronsighted" => F(w.BulletSpreadDegreesBipodIronsighted),
-        "rangemodifier" => F(w.RangeModifier),
-        "IronsightSpeedScale" => F(w.IronsightSpeedScale),
-        "CrouchSpreadMultiplier" => F(w.CrouchSpreadMultiplier),
-        "ProneSpreadMultiplier" => F(w.ProneSpreadMultiplier),
-        "StandMoveSpreadMultiplier" => F(w.StandMoveSpreadMultiplier),
-        "SneakMoveSpreadMultiplier" => F(w.SneakMoveSpreadMultiplier),
-        "CrouchMoveSpreadMultiplier" => F(w.CrouchMoveSpreadMultiplier),
-        "JumpSpreadMultiplier" => F(w.JumpSpreadMultiplier),
-        "DamageHeadMultiplier" => F(w.DamageHeadMultiplier),
-        "DamageChestMultiplier" => F(w.DamageChestMultiplier),
-        "DamageStomachMultiplier" => F(w.DamageStomachMultiplier),
-        "DamageLegMultiplier" => F(w.DamageLegMultiplier),
-        "DamageArmMultiplier" => F(w.DamageArmMultiplier),
-        "DamageGeneric" => F(w.DamageGeneric),
+        "FireRate" => isDov ? w.DovFireRate?.ToString() : w.FireRate?.ToString(),
+        "BulletSpreadDegrees" => F(isDov ? w.DovBulletSpread : w.BulletSpread),
+        "BulletSpreadDegreesIronsighted" => F(isDov ? w.DovBulletSpreadDegreesIronsighted : w.BulletSpreadDegreesIronsighted),
+        "BulletSpreadDegreesBipod" => isDov ? F(w.DovBulletSpreadDegreesBipod) : F(w.BulletSpreadDegreesBipod),
+        "BulletSpreadDegreesBipodIronsighted" => isDov ? F(w.DovBulletSpreadDegreesBipodIronsighted) : F(w.BulletSpreadDegreesBipodIronsighted),
+        "rangemodifier" => F(isDov ? w.DovRangeModifier : w.RangeModifier),
+        "IronsightSpeedScale" => F(isDov ? w.DovIronsightSpeedScale : w.IronsightSpeedScale),
+        "CrouchSpreadMultiplier" => F(isDov ? w.DovCrouchSpreadMultiplier : w.CrouchSpreadMultiplier),
+        "ProneSpreadMultiplier" => F(isDov ? w.DovProneSpreadMultiplier : w.ProneSpreadMultiplier),
+        "StandMoveSpreadMultiplier" => F(isDov ? w.DovStandMoveSpreadMultiplier : w.StandMoveSpreadMultiplier),
+        "SneakMoveSpreadMultiplier" => F(isDov ? w.DovSneakMoveSpreadMultiplier : w.SneakMoveSpreadMultiplier),
+        "CrouchMoveSpreadMultiplier" => F(isDov ? w.DovCrouchMoveSpreadMultiplier : w.CrouchMoveSpreadMultiplier),
+        "JumpSpreadMultiplier" => F(isDov ? w.DovJumpSpreadMultiplier : w.JumpSpreadMultiplier),
+        "DamageHeadMultiplier" => F(isDov ? w.DovDamageHeadMultiplier : w.DamageHeadMultiplier),
+        "DamageChestMultiplier" => F(isDov ? w.DovDamageChestMultiplier : w.DamageChestMultiplier),
+        "DamageStomachMultiplier" => F(isDov ? w.DovDamageStomachMultiplier : w.DamageStomachMultiplier),
+        "DamageLegMultiplier" => F(isDov ? w.DovDamageLegMultiplier : w.DamageLegMultiplier),
+        "DamageArmMultiplier" => F(isDov ? w.DovDamageArmMultiplier : w.DamageArmMultiplier),
+        "DamageGeneric" => F(isDov ? w.DovDamageGeneric : w.DamageGeneric),
         "ShakeScale" => F(w.ShakeScale),
         "ShakeFreq" => F(w.ShakeFreq),
         "ShakeDuration" => F(w.ShakeDuration),
-        "CrosshairMinDistance" => w.CrosshairMinDistance?.ToString(),
-        "CrosshairDeltaDistance" => w.CrosshairDeltaDistance?.ToString(),
-        "weight" => F(w.Weight),
-        "ZMBuyPrice" => w.ZMBuyPrice?.ToString(),
-        "ZMWeight" => w.ZMWeight?.ToString(),
+        "CrosshairMinDistance" => isDov ? w.DovCrosshairMinDistance?.ToString() : w.CrosshairMinDistance?.ToString(),
+        "CrosshairDeltaDistance" => isDov ? w.DovCrosshairDeltaDistance?.ToString() : w.CrosshairDeltaDistance?.ToString(),
+        "weight" => F(isDov ? w.DovWeight : w.Weight),
+        "ZMBuyPrice" => isDov ? w.DovZMBuyPrice?.ToString() : w.ZMBuyPrice?.ToString(),
+        "ZMWeight" => isDov ? w.DovZMWeight?.ToString() : w.ZMWeight?.ToString(),
         "recoilpushbackvalue" => F(w.RecoilPushbackValue),
         "ironsightwalkbobbingstrength" => F(w.IronsightWalkBobbingStrength),
         "MetalPenetrationDepth" => F(w.MetalPenetrationDepth),
@@ -405,16 +531,30 @@ public static class WeaponScriptService
         "WoodDamageModifier" => F(w.WoodDamageModifier),
         "OtherDamageModifier" => F(w.OtherDamageModifier),
         "NearwallDistance" => w.NearwallDistance?.ToString(),
-        "ViewSlideRecoil.Up" => F(w.ViewSlideRecoilUp),
-        "ViewSlideRecoil.Right" => F(w.ViewSlideRecoilRight),
-        "ViewSlideRecoilIronsight.Up" => F(w.ViewSlideRecoilIronsightUp),
-        "ViewSlideRecoilIronsight.Right" => F(w.ViewSlideRecoilIronsightRight),
+        "ViewSlideRecoil.Up" => F(isDov ? w.DovViewSlideRecoilUp : w.ViewSlideRecoilUp),
+        "ViewSlideRecoil.Right" => F(isDov ? w.DovViewSlideRecoilRight : w.ViewSlideRecoilRight),
+        "ViewSlideRecoilIronsight.Up" => F(isDov ? w.DovViewSlideRecoilIronsightUp : w.ViewSlideRecoilIronsightUp),
+        "ViewSlideRecoilIronsight.Right" => F(isDov ? w.DovViewSlideRecoilIronsightRight : w.ViewSlideRecoilIronsightRight),
         "primary_ammo" => w.PrimaryAmmo,
-        "clip_size" => w.ClipSize,
+        "clip_size" => isDov ? w.DovClipSize : w.ClipSize,
         _ => null
     };
 
     private static string? F(double? v) => v.HasValue ? v.Value.ToString("0.####", CultureInfo.InvariantCulture) : null;
+
+    private static void TrySetInt(string block, string key, out int? val)
+    {
+        val = null;
+        if (ExtractValue(block, key) is string v && int.TryParse(v, out int r))
+            val = r;
+    }
+
+    private static void TrySetDouble(string block, string key, out double? val)
+    {
+        val = null;
+        if (ExtractValue(block, key) is string v && TryParseDouble(v, out double r))
+            val = r;
+    }
 
     //替换脚本中的键值对 第一优先级匹配带注释行
     private static string ReplaceKeyValue(string c, string k, string v)

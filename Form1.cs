@@ -34,6 +34,7 @@ public partial class Form1 : Form
     private bool refreshing = false;
     private int saveLock = 0;
     private bool isTopmost = false;
+    private bool showingDovStats = false;
 
     private PanelRenderer spreadRenderer = null!;
     private PanelRenderer recoilRenderer = null!;
@@ -169,6 +170,10 @@ public partial class Form1 : Form
             if (e.Button == MouseButtons.Right) CancelConfirm(btnCopyCvar);
         };
         this.Controls.Add(btnCopyCvar);
+
+        var btnToggleDov = new Button { Text = "DoV", Location = new Point(cx + 126, 644), Size = new Size(48, 24), BackColor = SystemColors.Control };
+        btnToggleDov.Click += ToggleDovStats;
+        this.Controls.Add(btnToggleDov);
 
         var btnCopyR = new Button { Text = "L<R", Location = new Point(cx + 230, 620), Size = new Size(48, 24) };
         btnCopyR.Click += CopyRightToLeft;
@@ -307,12 +312,10 @@ public partial class Form1 : Form
         catch { return false; }
     }
 
-        private void StoreSnapshot(bool isLeft)
+    private void StoreSnapshot(bool isLeft)
     {
-        var src = isLeft ? currentWeaponLeft : currentWeaponRight;
-        if (src == null) return;
         var snap = new WeaponData();
-        CopyWeaponDataFields(src, snap);
+        SaveControlsToWeapon(snap, isLeft);
         if (isLeft) snapshotLeft = snap; else snapshotRight = snap;
     }
 
@@ -401,6 +404,9 @@ public partial class Form1 : Form
         dst.CrouchMoveSpreadMultiplier = src.CrouchMoveSpreadMultiplier;
         dst.JumpSpreadMultiplier = src.JumpSpreadMultiplier;
         dst.DamageGeneric = src.DamageGeneric;
+        dst.DovBulletSpreadDegreesBipod = src.DovBulletSpreadDegreesBipod;
+        dst.DovBulletSpreadDegreesBipodIronsighted = src.DovBulletSpreadDegreesBipodIronsighted;
+        dst.DovFireModes = src.DovFireModes;
     }
 
     #endregion

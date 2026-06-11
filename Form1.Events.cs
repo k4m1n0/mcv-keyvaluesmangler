@@ -39,6 +39,17 @@ public partial class Form1
             UpdateAllDamage();
             pnlSpread.Invalidate();
             pnlRecoil.Invalidate();
+            StoreSnapshot(true);
+            if (showingDovStats && WeaponHasDovStats(w))
+            {
+                updatingControls = true;
+                LoadDovStatsToControls(true);
+                SetDovReadonly(true);
+                StoreSnapshot(true);
+                updatingControls = false;
+            }
+            if (showingDovStats && !WeaponHasDovStats(w))
+                ExitDovMode();
         }
     }
 
@@ -72,12 +83,23 @@ public partial class Form1
             UpdateAllDamage();
             pnlSpread.Invalidate();
             pnlRecoil.Invalidate();
+            StoreSnapshot(false);
+            if (showingDovStats && WeaponHasDovStats(w))
+            {
+                updatingControls = true;
+                LoadDovStatsToControls(false);
+                SetDovReadonly(false);
+                StoreSnapshot(false);
+                updatingControls = false;
+            }
+            if (showingDovStats && !WeaponHasDovStats(w))
+                ExitDovMode();
         }
     }
 
     private bool HasUnsavedChanges(bool isLeft)
     {
-        var original = isLeft ? currentWeaponLeft : currentWeaponRight;
+        var original = isLeft ? snapshotLeft : snapshotRight;
         if (original == null) return false;
         //同一武器时只检查焦点侧 因为保存时也只保存焦点侧
         if (currentWeaponLeft != null && currentWeaponRight != null
@@ -140,7 +162,7 @@ public partial class Form1
     {
         double va = a ?? 0.0;
         double vb = b ?? 0.0;
-        return Math.Abs(va - vb) < 0.0001;
+        return Math.Abs(va - vb) < 0.001;
         //容差比较 防止掉精度导致误判为未保存
     }
 
@@ -247,20 +269,48 @@ public partial class Form1
                 //同一武器时只保存焦点所在侧 防止后保存的一侧覆盖前一侧
                 bool focusLeft = IsControlOnLeft(active);
                 if (focusLeft)
+                {
                     SaveControlsToWeapon(currentWeaponLeft!, true);
+                    StoreSnapshot(true);
+                    if (showingDovStats && WeaponHasDovStats(currentWeaponLeft))
+                        LoadDovStatsToControls(false);
+                    else
+                        LoadWeaponToControls(currentWeaponLeft!, false);
+                    UpdateAllDamage();
+                    pnlSpread.Invalidate();
+                    pnlRecoil.Invalidate();
+                }
                 else
+                {
                     SaveControlsToWeapon(currentWeaponRight!, false);
+                    StoreSnapshot(false);
+                    if (showingDovStats && WeaponHasDovStats(currentWeaponRight))
+                        LoadDovStatsToControls(true);
+                    else
+                        LoadWeaponToControls(currentWeaponRight!, true);
+                    UpdateAllDamage();
+                    pnlSpread.Invalidate();
+                    pnlRecoil.Invalidate();
+                }
             }
             else
             {
                 if (currentWeaponLeft != null) SaveControlsToWeapon(currentWeaponLeft, true);
                 if (currentWeaponRight != null) SaveControlsToWeapon(currentWeaponRight, false);
             }
+            if (showingDovStats)
+            {
+                if (currentWeaponLeft != null) SyncDovFields(currentWeaponLeft);
+                if (currentWeaponRight != null && !ReferenceEquals(currentWeaponLeft, currentWeaponRight))
+                    SyncDovFields(currentWeaponRight);
+            }
             var savedOriginalTitle = this.Text;
             this.Text = "Saved!";
             try
             {
                 CsvService.SaveWeapons(Path.Combine(AppContext.BaseDirectory, "weapons.csv"), weapons);
+                StoreSnapshot(true);
+                StoreSnapshot(false);
                 await Task.Delay(1145);
             }
             catch (Exception ex) { MessageBox.Show($"Save failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
@@ -318,25 +368,50 @@ public partial class Form1
             {
                 bool focusLeft = IsControlOnLeft(active);
                 if (focusLeft)
+                {
                     SaveControlsToWeapon(currentWeaponLeft!, true);
+                    StoreSnapshot(true);
+                    if (showingDovStats && WeaponHasDovStats(currentWeaponLeft))
+                        LoadDovStatsToControls(false);
+                    else
+                        LoadWeaponToControls(currentWeaponLeft!, false);
+                }
                 else
+                {
                     SaveControlsToWeapon(currentWeaponRight!, false);
+                    StoreSnapshot(false);
+                    if (showingDovStats && WeaponHasDovStats(currentWeaponRight))
+                        LoadDovStatsToControls(true);
+                    else
+                        LoadWeaponToControls(currentWeaponRight!, true);
+                }
             }
             else
             {
                 if (currentWeaponLeft != null) SaveControlsToWeapon(currentWeaponLeft, true);
                 if (currentWeaponRight != null) SaveControlsToWeapon(currentWeaponRight, false);
             }
+            if (showingDovStats)
+            {
+                if (currentWeaponLeft != null) SyncDovFields(currentWeaponLeft);
+                if (currentWeaponRight != null && !ReferenceEquals(currentWeaponLeft, currentWeaponRight))
+                    SyncDovFields(currentWeaponRight);
+            }
             var originalTitle = this.Text;
             try
             {
                 CsvService.SaveWeapons(Path.Combine(AppContext.BaseDirectory, "weapons.csv"), weapons);
+                StoreSnapshot(true);
+                StoreSnapshot(false);
                 string csv = Path.Combine(AppContext.BaseDirectory, "weapons.csv");
+                bool dovMode = showingDovStats;
                 await Task.Run(() =>
                 {
-                    WeaponScriptService.ExportCsvToScripts(csv, lastScriptsDir);
+                    if (dovMode)
+                        WeaponScriptService.ExportDovToScripts(csv, lastScriptsDir);
+                    else
+                        WeaponScriptService.ExportCsvToScripts(csv, lastScriptsDir);
                 });
-                Clipboard.SetText("wpn_reload_script all");
                 btn.Text = "wpn_reload_script all";
                 btn.Tag = false;
                 this.Text = "Exported!";
@@ -370,6 +445,196 @@ public partial class Form1
             }
             catch (Exception ex) { this.Invoke(() => MessageBox.Show($"Import failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error)); }
         });
+    }
+
+    private void ToggleDovStats(object? sender, EventArgs e)
+    {
+        bool leftHasDov = WeaponHasDovStats(currentWeaponLeft);
+        bool rightHasDov = WeaponHasDovStats(currentWeaponRight);
+        if (!leftHasDov && !rightHasDov) return;
+        bool anyDirty = (currentWeaponLeft != null && HasUnsavedChanges(true))
+                     || (currentWeaponRight != null && HasUnsavedChanges(false));
+        if (anyDirty)
+        {
+            var result = MessageBox.Show("Unsaved changes will be lost. Switch stats mode?",
+                "Unsaved Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+            if (result != DialogResult.Yes) return;
+        }
+        showingDovStats = !showingDovStats;
+        if (sender is Button btn)
+            btn.BackColor = showingDovStats ? Color.LightGreen : SystemColors.Control;
+        
+        updatingControls = true;
+        if (showingDovStats)
+        {
+            if (leftHasDov) { LoadDovStatsToControls(true); StoreSnapshot(true); SetDovReadonly(true); }
+            if (rightHasDov) { LoadDovStatsToControls(false); StoreSnapshot(false); SetDovReadonly(false); }
+        }
+        else
+        {
+            if (leftHasDov && currentWeaponLeft != null)
+            {
+                LoadWeaponToControls(currentWeaponLeft, true);
+                StoreSnapshot(true);
+            }
+            if (rightHasDov && currentWeaponRight != null)
+            {
+                LoadWeaponToControls(currentWeaponRight, false);
+                StoreSnapshot(false);
+            }
+            RestoreAllNudEnabled(true);
+            RestoreAllNudEnabled(false);
+        }
+        updatingControls = false;
+        UpdateAllDamage();
+        pnlSpread.Invalidate();
+        pnlRecoil.Invalidate();
+    }
+
+    private void SetDovReadonly(bool isLeft)
+    {
+        var w = isLeft ? currentWeaponLeft : currentWeaponRight;
+        //穿透及其减伤永远不在dov块中
+        SetNudEnabled(isLeft ? nudMetalPenL : nudMetalPenR, false);
+        SetNudEnabled(isLeft ? nudGlassPenL : nudGlassPenR, false);
+        SetNudEnabled(isLeft ? nudConcretePenL : nudConcretePenR, false);
+        SetNudEnabled(isLeft ? nudWoodPenL : nudWoodPenR, false);
+        SetNudEnabled(isLeft ? nudOtherPenL : nudOtherPenR, false);
+        SetNudEnabled(isLeft ? nudMetalDmgModL : nudMetalDmgModR, false);
+        SetNudEnabled(isLeft ? nudGlassDmgModL : nudGlassDmgModR, false);
+        SetNudEnabled(isLeft ? nudConcreteDmgModL : nudConcreteDmgModR, false);
+        SetNudEnabled(isLeft ? nudWoodDmgModL : nudWoodDmgModR, false);
+        SetNudEnabled(isLeft ? nudOtherDmgModL : nudOtherDmgModR, false);
+        //开镜散布和后座如果没有dov值则只读
+        if (w != null)
+        {
+            SetNudEnabled(isLeft ? nudAdsSpreadL : nudAdsSpreadR, w.DovBulletSpreadDegreesIronsighted != null);
+            SetNudEnabled(isLeft ? nudAdsRecoilUpL : nudAdsRecoilUpR, w.DovViewSlideRecoilIronsightUp != null);
+            SetNudEnabled(isLeft ? nudAdsRecoilRightL : nudAdsRecoilRightR, w.DovViewSlideRecoilIronsightRight != null);
+        }
+    }
+
+    private static void SetNudEnabled(NumericUpDown nud, bool enabled) => nud.Enabled = enabled;
+
+    // 只要有一个dov专属字段不为空就代表有dov数据
+    private static bool WeaponHasDovStats(WeaponData? weapon) => weapon?.DovDamageGeneric != null;
+
+    private void ExitDovMode()
+    {
+        if (!WeaponHasDovStats(currentWeaponLeft) && !WeaponHasDovStats(currentWeaponRight))
+        {
+            showingDovStats = false;
+            RestoreAllNudEnabled(true);
+            RestoreAllNudEnabled(false);
+            foreach (Control c in this.Controls)
+            {
+                if (c is Button btn && btn.Text == "DoV")
+                {
+                    btn.BackColor = SystemColors.Control;
+                    break;
+                }
+            }
+        }
+    }
+
+    private void LoadDovStatsToControls(bool isLeft)
+    {
+        var weapon = isLeft ? currentWeaponLeft : currentWeaponRight;
+        if (weapon == null) return;
+        var temp = new WeaponData();
+        CopyWeaponDataFields(weapon, temp);
+        
+        // 把dov专属属性映射回标准属性让LoadWeaponToControls能正确加载
+        temp.ExtraBulletChamber = weapon.DovExtraBulletChamber ?? weapon.ExtraBulletChamber;
+        temp.FireRate = weapon.DovFireRate ?? weapon.FireRate;
+        temp.BulletSpread = weapon.DovBulletSpread ?? weapon.BulletSpread;
+        temp.BulletSpreadDegreesIronsighted = weapon.DovBulletSpreadDegreesIronsighted ?? weapon.BulletSpreadDegreesIronsighted;
+        temp.RangeModifier = weapon.DovRangeModifier ?? weapon.RangeModifier;
+        temp.IronsightSpeedScale = weapon.DovIronsightSpeedScale ?? weapon.IronsightSpeedScale;
+        temp.CrouchSpreadMultiplier = weapon.DovCrouchSpreadMultiplier ?? weapon.CrouchSpreadMultiplier;
+        temp.ProneSpreadMultiplier = weapon.DovProneSpreadMultiplier ?? weapon.ProneSpreadMultiplier;
+        temp.StandMoveSpreadMultiplier = weapon.DovStandMoveSpreadMultiplier ?? weapon.StandMoveSpreadMultiplier;
+        temp.SneakMoveSpreadMultiplier = weapon.DovSneakMoveSpreadMultiplier ?? weapon.SneakMoveSpreadMultiplier;
+        temp.CrouchMoveSpreadMultiplier = weapon.DovCrouchMoveSpreadMultiplier ?? weapon.CrouchMoveSpreadMultiplier;
+        temp.JumpSpreadMultiplier = weapon.DovJumpSpreadMultiplier ?? weapon.JumpSpreadMultiplier;
+        temp.ViewSlideRecoilUp = weapon.DovViewSlideRecoilUp ?? weapon.ViewSlideRecoilUp;
+        temp.ViewSlideRecoilRight = weapon.DovViewSlideRecoilRight ?? weapon.ViewSlideRecoilRight;
+        temp.ViewSlideRecoilIronsightUp = weapon.DovViewSlideRecoilIronsightUp ?? weapon.ViewSlideRecoilIronsightUp;
+        temp.ViewSlideRecoilIronsightRight = weapon.DovViewSlideRecoilIronsightRight ?? weapon.ViewSlideRecoilIronsightRight;
+        temp.DamageHeadMultiplier = weapon.DovDamageHeadMultiplier ?? weapon.DamageHeadMultiplier;
+        temp.DamageChestMultiplier = weapon.DovDamageChestMultiplier ?? weapon.DamageChestMultiplier;
+        temp.DamageStomachMultiplier = weapon.DovDamageStomachMultiplier ?? weapon.DamageStomachMultiplier;
+        temp.DamageLegMultiplier = weapon.DovDamageLegMultiplier ?? weapon.DamageLegMultiplier;
+        temp.DamageArmMultiplier = weapon.DovDamageArmMultiplier ?? weapon.DamageArmMultiplier;
+        temp.DamageGeneric = weapon.DovDamageGeneric ?? weapon.DamageGeneric;
+        temp.CrosshairMinDistance = weapon.DovCrosshairMinDistance ?? weapon.CrosshairMinDistance;
+        temp.CrosshairDeltaDistance = weapon.DovCrosshairDeltaDistance ?? weapon.CrosshairDeltaDistance;
+        temp.Weight = weapon.DovWeight ?? weapon.Weight;
+        temp.ZMBuyPrice = weapon.DovZMBuyPrice ?? weapon.ZMBuyPrice;
+        temp.ZMWeight = weapon.DovZMWeight ?? weapon.ZMWeight;
+        temp.ClipSize = weapon.DovClipSize ?? weapon.ClipSize;
+        temp.BulletSpreadDegreesBipod = weapon.DovBulletSpreadDegreesBipod ?? weapon.BulletSpreadDegreesBipod;
+        temp.BulletSpreadDegreesBipodIronsighted = weapon.DovBulletSpreadDegreesBipodIronsighted ?? weapon.BulletSpreadDegreesBipodIronsighted;
+        
+
+        LoadWeaponToControls(temp, isLeft);
+
+        if (!string.IsNullOrEmpty(weapon.DovFireModes))
+        {
+            if (isLeft) txtFireModesL.Text = weapon.DovFireModes;
+            else txtFireModesR.Text = weapon.DovFireModes;
+        }
+    }
+
+    private void RestoreAllNudEnabled(bool isLeft)
+    {
+        var nuds = isLeft
+            ? new[] { nudExtraBulletChamberL, nudBulletsPerShotL, nudIronsightSpeedScaleL, nudWeightL, nudZMBuyPriceL, nudZMWeightL,
+                      nudMetalPenL, nudGlassPenL, nudConcretePenL, nudWoodPenL, nudOtherPenL,
+                      nudMetalDmgModL, nudGlassDmgModL, nudConcreteDmgModL, nudWoodDmgModL, nudOtherDmgModL,
+                      nudCrouchSpreadL, nudProneSpreadL, nudStandMoveSpreadL, nudSneakMoveSpreadL, nudCrouchMoveSpreadL, nudJumpSpreadL,
+                      nudAdsSpreadL, nudAdsRecoilUpL, nudAdsRecoilRightL }
+            : new[] { nudExtraBulletChamberR, nudBulletsPerShotR, nudIronsightSpeedScaleR, nudWeightR, nudZMBuyPriceR, nudZMWeightR,
+                      nudMetalPenR, nudGlassPenR, nudConcretePenR, nudWoodPenR, nudOtherPenR,
+                      nudMetalDmgModR, nudGlassDmgModR, nudConcreteDmgModR, nudWoodDmgModR, nudOtherDmgModR,
+                      nudCrouchSpreadR, nudProneSpreadR, nudStandMoveSpreadR, nudSneakMoveSpreadR, nudCrouchMoveSpreadR, nudJumpSpreadR,
+                      nudAdsSpreadR, nudAdsRecoilUpR, nudAdsRecoilRightR };
+        foreach (var nud in nuds) nud.Enabled = true;
+    }
+
+    private void SyncDovFields(WeaponData w)
+    {
+        w.DovDamageHeadMultiplier = w.DamageHeadMultiplier;
+        w.DovDamageChestMultiplier = w.DamageChestMultiplier;
+        w.DovDamageStomachMultiplier = w.DamageStomachMultiplier;
+        w.DovDamageLegMultiplier = w.DamageLegMultiplier;
+        w.DovDamageArmMultiplier = w.DamageArmMultiplier;
+        w.DovDamageGeneric = w.DamageGeneric;
+        w.DovBulletSpread = w.BulletSpread;
+        w.DovBulletSpreadDegreesIronsighted = w.BulletSpreadDegreesIronsighted;
+        w.DovRangeModifier = w.RangeModifier;
+        w.DovIronsightSpeedScale = w.IronsightSpeedScale;
+        w.DovCrouchSpreadMultiplier = w.CrouchSpreadMultiplier;
+        w.DovProneSpreadMultiplier = w.ProneSpreadMultiplier;
+        w.DovStandMoveSpreadMultiplier = w.StandMoveSpreadMultiplier;
+        w.DovSneakMoveSpreadMultiplier = w.SneakMoveSpreadMultiplier;
+        w.DovCrouchMoveSpreadMultiplier = w.CrouchMoveSpreadMultiplier;
+        w.DovJumpSpreadMultiplier = w.JumpSpreadMultiplier;
+        w.DovViewSlideRecoilUp = w.ViewSlideRecoilUp;
+        w.DovViewSlideRecoilRight = w.ViewSlideRecoilRight;
+        w.DovViewSlideRecoilIronsightUp = w.ViewSlideRecoilIronsightUp;
+        w.DovViewSlideRecoilIronsightRight = w.ViewSlideRecoilIronsightRight;
+        w.DovFireRate = w.FireRate;
+        w.DovExtraBulletChamber = w.ExtraBulletChamber;
+        w.DovCrosshairMinDistance = w.CrosshairMinDistance;
+        w.DovCrosshairDeltaDistance = w.CrosshairDeltaDistance;
+        w.DovWeight = w.Weight;
+        w.DovZMBuyPrice = w.ZMBuyPrice;
+        w.DovZMWeight = w.ZMWeight;
+        w.DovClipSize = w.ClipSize;
+        w.DovBulletSpreadDegreesBipod = w.BulletSpreadDegreesBipod;
+        w.DovBulletSpreadDegreesBipodIronsighted = w.BulletSpreadDegreesBipodIronsighted;
+        w.DovFireModes = w.FireModes;
     }
 
     private void BtnRefresh_Click(object? sender, EventArgs e) => RefreshWeaponList();

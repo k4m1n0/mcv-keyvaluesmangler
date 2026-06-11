@@ -168,7 +168,7 @@ public partial class Form1
         int y = 20;
         if (isLeft)
         {
-            nudCrouchSpreadL = CreateNullableNumericRow(gb, "Crouch", 8, y, 100m);
+            nudCrouchSpreadL = CreateNullableNumericRow(gb, "Duck", 8, y, 100m);
             nudProneSpreadL = CreateNullableNumericRow(gb, "Prone", 188, y, 100m);
             nudStandMoveSpreadL = CreateNullableNumericRow(gb, "Move", 368, y, 100m);
             y += 26;
@@ -178,7 +178,7 @@ public partial class Form1
         }
         else
         {
-            nudCrouchSpreadR = CreateNullableNumericRow(gb, "Crouch", 8, y, 100m);
+            nudCrouchSpreadR = CreateNullableNumericRow(gb, "Duck", 8, y, 100m);
             nudProneSpreadR = CreateNullableNumericRow(gb, "Prone", 188, y, 100m);
             nudStandMoveSpreadR = CreateNullableNumericRow(gb, "Move", 368, y, 100m);
             y += 26;
