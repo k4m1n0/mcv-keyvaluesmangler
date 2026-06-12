@@ -43,7 +43,7 @@ public static class ScriptToTemplateConverter
             try
             {
                 string script = File.ReadAllText(path, Encoding.UTF8);
-                string result = ConvertSingle(script, templateLines, simpleMode, name, log);
+                string result = ConvertSingle(script, templateLines, simpleMode);
                 File.WriteAllText(path, result, new UTF8Encoding(false));
                 success++;
                 log.Add($"[{i + 1}/{files.Length}] {name}");
@@ -90,7 +90,7 @@ public static class ScriptToTemplateConverter
     #endregion
     #region 转换解析
 
-    private static string ConvertSingle(string script, string[] templateLines, bool simpleMode, string weaponName, List<string> log)
+    private static string ConvertSingle(string script, string[] templateLines, bool simpleMode)
     {
         var scriptMap = ParseTopLevelMap(script);
         var scriptBlocks = ExtractAllBlocks(script);
@@ -100,7 +100,7 @@ public static class ScriptToTemplateConverter
             return string.Join("\n", templateLines);
 
         var missingKeys = new HashSet<string>(scriptMap.Keys, StringComparer.OrdinalIgnoreCase);
-        FillTreeWithScript(templateTree, scriptMap, scriptBlocks, script, missingKeys, weaponName, log);
+        FillTreeWithScript(templateTree, scriptMap, scriptBlocks, script, missingKeys);
 
         var result = new StringBuilder();
         RenderTree(templateTree, result, missingKeys, scriptMap, simpleMode);
@@ -122,7 +122,6 @@ public static class ScriptToTemplateConverter
         public List<AstNode> Children { get; set; } = new();
         public string RawText { get; set; } = "";
         public List<string> HeaderLines { get; set; } = new();
-        public bool HasContent { get; set; } = true;
     }
 
     private static AstNode ParseTemplateToTree(string[] lines)
@@ -330,8 +329,7 @@ public static class ScriptToTemplateConverter
 
     private static void FillTreeWithScript(AstNode node, Dictionary<string, string> currentMap,
                                            Dictionary<string, string> scriptBlocks, string currentScriptText,
-                                           HashSet<string> missingKeys,
-                                           string weaponName, List<string> log)
+                                           HashSet<string> missingKeys)
     {
         if (node.Type == NodeType.Root || node.Type == NodeType.Block)
         {
@@ -353,7 +351,7 @@ public static class ScriptToTemplateConverter
             }
 
             foreach (var child in node.Children)
-                FillTreeWithScript(child, childMap, scriptBlocks, childScriptText, missingKeys, weaponName, log);
+                FillTreeWithScript(child, childMap, scriptBlocks, childScriptText, missingKeys);
 
             if (node.Type == NodeType.Block && node.Name == "WeaponData")
             {
@@ -378,7 +376,7 @@ public static class ScriptToTemplateConverter
                  scriptBlocks.TryGetValue(node.Name!, out string? cbBlockContent) &&
                  !string.IsNullOrEmpty(cbBlockContent))
         {
-            //解析脚本块内容 提取键值对
+            //解析脚本块内容 提取键值对和子块
             string[] blockLines = cbBlockContent.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
             var tempChildren = new List<AstNode>();
             if (blockLines.Length > 0)
@@ -387,13 +385,16 @@ public static class ScriptToTemplateConverter
             }
 
             var scriptKeyValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var scriptSubBlocks = new List<AstNode>();
             foreach (var child in tempChildren)
             {
                 if (child.Type == NodeType.KeyValue && !string.IsNullOrEmpty(child.Value))
                     scriptKeyValues[child.Name!] = child.Value;
+                else if (child.Type == NodeType.Block)
+                    scriptSubBlocks.Add(child);
             }
 
-            if (scriptKeyValues.Count > 0)
+            if (scriptKeyValues.Count > 0 || scriptSubBlocks.Count > 0)
             {
                 node.Type = NodeType.Block;
                 node.HeaderLines = new List<string>
@@ -402,8 +403,35 @@ public static class ScriptToTemplateConverter
                     $"{node.Indent}{{"
                 };
 
-                //清空原有注释子节点 用脚本中的实际键值对重建
+                //保存模板中已有的注释子节点用于保留分隔符等信息
+                var templateChildren = new List<AstNode>(node.Children);
+
+                //清空原有注释子节点 用脚本中的实际键值对和子块重建
                 node.Children = new List<AstNode>();
+
+                //先填充模板中已有的键值对（保留模板的分隔符和注释）
+                foreach (var tChild in templateChildren)
+                {
+                    if ((tChild.Type == NodeType.CommentedKeyValue || tChild.Type == NodeType.KeyValue)
+                        && tChild.Name != null
+                        && scriptKeyValues.TryGetValue(tChild.Name, out string? val)
+                        && !string.IsNullOrEmpty(val))
+                    {
+                        node.Children.Add(new AstNode
+                        {
+                            Type = NodeType.KeyValue,
+                            Indent = tChild.Indent,
+                            Name = tChild.Name,
+                            Value = val,
+                            Separator = tChild.Separator,
+                            Comment = tChild.Comment
+                        });
+                        scriptKeyValues.Remove(tChild.Name);
+                        missingKeys.Remove(tChild.Name);
+                    }
+                }
+
+                //追加模板中没有但脚本中存在的键值对
                 foreach (var kvp in scriptKeyValues)
                 {
                     node.Children.Add(new AstNode
@@ -415,6 +443,13 @@ public static class ScriptToTemplateConverter
                         Separator = "\t\t\t\t"
                     });
                     missingKeys.Remove(kvp.Key);
+                }
+
+                //追加脚本中的子块（如 ViewSlideRecoil, ViewSlideRecoilIronsight 等）
+                foreach (var subBlock in scriptSubBlocks)
+                {
+                    node.Children.Add(subBlock);
+                    RemoveSubBlockKeysFromMissing(subBlock, missingKeys);
                 }
             }
         }
@@ -434,6 +469,18 @@ public static class ScriptToTemplateConverter
 
                 missingKeys.Remove(node.Name!);
             }
+        }
+    }
+
+    //递归移除子块中所有键值对的键名 防止被当作missingKey追加到WeaponData顶层
+    private static void RemoveSubBlockKeysFromMissing(AstNode block, HashSet<string> missingKeys)
+    {
+        foreach (var child in block.Children)
+        {
+            if (child.Type == NodeType.KeyValue && child.Name != null)
+                missingKeys.Remove(child.Name);
+            else if (child.Type == NodeType.Block)
+                RemoveSubBlockKeysFromMissing(child, missingKeys);
         }
     }
 
