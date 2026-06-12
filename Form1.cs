@@ -170,6 +170,10 @@ public partial class Form1 : Form
             if (e.Button == MouseButtons.Right) CancelConfirm(btnCopyCvar);
         };
         this.Controls.Add(btnCopyCvar);
+        
+        var btnConvertToTemplate = new Button { Text = "Tmpl", Location = new Point(cx + 22, 644), Size = new Size(48, 24) };
+        btnConvertToTemplate.Click += BtnConvertToTemplate_Click;
+        this.Controls.Add(btnConvertToTemplate);
 
         var btnToggleDov = new Button { Text = "DoV", Location = new Point(cx + 126, 644), Size = new Size(48, 24), BackColor = SystemColors.Control };
         btnToggleDov.Click += ToggleDovStats;

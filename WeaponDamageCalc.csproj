@@ -8,8 +8,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
-    <Version>1.0.1.0</Version>
-    <FileVersion>1.0.1.0</FileVersion>
+    <Version>1.0.1.1</Version>
+    <FileVersion>1.0.1.1</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -22,4 +22,7 @@
     </None>
   </ItemGroup>
 
+<ItemGroup>
+  <EmbeddedResource Include="Tools\preset_file.txt" />
+</ItemGroup>
 </Project>

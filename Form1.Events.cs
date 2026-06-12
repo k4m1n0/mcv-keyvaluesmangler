@@ -447,6 +447,43 @@ public partial class Form1
         });
     }
 
+    private void BtnConvertToTemplate_Click(object? sender, EventArgs e)
+    {
+        string initialDir = string.IsNullOrEmpty(lastScriptsDir) ? AppContext.BaseDirectory : lastScriptsDir;
+        using var dlg = new FolderBrowserDialog
+        {
+            Description = "Select folder containing weapon scripts to convert",
+            UseDescriptionForTitle = true,
+            InitialDirectory = initialDir
+        };
+        if (dlg.ShowDialog() != DialogResult.OK) return;
+        string dir = dlg.SelectedPath;
+
+        var result = MessageBox.Show("Select conversion mode:\n\nYes = Full (keep empty keys)\nNo = Simple (remove empty keys)\nCancel = Abort",
+            "Template Convert Mode", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+        if (result == DialogResult.Cancel) return;
+        bool simpleMode = (result == DialogResult.No);
+
+        Task.Run(() =>
+        {
+            try
+            {
+                string log = Tools.ScriptToTemplateConverter.ConvertAll(dir, simpleMode);
+                this.Invoke(() =>
+                {
+                    RefreshWeaponList();
+                    using var lf = new LogForm("Template Convert", log);
+                    lf.ShowDialog(this);
+                });
+            }
+            catch (Exception ex)
+            {
+                this.Invoke(() => MessageBox.Show($"Template convert failed: {ex.Message}",
+                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error));
+            }
+        });
+    }
+
     private void ToggleDovStats(object? sender, EventArgs e)
     {
         bool leftHasDov = WeaponHasDovStats(currentWeaponLeft);
