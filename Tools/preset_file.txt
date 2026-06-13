@@ -174,7 +174,7 @@ WeaponData
 	"IronSight"						"0" // 0 - not available to ADS with
 //	"IronsightSpeedScale"			"" // how long ADS transition will last in seconds
 //	"IronsightedFovOffset"			"" // degrees added when ADS
-//	"ScopeLensFov"					"" // degrees fov (base 79.5)
+//	"ScopeLensFov"					"" // degrees fov (base 60, engine default 79.5)
 //	"ScopeLensFov2"					"" // ditto for second zoom level
 //	"ScopeLensTeleFovScale"			"" // render-target scale for expensive scopes. best to experiment in-game.
 	// viewmodel offsets when ADS
