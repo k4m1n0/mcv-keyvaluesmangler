@@ -386,6 +386,9 @@ public partial class Form1
                         LoadDovStatsToControls(false);
                     else
                         LoadWeaponToControls(currentWeaponLeft!, false);
+                    UpdateAllDamage();
+                    pnlSpread.Invalidate();
+                    pnlRecoil.Invalidate();
                 }
                 else
                 {
@@ -395,6 +398,9 @@ public partial class Form1
                         LoadDovStatsToControls(true);
                     else
                         LoadWeaponToControls(currentWeaponRight!, true);
+                    UpdateAllDamage();
+                    pnlSpread.Invalidate();
+                    pnlRecoil.Invalidate();
                 }
             }
             else
@@ -555,7 +561,7 @@ public partial class Form1
         SetNudEnabled(isLeft ? nudOtherDmgModL : nudOtherDmgModR, false);
         if (w != null)//开镜散布和后座如果没有dov值则只读
         {
-            bool noAds = w.IronSight == 0;
+            bool noAds = (w.DovIronSight ?? w.IronSight) == 0;
             SetNudEnabled(isLeft ? nudAdsSpreadL : nudAdsSpreadR, !noAds && w.DovBulletSpreadDegreesIronsighted != null);
             SetNudEnabled(isLeft ? nudAdsRecoilUpL : nudAdsRecoilUpR, !noAds && w.DovViewSlideRecoilIronsightUp != null);
             SetNudEnabled(isLeft ? nudAdsRecoilRightL : nudAdsRecoilRightR, !noAds && w.DovViewSlideRecoilIronsightRight != null);
@@ -706,6 +712,9 @@ public partial class Form1
                 weapons = CsvService.LoadWeapons(csv);
                 this.Invoke(() =>
                 {
+                    //先解绑事件防止刷新时弹出未保存确认
+                    cmbWeaponsL.SelectedIndexChanged -= WeaponSelectedL;
+                    cmbWeaponsR.SelectedIndexChanged -= WeaponSelectedR;
                     //DataSource设为null再赋值新列表 触发重新绑定
                     cmbWeaponsL.DataSource = null;
                     cmbWeaponsL.DataSource = new List<WeaponData>(weapons);
@@ -715,11 +724,13 @@ public partial class Form1
                     cmbWeaponsR.DisplayMember = "PrintName";
                     if (weapons.Count > 0)
                     {
-                        //临时解绑事件防止刷新时弹出未保存确认
-                        cmbWeaponsL.SelectedIndexChanged -= WeaponSelectedL;
-                        cmbWeaponsR.SelectedIndexChanged -= WeaponSelectedR;
-                        RestoreComboSelection(cmbWeaponsL, leftName);
                         RestoreComboSelection(cmbWeaponsR, rightName);
+                        cmbWeaponsL.SelectedIndexChanged += WeaponSelectedL;
+                        cmbWeaponsR.SelectedIndexChanged += WeaponSelectedR;
+                        RestoreComboSelection(cmbWeaponsL, leftName);
+                    }
+                    else
+                    {
                         cmbWeaponsL.SelectedIndexChanged += WeaponSelectedL;
                         cmbWeaponsR.SelectedIndexChanged += WeaponSelectedR;
                     }
