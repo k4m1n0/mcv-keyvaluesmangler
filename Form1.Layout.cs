@@ -220,6 +220,21 @@ public partial class Form1
             nudWoodDmgModL = CreateNullableNumericRow(gb, "WoodMod", 368, y, 100m);
             y += 26;
             nudOtherDmgModL = CreateNullableNumericRow(gb, "OtherMod", 8, y, 100m);
+            nudSecondaryFireRateL = CreateNullableIntNumericRow(gb, "2ndROF", 188, y, 10000m);
+            nudSecondaryFireRateL.ValueChanged += (s, e) => { UpdateAllDamage(); };
+            nudSecondaryFireRateL.Enter += (s, e) => { UpdateAllDamage(); };
+            nudSecondaryFireRateL.Leave += (s, e) => { UpdateAllDamage(); };
+            nudIronSightL = CreateNullableIntNumericRow(gb, "IronSight", 368, y, 1m);
+            nudIronSightL.ValueChanged += (s, e) =>
+            {
+                bool noIronsight = nudIronSightL.Value == 0;
+                nudAdsSpreadL.Enabled = !noIronsight;
+                nudAdsRecoilUpL.Enabled = !noIronsight;
+                nudAdsRecoilRightL.Enabled = !noIronsight;
+                nudIronsightSpeedScaleL.Enabled = !noIronsight;
+                pnlSpread.Invalidate();
+                pnlRecoil.Invalidate();
+            };
         }
         else
         {
@@ -245,6 +260,21 @@ public partial class Form1
             nudWoodDmgModR = CreateNullableNumericRow(gb, "WoodMod", 368, y, 100m);
             y += 26;
             nudOtherDmgModR = CreateNullableNumericRow(gb, "OtherMod", 8, y, 100m);
+            nudSecondaryFireRateR = CreateNullableIntNumericRow(gb, "2ndROF", 188, y, 10000m);
+            nudSecondaryFireRateR.ValueChanged += (s, e) => { UpdateAllDamage(); };
+            nudSecondaryFireRateR.Enter += (s, e) => { UpdateAllDamage(); };
+            nudSecondaryFireRateR.Leave += (s, e) => { UpdateAllDamage(); };
+            nudIronSightR = CreateNullableIntNumericRow(gb, "IronSight", 368, y, 1m);
+            nudIronSightR.ValueChanged += (s, e) =>
+            {
+                bool noIronsight = nudIronSightR.Value == 0;
+                nudAdsSpreadR.Enabled = !noIronsight;
+                nudAdsRecoilUpR.Enabled = !noIronsight;
+                nudAdsRecoilRightR.Enabled = !noIronsight;
+                nudIronsightSpeedScaleR.Enabled = !noIronsight;
+                pnlSpread.Invalidate();
+                pnlRecoil.Invalidate();
+            };
         }
         this.Controls.Add(gb);
     }

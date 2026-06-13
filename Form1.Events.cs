@@ -49,7 +49,11 @@ public partial class Form1
                 updatingControls = false;
             }
             if (showingDovStats && !WeaponHasDovStats(w))
-                ExitDovMode();
+            {
+                RestoreAllNudEnabled(true);
+                if (!WeaponHasDovStats(currentWeaponRight))
+                    ExitDovMode();
+            }
         }
     }
 
@@ -93,7 +97,11 @@ public partial class Form1
                 updatingControls = false;
             }
             if (showingDovStats && !WeaponHasDovStats(w))
-                ExitDovMode();
+            {
+                RestoreAllNudEnabled(false);
+                if (!WeaponHasDovStats(currentWeaponLeft))
+                    ExitDovMode();
+            }
         }
     }
 
@@ -131,11 +139,13 @@ public partial class Form1
             && NullableEquals(a.ViewSlideRecoilIronsightRight, b.ViewSlideRecoilIronsightRight)
             && string.Equals(a.FireModes, b.FireModes)
             && IntNullableEquals(a.FireRate, b.FireRate)
+            && IntNullableEquals(a.SecondaryFireRate, b.SecondaryFireRate)
             && NullableEquals(a.RangeModifier, b.RangeModifier)
             && string.Equals(a.ClipSize, b.ClipSize)
             && IntNullableEquals(a.ExtraBulletChamber, b.ExtraBulletChamber)
             && IntNullableEquals(a.BulletsPerShot, b.BulletsPerShot)
             && NullableEquals(a.IronsightSpeedScale, b.IronsightSpeedScale)
+            && IntNullableEquals(a.IronSight, b.IronSight)
             && NullableEquals(a.Weight, b.Weight)
             && IntNullableEquals(a.ZMBuyPrice, b.ZMBuyPrice)
             && IntNullableEquals(a.ZMWeight, b.ZMWeight)
@@ -168,7 +178,8 @@ public partial class Form1
 
     private static bool IntNullableEquals(int? a, int? b)
     {
-        if (!a.HasValue || !b.HasValue) return true;
+        if (!a.HasValue && !b.HasValue) return true;
+        if (!a.HasValue || !b.HasValue) return false;
         return a.Value == b.Value;
     }
 
@@ -542,12 +553,13 @@ public partial class Form1
         SetNudEnabled(isLeft ? nudConcreteDmgModL : nudConcreteDmgModR, false);
         SetNudEnabled(isLeft ? nudWoodDmgModL : nudWoodDmgModR, false);
         SetNudEnabled(isLeft ? nudOtherDmgModL : nudOtherDmgModR, false);
-        //开镜散布和后座如果没有dov值则只读
-        if (w != null)
+        if (w != null)//开镜散布和后座如果没有dov值则只读
         {
-            SetNudEnabled(isLeft ? nudAdsSpreadL : nudAdsSpreadR, w.DovBulletSpreadDegreesIronsighted != null);
-            SetNudEnabled(isLeft ? nudAdsRecoilUpL : nudAdsRecoilUpR, w.DovViewSlideRecoilIronsightUp != null);
-            SetNudEnabled(isLeft ? nudAdsRecoilRightL : nudAdsRecoilRightR, w.DovViewSlideRecoilIronsightRight != null);
+            bool noAds = w.IronSight == 0;
+            SetNudEnabled(isLeft ? nudAdsSpreadL : nudAdsSpreadR, !noAds && w.DovBulletSpreadDegreesIronsighted != null);
+            SetNudEnabled(isLeft ? nudAdsRecoilUpL : nudAdsRecoilUpR, !noAds && w.DovViewSlideRecoilIronsightUp != null);
+            SetNudEnabled(isLeft ? nudAdsRecoilRightL : nudAdsRecoilRightR, !noAds && w.DovViewSlideRecoilIronsightRight != null);
+            SetNudEnabled(isLeft ? nudIronsightSpeedScaleL : nudIronsightSpeedScaleR, !noAds);
         }
     }
 
@@ -612,6 +624,8 @@ public partial class Form1
         temp.ClipSize = weapon.DovClipSize ?? weapon.ClipSize;
         temp.BulletSpreadDegreesBipod = weapon.DovBulletSpreadDegreesBipod ?? weapon.BulletSpreadDegreesBipod;
         temp.BulletSpreadDegreesBipodIronsighted = weapon.DovBulletSpreadDegreesBipodIronsighted ?? weapon.BulletSpreadDegreesBipodIronsighted;
+        temp.SecondaryFireRate = weapon.DovSecondaryFireRate ?? weapon.SecondaryFireRate;
+        temp.IronSight = weapon.DovIronSight ?? weapon.IronSight;
         
 
         LoadWeaponToControls(temp, isLeft);
@@ -630,12 +644,12 @@ public partial class Form1
                       nudMetalPenL, nudGlassPenL, nudConcretePenL, nudWoodPenL, nudOtherPenL,
                       nudMetalDmgModL, nudGlassDmgModL, nudConcreteDmgModL, nudWoodDmgModL, nudOtherDmgModL,
                       nudCrouchSpreadL, nudProneSpreadL, nudStandMoveSpreadL, nudSneakMoveSpreadL, nudCrouchMoveSpreadL, nudJumpSpreadL,
-                      nudAdsSpreadL, nudAdsRecoilUpL, nudAdsRecoilRightL }
+                      nudSecondaryFireRateL, nudIronSightL, nudAdsSpreadL, nudAdsRecoilUpL, nudAdsRecoilRightL, nudIronsightSpeedScaleL }
             : new[] { nudExtraBulletChamberR, nudBulletsPerShotR, nudIronsightSpeedScaleR, nudWeightR, nudZMBuyPriceR, nudZMWeightR,
                       nudMetalPenR, nudGlassPenR, nudConcretePenR, nudWoodPenR, nudOtherPenR,
                       nudMetalDmgModR, nudGlassDmgModR, nudConcreteDmgModR, nudWoodDmgModR, nudOtherDmgModR,
                       nudCrouchSpreadR, nudProneSpreadR, nudStandMoveSpreadR, nudSneakMoveSpreadR, nudCrouchMoveSpreadR, nudJumpSpreadR,
-                      nudAdsSpreadR, nudAdsRecoilUpR, nudAdsRecoilRightR };
+                      nudSecondaryFireRateR, nudIronSightR, nudAdsSpreadR, nudAdsRecoilUpR, nudAdsRecoilRightR, nudIronsightSpeedScaleR };
         foreach (var nud in nuds) nud.Enabled = true;
     }
 
@@ -672,6 +686,8 @@ public partial class Form1
         w.DovBulletSpreadDegreesBipod = w.BulletSpreadDegreesBipod;
         w.DovBulletSpreadDegreesBipodIronsighted = w.BulletSpreadDegreesBipodIronsighted;
         w.DovFireModes = w.FireModes;
+        w.DovSecondaryFireRate = w.SecondaryFireRate;
+        w.DovIronSight = w.IronSight;
     }
 
     private void BtnRefresh_Click(object? sender, EventArgs e) => RefreshWeaponList();
@@ -699,8 +715,13 @@ public partial class Form1
                     cmbWeaponsR.DisplayMember = "PrintName";
                     if (weapons.Count > 0)
                     {
+                        //临时解绑事件防止刷新时弹出未保存确认
+                        cmbWeaponsL.SelectedIndexChanged -= WeaponSelectedL;
+                        cmbWeaponsR.SelectedIndexChanged -= WeaponSelectedR;
                         RestoreComboSelection(cmbWeaponsL, leftName);
                         RestoreComboSelection(cmbWeaponsR, rightName);
+                        cmbWeaponsL.SelectedIndexChanged += WeaponSelectedL;
+                        cmbWeaponsR.SelectedIndexChanged += WeaponSelectedR;
                     }
                     UpdateC64Labels(weapons.Count > 0);
                 });

@@ -23,6 +23,8 @@ public partial class Form1
         int pellets = (int)nudBulletsPerShotL.Value;
         double vest = chkVestL.Checked ? (pellets > 1 ? 0.8 : 0.9) : 1.0;//普通0.9x 霰弹0.8x
         int rpm = (int)nudFireRateL.Value;
+        if (nudSecondaryFireRateL.Focused && nudSecondaryFireRateL.Value > 0)
+            rpm = (int)nudSecondaryFireRateL.Value;
         var (burstCount, burstInterval) = ParseBurstInfo(txtFireModesL.Text);
         UpdateDamageLabel(lblHeadDmgL, bd * hm * pellets, 100, rpm, burstCount, burstInterval);
         UpdateDamageLabel(lblChestDmgL, bd * cm * vest * pellets, 100, rpm, burstCount, burstInterval);
@@ -41,6 +43,9 @@ public partial class Form1
         int pellets = (int)nudBulletsPerShotR.Value;
         double vest = chkVestR.Checked ? (pellets > 1 ? 0.8 : 0.9) : 1.0;
         int rpm = (int)nudFireRateR.Value;
+        // 如果 SecondaryFireRate NUD 有焦点且值为正整数，使用它
+        if (nudSecondaryFireRateR.Focused && nudSecondaryFireRateR.Value > 0)
+            rpm = (int)nudSecondaryFireRateR.Value;
         var (burstCount, burstInterval) = ParseBurstInfo(txtFireModesR.Text);
         UpdateDamageLabel(lblHeadDmgR, bd * hm * pellets, 100, rpm, burstCount, burstInterval);
         UpdateDamageLabel(lblChestDmgR, bd * cm * vest * pellets, 100, rpm, burstCount, burstInterval);
@@ -106,11 +111,13 @@ public partial class Form1
             nudAdsRecoilRightL.Value = ClampNud((decimal)(w.ViewSlideRecoilIronsightRight ?? 0), nudAdsRecoilRightL);
             txtFireModesL.Text = w.FireModes ?? "";
             nudFireRateL.Value = ClampNud(w.FireRate ?? 0, nudFireRateL);
+            nudSecondaryFireRateL.Value = ClampNud(w.SecondaryFireRate ?? -1, nudSecondaryFireRateL);
             nudRangeModifierL.Value = ClampNud((decimal)(w.RangeModifier ?? 1.0), nudRangeModifierL);
             txtCapacityL.Text = w.ClipSize ?? w.DefaultClip?.ToString() ?? "";
             nudExtraBulletChamberL.Value = ClampNud(w.ExtraBulletChamber ?? 0, nudExtraBulletChamberL);
             nudBulletsPerShotL.Value = ClampNud(w.BulletsPerShot ?? 1, nudBulletsPerShotL);
             nudIronsightSpeedScaleL.Value = ClampNud((decimal)(w.IronsightSpeedScale ?? 1.0), nudIronsightSpeedScaleL);
+            nudIronSightL.Value = ClampNud(w.IronSight ?? 1, nudIronSightL);
             nudWeightL.Value = ClampNud((decimal)(w.Weight ?? 0), nudWeightL);
             nudZMBuyPriceL.Value = ClampNud(w.ZMBuyPrice ?? 0, nudZMBuyPriceL);
             nudZMWeightL.Value = ClampNud(w.ZMWeight ?? 0, nudZMWeightL);
@@ -131,6 +138,15 @@ public partial class Form1
             nudCrouchMoveSpreadL.Value = ClampNud((decimal)(w.CrouchMoveSpreadMultiplier ?? 0), nudCrouchMoveSpreadL);
             nudJumpSpreadL.Value = ClampNud((decimal)(w.JumpSpreadMultiplier ?? 0), nudJumpSpreadL);
             nudDamageGenericL.Value = ClampNud((decimal)(w.DamageGeneric ?? 0), nudDamageGenericL);
+
+            // IronSight == 0 时禁用 ADS 相关控件
+            if (w.IronSight == 0)
+            {
+                nudAdsSpreadL.Enabled = false;
+                nudAdsRecoilUpL.Enabled = false;
+                nudAdsRecoilRightL.Enabled = false;
+                nudIronsightSpeedScaleL.Enabled = false;
+            }
         }
         else
         {
@@ -149,11 +165,13 @@ public partial class Form1
             nudAdsRecoilRightR.Value = ClampNud((decimal)(w.ViewSlideRecoilIronsightRight ?? 0), nudAdsRecoilRightR);
             txtFireModesR.Text = w.FireModes ?? "";
             nudFireRateR.Value = ClampNud(w.FireRate ?? 0, nudFireRateR);
+            nudSecondaryFireRateR.Value = ClampNud(w.SecondaryFireRate ?? -1, nudSecondaryFireRateR);
             nudRangeModifierR.Value = ClampNud((decimal)(w.RangeModifier ?? 1.0), nudRangeModifierR);
             txtCapacityR.Text = w.ClipSize ?? w.DefaultClip?.ToString() ?? "";
             nudExtraBulletChamberR.Value = ClampNud(w.ExtraBulletChamber ?? 0, nudExtraBulletChamberR);
             nudBulletsPerShotR.Value = ClampNud(w.BulletsPerShot ?? 1, nudBulletsPerShotR);
             nudIronsightSpeedScaleR.Value = ClampNud((decimal)(w.IronsightSpeedScale ?? 1.0), nudIronsightSpeedScaleR);
+            nudIronSightR.Value = ClampNud(w.IronSight ?? 1, nudIronSightR);
             nudWeightR.Value = ClampNud((decimal)(w.Weight ?? 0), nudWeightR);
             nudZMBuyPriceR.Value = ClampNud(w.ZMBuyPrice ?? 0, nudZMBuyPriceR);
             nudZMWeightR.Value = ClampNud(w.ZMWeight ?? 0, nudZMWeightR);
@@ -174,6 +192,15 @@ public partial class Form1
             nudCrouchMoveSpreadR.Value = ClampNud((decimal)(w.CrouchMoveSpreadMultiplier ?? 0), nudCrouchMoveSpreadR);
             nudJumpSpreadR.Value = ClampNud((decimal)(w.JumpSpreadMultiplier ?? 0), nudJumpSpreadR);
             nudDamageGenericR.Value = ClampNud((decimal)(w.DamageGeneric ?? 0), nudDamageGenericR);
+
+            // IronSight == 0 时禁用 ADS 相关控件
+            if (w.IronSight == 0)
+            {
+                nudAdsSpreadR.Enabled = false;
+                nudAdsRecoilUpR.Enabled = false;
+                nudAdsRecoilRightR.Enabled = false;
+                nudIronsightSpeedScaleR.Enabled = false;
+            }
         }
     }
 
@@ -204,6 +231,7 @@ public partial class Form1
             w.ViewSlideRecoilIronsightRight = (double)nudAdsRecoilRightL.Value;
             w.FireModes = txtFireModesL.Text;
             w.FireRate = (int)nudFireRateL.Value;
+            w.SecondaryFireRate = (int)nudSecondaryFireRateL.Value;
             w.RangeModifier = (double)nudRangeModifierL.Value;
             w.ClipSize = txtCapacityL.Text;
             var clipParts = txtCapacityL.Text.Split('/');//从字段拆分出DefaultClip 如30/120取30
@@ -211,6 +239,7 @@ public partial class Form1
             w.ExtraBulletChamber = (int)nudExtraBulletChamberL.Value;
             w.BulletsPerShot = (int)nudBulletsPerShotL.Value;
             w.IronsightSpeedScale = (double)nudIronsightSpeedScaleL.Value;
+            w.IronSight = (int)nudIronSightL.Value;
             w.Weight = (double)nudWeightL.Value;
             w.ZMBuyPrice = (int)nudZMBuyPriceL.Value;
             w.ZMWeight = (int)nudZMWeightL.Value;
@@ -249,6 +278,7 @@ public partial class Form1
             w.ViewSlideRecoilIronsightRight = (double)nudAdsRecoilRightR.Value;
             w.FireModes = txtFireModesR.Text;
             w.FireRate = (int)nudFireRateR.Value;
+            w.SecondaryFireRate = (int)nudSecondaryFireRateR.Value;
             w.RangeModifier = (double)nudRangeModifierR.Value;
             w.ClipSize = txtCapacityR.Text;
             var clipParts = txtCapacityR.Text.Split('/');
@@ -256,6 +286,7 @@ public partial class Form1
             w.ExtraBulletChamber = (int)nudExtraBulletChamberR.Value;
             w.BulletsPerShot = (int)nudBulletsPerShotR.Value;
             w.IronsightSpeedScale = (double)nudIronsightSpeedScaleR.Value;
+            w.IronSight = (int)nudIronSightR.Value;
             w.Weight = (double)nudWeightR.Value;
             w.ZMBuyPrice = (int)nudZMBuyPriceR.Value;
             w.ZMWeight = (int)nudZMWeightR.Value;

@@ -428,24 +428,28 @@ public partial class Form1 : Form
 
     private void PnlSpread_Paint(object? sender, PaintEventArgs e)
     {
+        bool leftAds = currentWeaponLeft?.IronSight != 0;
+        bool rightAds = currentWeaponRight?.IronSight != 0;
         spreadRenderer.DrawSpread(e.Graphics, currentWeaponLeft, currentWeaponRight,
-            (double)nudHipSpreadL.Value, (double)nudAdsSpreadL.Value,
-            (double)nudBipodHipSpreadL.Value, (double)nudBipodAdsSpreadL.Value,
+            (double)nudHipSpreadL.Value, leftAds ? (double)nudAdsSpreadL.Value : 0,
+            (double)nudBipodHipSpreadL.Value, leftAds ? (double)nudBipodAdsSpreadL.Value : 0,
             currentWeaponRight != null ? (double)nudHipSpreadR.Value : 1.0,
-            currentWeaponRight != null ? (double)nudAdsSpreadR.Value : 1.0,
+            currentWeaponRight != null && rightAds ? (double)nudAdsSpreadR.Value : 1.0,
             currentWeaponRight != null ? (double)nudBipodHipSpreadR.Value : 0,
-            currentWeaponRight != null ? (double)nudBipodAdsSpreadR.Value : 0);
+            currentWeaponRight != null && rightAds ? (double)nudBipodAdsSpreadR.Value : 0);
     }
 
     private void PnlRecoil_Paint(object? sender, PaintEventArgs e)
     {
+        bool leftAds = currentWeaponLeft?.IronSight != 0;
+        bool rightAds = currentWeaponRight?.IronSight != 0;
         recoilRenderer.DrawRecoil(e.Graphics, currentWeaponLeft, currentWeaponRight,
             (double)nudHipRecoilUpL.Value, (double)nudHipRecoilRightL.Value,
-            (double)nudAdsRecoilUpL.Value, (double)nudAdsRecoilRightL.Value,
+            leftAds ? (double)nudAdsRecoilUpL.Value : 0, leftAds ? (double)nudAdsRecoilRightL.Value : 0,
             currentWeaponRight != null ? (double)nudHipRecoilUpR.Value : 0,
             currentWeaponRight != null ? (double)nudHipRecoilRightR.Value : 0,
-            currentWeaponRight != null ? (double)nudAdsRecoilUpR.Value : 0,
-            currentWeaponRight != null ? (double)nudAdsRecoilRightR.Value : 0);
+            currentWeaponRight != null && rightAds ? (double)nudAdsRecoilUpR.Value : 0,
+            currentWeaponRight != null && rightAds ? (double)nudAdsRecoilRightR.Value : 0);
     }
 
     public class LogForm : Form

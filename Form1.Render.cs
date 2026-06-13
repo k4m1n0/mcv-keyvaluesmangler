@@ -93,6 +93,7 @@ public class PanelRenderer
 
     private void DrawCircle(Graphics g, int cx, int cy, float radius, Color color, DashStyle dashStyle)
     {
+        if (radius <= 0) return;
         using var pen = new Pen(color, 1.2f) { DashStyle = dashStyle };
         g.DrawEllipse(pen, cx - radius, cy - radius, radius * 2, radius * 2);
     }

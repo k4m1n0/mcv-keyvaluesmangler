@@ -17,6 +17,7 @@ public partial class Form1
     private NumericUpDown nudMetalPenR, nudGlassPenR, nudConcretePenR, nudWoodPenR, nudOtherPenR;
     private NumericUpDown nudMetalDmgModR, nudGlassDmgModR, nudConcreteDmgModR, nudWoodDmgModR, nudOtherDmgModR;
     private NumericUpDown nudCrouchSpreadR, nudProneSpreadR, nudStandMoveSpreadR, nudSneakMoveSpreadR, nudCrouchMoveSpreadR, nudJumpSpreadR;
+    private NumericUpDown nudSecondaryFireRateR, nudIronSightR;
     private TextBox txtFireModesR, txtCapacityR;
     private Label lblHeadDmgR, lblChestDmgR, lblStomachDmgR, lblLegDmgR, lblArmDmgR;
     private CheckBox chkVestR;

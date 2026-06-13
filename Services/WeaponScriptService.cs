@@ -67,6 +67,8 @@ public static class WeaponScriptService
         ["NearwallDistance"] = "NearwallDistance",
         ["primary_ammo"] = "primary_ammo",
         ["clip_size"] = "clip_size",
+        ["SecondaryFireRate"] = "SecondaryFireRate",
+        ["IronSight"] = "IronSight",
     };
 
     internal static readonly Dictionary<string, Action<WeaponData, string>> FieldSetters = new(StringComparer.OrdinalIgnoreCase)
@@ -117,6 +119,8 @@ public static class WeaponScriptService
         ["NearwallDistance"] = (w, v) => { if (int.TryParse(v, out int r)) w.NearwallDistance = r; },
         ["primary_ammo"] = (w, v) => w.PrimaryAmmo = v,
         ["clip_size"] = (w, v) => w.ClipSize = v,
+        ["SecondaryFireRate"] = (w, v) => { if (int.TryParse(v, out int r)) w.SecondaryFireRate = r; },
+        ["IronSight"] = (w, v) => { if (int.TryParse(v, out int r)) w.IronSight = r; },
     };
 
     private static Dictionary<string, string> LoadPrintNameMap(string csvPath)
@@ -480,6 +484,8 @@ public static class WeaponScriptService
         w.DovViewSlideRecoilRight = ParseRecoilBlockInDov(block, "ViewSlideRecoil", "Right");
         w.DovViewSlideRecoilIronsightUp = ParseRecoilBlockInDov(block, "ViewSlideRecoilIronsight", "Up");
         w.DovViewSlideRecoilIronsightRight = ParseRecoilBlockInDov(block, "ViewSlideRecoilIronsight", "Right");
+        TrySetInt(block, "SecondaryFireRate", out int? i7); w.DovSecondaryFireRate = i7;
+        TrySetInt(block, "IronSight", out int? i8); w.DovIronSight = i8;
     }
 
     #endregion
@@ -537,6 +543,8 @@ public static class WeaponScriptService
         "ViewSlideRecoilIronsight.Right" => F(isDov ? w.DovViewSlideRecoilIronsightRight : w.ViewSlideRecoilIronsightRight),
         "primary_ammo" => w.PrimaryAmmo,
         "clip_size" => isDov ? w.DovClipSize : w.ClipSize,
+        "SecondaryFireRate" => isDov ? w.DovSecondaryFireRate?.ToString() : w.SecondaryFireRate?.ToString(),
+        "IronSight" => isDov ? w.DovIronSight?.ToString() : w.IronSight?.ToString(),
         _ => null
     };
 

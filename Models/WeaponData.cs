@@ -18,6 +18,11 @@ public class WeaponData
     [Name("default_clip")]
     public int? DefaultClip { get; set; }
 
+    [Name("SecondaryFireRate")]
+    public int? SecondaryFireRate { get; set; }
+    [Name("dov_SecondaryFireRate")]
+    public int? DovSecondaryFireRate { get; set; }
+
     [Name("ExtraBulletChamber")]
     public int? ExtraBulletChamber { get; set; }
     [Name("dov_ExtraBulletChamber")]
@@ -60,6 +65,11 @@ public class WeaponData
     public double? IronsightSpeedScale { get; set; }
     [Name("dov_IronsightSpeedScale")]
     public double? DovIronsightSpeedScale { get; set; }
+
+    [Name("IronSight")]
+    public int? IronSight { get; set; }
+    [Name("dov_IronSight")]
+    public int? DovIronSight { get; set; }
 
     [Name("CrouchSpreadMultiplier")]
     public double? CrouchSpreadMultiplier { get; set; }
