@@ -428,8 +428,8 @@ public partial class Form1 : Form
 
     private void PnlSpread_Paint(object? sender, PaintEventArgs e)
     {
-        bool leftAds = (currentWeaponLeft?.DovIronSight ?? currentWeaponLeft?.IronSight ?? 1) != 0;
-        bool rightAds = (currentWeaponRight?.DovIronSight ?? currentWeaponRight?.IronSight ?? 1) != 0;
+        bool leftAds = nudIronSightL.Value != 0;
+        bool rightAds = nudIronSightR.Value != 0;
         spreadRenderer.DrawSpread(e.Graphics, currentWeaponLeft, currentWeaponRight,
             (double)nudHipSpreadL.Value, leftAds ? (double)nudAdsSpreadL.Value : 0,
             (double)nudBipodHipSpreadL.Value, leftAds ? (double)nudBipodAdsSpreadL.Value : 0,
@@ -441,15 +441,17 @@ public partial class Form1 : Form
 
     private void PnlRecoil_Paint(object? sender, PaintEventArgs e)
     {
-        bool leftAds = (currentWeaponLeft?.DovIronSight ?? currentWeaponLeft?.IronSight ?? 1) != 0;
-        bool rightAds = (currentWeaponRight?.DovIronSight ?? currentWeaponRight?.IronSight ?? 1) != 0;
+        bool leftAds = nudIronSightL.Value != 0;
+        bool rightAds = nudIronSightR.Value != 0;
+        float maxScale = showingDovStats ? 1.25f : 2.5f;
         recoilRenderer.DrawRecoil(e.Graphics, currentWeaponLeft, currentWeaponRight,
             (double)nudHipRecoilUpL.Value, (double)nudHipRecoilRightL.Value,
             leftAds ? (double)nudAdsRecoilUpL.Value : 0, leftAds ? (double)nudAdsRecoilRightL.Value : 0,
             currentWeaponRight != null ? (double)nudHipRecoilUpR.Value : 0,
             currentWeaponRight != null ? (double)nudHipRecoilRightR.Value : 0,
             currentWeaponRight != null && rightAds ? (double)nudAdsRecoilUpR.Value : 0,
-            currentWeaponRight != null && rightAds ? (double)nudAdsRecoilRightR.Value : 0);
+            currentWeaponRight != null && rightAds ? (double)nudAdsRecoilRightR.Value : 0,
+            maxScale);
     }
 
     public class LogForm : Form

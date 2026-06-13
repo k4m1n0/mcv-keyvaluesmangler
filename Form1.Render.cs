@@ -64,15 +64,16 @@ public class PanelRenderer
 
     public void DrawRecoil(Graphics g, WeaponData? left, WeaponData? right,
         double hipUpL, double hipRtL, double adsUpL, double adsRtL,
-        double hipUpR, double hipRtR, double adsUpR, double adsRtR)
+        double hipUpR, double hipRtR, double adsUpR, double adsRtR,
+        float maxScale = 2.5f)
     {
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.Clear(Color.Black);
         int cx = panel.Width / 2;
         int cy = panel.Height - 30;
         int shots = 30;
-        float s = Math.Min(2.5f, (float)((panel.Height - 40) / (Math.Max(hipUpL, 0.01) * shots)));
-        //scale钳制到2.5 防止低后座时扇形过大 用hipUpL防除零
+        float s = Math.Min(maxScale, (float)((panel.Height - 40) / (Math.Max(hipUpL, 0.01) * shots)));
+        //scale钳制到maxScale 防止低后座时扇形过大 用hipUpL防除零
 
         DrawSector(g, cx, cy, (float)hipUpL, (float)hipRtL, shots, s,
             Color.FromArgb(80, 255, 0, 0), Color.Red, "L Hip", "left");
