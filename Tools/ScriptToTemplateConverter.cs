@@ -220,8 +220,7 @@ public static class ScriptToTemplateConverter
                                 cNode.Children.Add(new AstNode { Type = NodeType.Blank, RawText = innerLine });
                                 continue;
                             }
-                            //去掉行首注释符号和缩进尝试解析键值对
-                            string uncommented = innerTrimmed.StartsWith("//") ? innerTrimmed.Substring(2).TrimStart() : innerTrimmed;
+                            string uncommented = innerTrimmed.StartsWith("//") ? innerTrimmed.Substring(2).TrimStart() : innerTrimmed;//去掉行首注释符号和缩进尝试解析键值对
                             var (key, val) = ExtractKeyValue(uncommented);
                             if (key != null)
                             {
@@ -237,8 +236,7 @@ public static class ScriptToTemplateConverter
                             }
                             else
                             {
-                                //无法识别的行当raw处理
-                                cNode.Children.Add(new AstNode { Type = NodeType.Raw, RawText = innerLine });
+                                cNode.Children.Add(new AstNode { Type = NodeType.Raw, RawText = innerLine });//无法识别的行当raw处理
                             }
                         }
 
@@ -251,8 +249,7 @@ public static class ScriptToTemplateConverter
 
             if (trimmed.StartsWith("//") && trimmed.Contains('"'))
             {
-                //若前一个节点是纯注释行且当前键值为空 标记该注释行冗余
-                string afterSlash = trimmed.Substring(trimmed.IndexOf('"'));
+                string afterSlash = trimmed.Substring(trimmed.IndexOf('"'));//若前一个节点是纯注释行且当前键值为空 标记该注释行冗余
                 var (key, val) = ExtractKeyValue(afterSlash);
                 if (key != null)
                 {
@@ -403,11 +400,9 @@ public static class ScriptToTemplateConverter
                     $"{node.Indent}{{"
                 };
 
-                //保存模板中已有的注释子节点用于保留分隔符等信息
-                var templateChildren = new List<AstNode>(node.Children);
+                var templateChildren = new List<AstNode>(node.Children);//保存模板中已有的注释子节点用于保留分隔符等信息
 
-                //清空原有注释子节点 用脚本中的实际键值对和子块重建
-                node.Children = new List<AstNode>();
+                node.Children = new List<AstNode>();//清空原有注释子节点 用脚本中的实际键值对和子块重建
 
                 //先填充模板中已有的键值对（保留模板的分隔符和注释）
                 foreach (var tChild in templateChildren)
@@ -457,8 +452,7 @@ public static class ScriptToTemplateConverter
         {
             if (currentMap.TryGetValue(node.Name!, out string? scriptVal) && !string.IsNullOrEmpty(scriptVal))
             {
-                //注释键在脚本中有值 激活为普通键 重新计算分隔符以匹配模板对齐宽度
-                node.Value = scriptVal;
+                node.Value = scriptVal;//注释键在脚本中有值 激活为普通键 重新计算分隔符以匹配模板对齐宽度
                 if (node.Type == NodeType.CommentedKeyValue)
                 {
                     node.Type = NodeType.KeyValue;
@@ -499,13 +493,12 @@ public static class ScriptToTemplateConverter
                 sb.AppendLine(node.RawText);
                 break;
             case NodeType.Raw:
-                if (simpleMode && node.RawText.TrimStart().StartsWith("//") && !node.RawText.Contains('"'))
+                if (simpleMode && IsSeparatorComment(node.RawText))
                     break;
                 sb.AppendLine(node.RawText);
                 break;
             case NodeType.Block:
-                //检查块是否有内容 无内容则整体跳过
-                if (simpleMode && !BlockHasContent(node)) break;
+                if (simpleMode && !BlockHasContent(node)) break;//检查块是否有内容 无内容则整体跳过
                 foreach (var header in node.HeaderLines)
                     sb.AppendLine(header);
                 int bodyStart = sb.Length;
@@ -517,8 +510,7 @@ public static class ScriptToTemplateConverter
                     sb.Length = bodyStart;
                     sb.Append(body);
                 }
-                //最外层WeaponData块闭合顶格 子块保留缩进
-                string closeIndent = (node.Name == "WeaponData") ? "" : node.Indent;
+                string closeIndent = (node.Name == "WeaponData") ? "" : node.Indent;//最外层WeaponData块闭合顶格 子块保留缩进
                 sb.AppendLine($"{closeIndent}}}");
                 break;
             case NodeType.KeyValue:
@@ -527,21 +519,18 @@ public static class ScriptToTemplateConverter
                 sb.AppendLine($"{node.Indent}\"{node.Name}\"{node.Separator}\"{node.Value}\"{commentStr}");
                 break;
             case NodeType.CommentedBlock:
-                //若注释块内没有复活且脚本中也不存在该块则跳过
-                if (simpleMode && !node.Children.Any(c => c.Type == NodeType.KeyValue || c.Type == NodeType.Block))
+                if (simpleMode && !node.Children.Any(c => c.Type == NodeType.KeyValue || c.Type == NodeType.Block))//若注释块内没有复活且脚本中也不存在该块则跳过
                     break;
                 foreach (var header in node.HeaderLines)
                     sb.AppendLine(header);
-                // 输出注释块的左大括号行
                 sb.AppendLine($"{node.Indent}//{{");
                 foreach (var child in node.Children) RenderTree(child, sb, missingKeys, scriptMap, simpleMode);
-                // 输出注释块的右大括号行
                 sb.AppendLine($"{node.Indent}//}}");
                 break;
             case NodeType.CommentedKeyValue:
-                //空值注释键不输出但保留在模板中的位置
-                if (simpleMode && string.IsNullOrEmpty(node.Value)) break;
-                sb.AppendLine($"{node.Indent}// \"{node.Name}\"{node.Separator}\"{node.Value}\"");
+                if (simpleMode && string.IsNullOrEmpty(node.Value)) break;//空值注释键不输出但保留在模板中的位置
+                string ckvCommentStr = string.IsNullOrEmpty(node.Comment) ? "" : $" //{node.Comment}";
+                sb.AppendLine($"{node.Indent}// \"{node.Name}\"{node.Separator}\"{node.Value}\"{ckvCommentStr}");
                 break;
         }
     }
@@ -565,6 +554,21 @@ public static class ScriptToTemplateConverter
 
     #endregion
     #region 辅助
+
+    //判断是否为仅由符号组成的装饰性分隔注释 如////////////// 或//--- 或//****
+    private static bool IsSeparatorComment(string line)
+    {
+        string trimmed = line.TrimStart();
+        if (!trimmed.StartsWith("//")) return false;
+        string body = trimmed.Substring(2).Trim();//去掉//前缀和空白
+        if (string.IsNullOrEmpty(body)) return false;
+        foreach (char c in body)//如果剩余字符全部由 / * - = # _ . 空格和tab组成 视为分隔注释
+        {
+            if (c != '/' && c != '*' && c != '-' && c != '=' && c != '#' && c != '_' && c != '.' && c != ' ' && c != '\t')
+                return false;
+        }
+        return true;
+    }
 
     private static string ExtractIndent(string line)
     {
@@ -638,8 +642,7 @@ public static class ScriptToTemplateConverter
         var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         int depth = 0;
         bool inString = false;
-        int keyStart = -1;
-        //记录字符串起始引号位置 在字符串闭合时从该位置尝试匹配键值对 而非从闭合引号处
+        int keyStart = -1;//记录字符串起始引号位置 在字符串闭合时从该位置尝试匹配键值对 而非从闭合引号处
         int i = 0;
         while (i < text.Length)
         {
@@ -654,15 +657,13 @@ public static class ScriptToTemplateConverter
                     {
                         int lineStart = text.LastIndexOf('\n', keyStart) + 1;
                         string lineBefore = text.Substring(lineStart, keyStart - lineStart).TrimStart();
-                        //行首为//说明该键被注释就跳过
-                        if (!lineBefore.StartsWith("//"))
+                        if (!lineBefore.StartsWith("//"))//行首为//说明该键被注释就跳过
                         {
                             var m = KeyValRegex.Match(text, keyStart);
                             if (m.Success && m.Index == keyStart)
                             {
                                 map[m.Groups[1].Value] = m.Groups[2].Value;
-                                //匹配成功后跳转到值结束位置 循环末尾i++所以减1
-                                i = m.Index + m.Length - 1;
+                                i = m.Index + m.Length - 1;//匹配成功后跳转到值结束位置 循环末尾i++所以减1
                                 keyStart = -1;
                             }
                         }
@@ -808,8 +809,7 @@ public static class ScriptToTemplateConverter
             int k = (j == startLine) ? startCol : 0;
             for (; k < l.Length; k++)
             {
-                //追踪字符串状态 防止字符串内的{或}干扰深度计数
-                if (l[k] == '"' && (k == 0 || l[k - 1] != '\\')) inString = !inString;
+                if (l[k] == '"' && (k == 0 || l[k - 1] != '\\')) inString = !inString;//追踪字符串状态 防止字符串内的{或}干扰深度计数
                 if (!inString)
                 {
                     if (l[k] == '{') depth++;
