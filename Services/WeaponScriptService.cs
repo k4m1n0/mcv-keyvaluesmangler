@@ -564,33 +564,48 @@ public static class WeaponScriptService
             val = r;
     }
 
-    //替换脚本中的键值对 第一优先级匹配带注释行
+    //替换脚本中的键值对 仅替换第一个未被注释的匹配 防止误伤嵌套块内的同名键
     private static string ReplaceKeyValue(string c, string k, string v)
     {
-        string p = $@"(""{Regex.Escape(k)}""\s+)"".*?""(\s*(?://.*)?)";//捕获key和空白 替换双引号内的旧值并保留行尾注释
-        if (Regex.IsMatch(c, p))
-            return Regex.Replace(c, p, $@"$1""{v}""$2");
-
-        p = $@"(""{Regex.Escape(k)}""\s+)""[^""]*""";//回退匹配不带注释的行
-        if (Regex.IsMatch(c, p))
-            return Regex.Replace(c, p, $@"$1""{v}""");
-
+        //匹配"key" "value"格式的行 要求行首不是//(即非注释行) 捕获key及其前导空白 旧值和行尾注释
+        string p = $@"(^[ \t]*""{Regex.Escape(k)}""\s+)""[^""]*""(\s*(?://.*)?)";
+        var m = Regex.Match(c, p, RegexOptions.Multiline);
+        if (m.Success)
+        {
+            //只替换第一个匹配 后面的同名键(如在嵌套块内)不受影响
+            return c.Remove(m.Index, m.Length)
+                    .Insert(m.Index, $@"{m.Groups[1].Value}""{v}""{m.Groups[2].Value}");
+        }
         return c;
     }
 
     private static string ReplaceRecoilBlock(string c, string block, string? up, string? right)
     {
-        string p = $@"({Regex.Escape(block)}\s*\{{[^}}]*)}}";//捕获block名到倒数第二个} 不含最后的}
-        var m = Regex.Match(c, p, RegexOptions.Singleline);
+        //匹配block 限制在WeaponData顶层 使用RegexOptions来匹配大括号
+        //通过 ^(?!\s*//) 确保块名不在注释行内 加.*平衡大括号嵌套
+        string p = $@"(^{Regex.Escape(block)}\s*\{{(?:[^{{}}]|(?<open>\{{)|(?<-open>\}}))*(?(open)(?!))\}})";
+        var m = Regex.Match(c, p, RegexOptions.Multiline | RegexOptions.Singleline);
         if (!m.Success) return c;
-        string b = m.Groups[1].Value;
+        string b = m.Value;
 
         if (up != null)
-            b = Regex.Replace(b, $@"(""Up""\s+)""[^""]*""", $@"$1""{up}""");//匹配Up后面引号内的旧值替换为新值
+        {
+            string upPat = $@"(""Up""\s+)""[^""]*""";
+            var upMatch = Regex.Match(b, upPat, RegexOptions.Singleline);
+            if (upMatch.Success)
+                b = b.Remove(upMatch.Index, upMatch.Length)
+                     .Insert(upMatch.Index, $@"$1""{up}""".Replace("$1", upMatch.Groups[1].Value));
+        }
         if (right != null)
-            b = Regex.Replace(b, $@"(""Right""\s+)""[^""]*""", $@"$1""{right}""");//Right同上
+        {
+            string rightPat = $@"(""Right""\s+)""[^""]*""";
+            var rightMatch = Regex.Match(b, rightPat, RegexOptions.Singleline);
+            if (rightMatch.Success)
+                b = b.Remove(rightMatch.Index, rightMatch.Length)
+                     .Insert(rightMatch.Index, $@"$1""{right}""".Replace("$1", rightMatch.Groups[1].Value));
+        }
 
-        return c.Replace(m.Value, b + "}");
+        return c.Remove(m.Index, m.Length).Insert(m.Index, b);
     }
     #endregion
 }
