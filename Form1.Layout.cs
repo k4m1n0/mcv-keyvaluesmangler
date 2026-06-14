@@ -221,6 +221,7 @@ public partial class Form1
             y += 26;
             nudOtherDmgModL = CreateNullableNumericRow(gb, "OtherMod", 8, y, 100m);
             nudSecondaryFireRateL = CreateNullableIntNumericRow(gb, "2ndROF", 188, y, 10000m);
+            nudSecondaryFireRateL.Minimum = -1m;
             nudSecondaryFireRateL.ValueChanged += (s, e) => { UpdateAllDamage(); };
             nudSecondaryFireRateL.Enter += (s, e) => { UpdateAllDamage(); };
             nudSecondaryFireRateL.Leave += (s, e) => { UpdateAllDamage(); };
@@ -261,6 +262,7 @@ public partial class Form1
             y += 26;
             nudOtherDmgModR = CreateNullableNumericRow(gb, "OtherMod", 8, y, 100m);
             nudSecondaryFireRateR = CreateNullableIntNumericRow(gb, "2ndROF", 188, y, 10000m);
+            nudSecondaryFireRateR.Minimum = -1m;
             nudSecondaryFireRateR.ValueChanged += (s, e) => { UpdateAllDamage(); };
             nudSecondaryFireRateR.Enter += (s, e) => { UpdateAllDamage(); };
             nudSecondaryFireRateR.Leave += (s, e) => { UpdateAllDamage(); };
