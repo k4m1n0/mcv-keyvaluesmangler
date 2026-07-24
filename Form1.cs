@@ -34,7 +34,8 @@ public partial class Form1 : Form
     private bool refreshing = false;
     private int saveLock = 0;
     private bool isTopmost = false;
-    private bool showingDovStats = false;
+    private bool showingAltStats = false;
+    private WeaponScriptService.AltStatMode currentAltStatMode = WeaponScriptService.AltStatMode.Dov;
 
     private PanelRenderer spreadRenderer = null!;
     private PanelRenderer recoilRenderer = null!;
@@ -161,7 +162,7 @@ public partial class Form1 : Form
         this.Controls.Add(btnCopy);
 
         //glory to our coders all i dont need to write a hook myself but just call a cvar
-        var btnCopyCvar = new Button { Text = "wpn_reload_script all", Location = new Point(cx + 73, 620), Size = new Size(154, 24) };
+        var btnCopyCvar = new Button { Text = "wpn_reload_script all", Location = new Point(cx + 72, 620), Size = new Size(154, 24) };
         btnCopyCvar.Tag = false;
         btnCopyCvar.Click += BtnQuickExport_Click;
         btnCopyCvar.MouseLeave += (s, e) => CancelConfirm(btnCopyCvar);
@@ -175,13 +176,21 @@ public partial class Form1 : Form
         btnConvertToTemplate.Click += BtnConvertToTemplate_Click;
         this.Controls.Add(btnConvertToTemplate);
 
-        var btnToggleDov = new Button { Text = "DoV", Location = new Point(cx + 126, 644), Size = new Size(48, 24), BackColor = SystemColors.Control };
-        btnToggleDov.Click += ToggleDovStats;
+        var btnToggleDov = new Button { Text = "DoV", Location = new Point(cx + 72, 644), Size = new Size(77, 24), BackColor = SystemColors.Control };
+        btnToggleDov.Click += (s, e) => ToggleAltStats(WeaponScriptService.AltStatMode.Dov);
         this.Controls.Add(btnToggleDov);
 
-        var btnCopyR = new Button { Text = "L<R", Location = new Point(cx + 230, 620), Size = new Size(48, 24) };
+        var btnToggleZombie = new Button { Text = "Zmb", Location = new Point(cx + 149, 644), Size = new Size(77, 24), BackColor = SystemColors.Control };
+        btnToggleZombie.Click += (s, e) => ToggleAltStats(WeaponScriptService.AltStatMode.Zombie);
+        this.Controls.Add(btnToggleZombie);
+
+        var btnCopyR = new Button { Text = "L<R", Location = new Point(cx + 228, 620), Size = new Size(48, 24) };
         btnCopyR.Click += CopyRightToLeft;
         this.Controls.Add(btnCopyR);
+
+        var btnWiki = new Button { Text = "Wiki", Location = new Point(cx + 228, 644), Size = new Size(48, 24) };
+        btnWiki.Click += BtnWiki_Click;
+        this.Controls.Add(btnWiki);
     }
 
     private static void CancelConfirm(Button btn)
@@ -443,7 +452,7 @@ public partial class Form1 : Form
     {
         bool leftAds = nudIronSightL.Value != 0;
         bool rightAds = nudIronSightR.Value != 0;
-        float maxScale = showingDovStats ? 1.25f : 2.5f;
+        float maxScale = (showingAltStats && currentAltStatMode == WeaponScriptService.AltStatMode.Dov) ? 1.25f : 2.5f;
         recoilRenderer.DrawRecoil(e.Graphics, currentWeaponLeft, currentWeaponRight,
             (double)nudHipRecoilUpL.Value, (double)nudHipRecoilRightL.Value,
             leftAds ? (double)nudAdsRecoilUpL.Value : 0, leftAds ? (double)nudAdsRecoilRightL.Value : 0,
@@ -465,7 +474,7 @@ public partial class Form1 : Form
             this.MinimizeBox = false;
             this.MaximizeBox = false;
             this.TopMost = true;
-            var txt = new TextBox { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Dock = DockStyle.Fill, Font = new Font("Consolas", 9), Text = logText };
+            var txt = new TextBox { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Dock = DockStyle.Fill, Font = new Font("Consolas", 9), Text = logText.Replace("\n", "\r\n") };
             this.Controls.Add(txt);
         }
     }

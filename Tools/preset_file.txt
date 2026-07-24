@@ -1,12 +1,11 @@
 WeaponData
 {
 	"printname"					""
-//	"ammo_id_display"			""
+	"ammo_id_display"			""
 	"origin"					""
 	
 	"viewmodel"					""
 	"playermodel"				""
-//	"MagazineModel"				""
 	"anim_prefix"				""
 	
 	"bucket"					"0" // weapon menu category
@@ -14,38 +13,19 @@ WeaponData
 	"item_flags"				"0"
 //	"autoswitchfrom"			"0"
 	"WeaponType"				""
-//	"SupportedFireModes"		""
+	"SupportedFireModes"		""
 
 	"weight"					"0.1" // KG
-//	"point_cost"				""
-	
-//	"UseScopecamera"			""
-//	"BlurScope"					""
-//	"DofFocusDist"				""
-//	"DofScale"					""
+	"point_cost"				"0"
+
 	"HasBayonet"				"0"
 	"HasBipod"					"0"
-	"isSupressed"				"0"
-	"BuiltRightHanded"			"1"
+	"isSupressed"				"0" // informational only
+	"BuiltRightHanded"			"1" // if 0 it will automatically flip weapon viewmodel to be lefthanded
 	
 //	"skin"						""
 //	BodygroupData
 //	{	
-//		"scope"			""
-//		"mount"			""
-//		"bayonet"		""
-//		"magazine"		""
-//		"mk22_variants"	""
-//		"tape"			""
-//		"bar_variants"	""
-//		"mine"			""
-//		"studio"		""
-//		"bodygroup"		""
-//		"barrel"		""
-//		"projectilemodel"	""
-//		"explosive"		""
-//		"mag"			""
-//		"bipod"			""
 //	}
 	
 	"primary_ammo"				"None" // caliber
@@ -58,7 +38,9 @@ WeaponData
 	"default_clip2"				"-1" // ditto for second ammo type, -1 to disable
 
 	"FireRate"					"30" // RPM
-	"SecondaryFireRate"			"-1" // RPM, -1 to disable
+	"SecondaryFireRate"			"-1" //RPM, -1 to disable both secondary and tertiary - second firerate or for revolvers DELAYED (double-action)
+//	"TertiaryFireRate"			"-1" //RPM, -1 to disable - revolvers only: WESTERN (fanning)
+
 //	"bullet_weight"				"" // KG
 	
 //	"OverheatRate"				"" // added per shot up to 1.0 (overheated)
@@ -71,7 +53,7 @@ WeaponData
 	
 	//explosives only
 //	"ExplosionDamage"		""
-//	"ExplosionRadius"		"" // hammer units
+//	"ExplosionRadius"		"" // in hammer units
 //	"IgniteRadius"			"" // extends ExplosionRadius by this value (ExplosionRadius+IgniteRadius) and ignites all objects within resulted radius
 	//---
 	
@@ -81,34 +63,35 @@ WeaponData
 	//---
 	
 	// shotguns only - pellet count
-//	"bullets_per_shot"	""
+//	"bullets_per_shot"	"" // should NOT be more than 24
 	//---
 	
 	// revolvers only
-//	"Fanning"			""
-//	"DoubleAction"		""
-	"FiremodeSpreadMultiplier" // additional multiplier for firemode types: 0 - Double, 1 - Single, 2 - Fanning.
-	{
-		"0"	""
-		"1"	""
-		"2"	""
-	}
+//	"doubleaction"				"0" // this NEEDS to be set either 0 or 1 for revolvers. It needs to match the QC file and code!
+//	"fanning"					"1" // this NEEDS to be set either 0 or 1 for revolvers. It needs to match the QC file and code!
+	
+//	"FiremodeSpreadMultiplier" // spread multipliers for firemode types: 0 - Double, 1 - Single, 2 - Fanning
+//	{
+//		"0"	"0.95"
+//		"1"	"0.85"
+//		"2"	"1"
+//	}
 	//---
 	
-//	"MeleeRange"				"" // hammer units
-//	"MeleeRangeAlt"				"" // hammer units
+//	"MeleeRange"				"" // hammer units; for primary attack
+//	"MeleeRangeAlt"				"" // hammer units; for secondary attack
 	
 	//non-explosive only
 //	"ExtraBulletChamber"		"" // 0 - does NOT have +1 in the chamber
 //	"muzzle_velocity"			"" // m/s
 	"DamageGeneric"				"" // damage for other objects (i.e. explosive barrels, breakable walls, or characters with no hitboxes set)
-	"DamageHeadMultiplier"		""
-	"DamageChestMultiplier"		""
-	"DamageStomachMultiplier"	""
-	"DamageLegMultiplier"		""
-	"DamageArmMultiplier"		""
+	"DamageHeadMultiplier"		"" // multiplier for head hitbox
+	"DamageChestMultiplier"		"" // multiplier for chest hitbox
+	"DamageStomachMultiplier"	"" // multiplier for stomach/abdomen hitbox
+	"DamageLegMultiplier"		"" // multiplier for any leg hitbox
+	"DamageArmMultiplier"		"" // multiplier for any arm/hand hitbox
 	"rangemodifier"				"" // damage * (rangemodifier ^ distance/500) ; or approx. this multiplier is compounded every 600 units 
-	// bullet penetration settings | max depth | all in hammer units
+	// bullet penetration settings | max depth | all in hammer units | after this distance travelled inside stated material the bullet is completely stopped
 //	"MetalPenetrationDepth"			""
 //	"GlassPenetrationDepth"			""
 //	"ConcretePenetrationDepth"		""
@@ -127,7 +110,7 @@ WeaponData
 //	"BulletSpreadDegreesBipod"				"" // degrees
 //	"BulletSpreadDegreesBipodIronsighted"	"" // degrees
 
-	// Bullet spread multiplier according to current stance
+	// Bullet spread multiplier according to current stance; 0-1 will lessen spread; 1-inf will increase spread
 //	"StandMoveSpreadMultiplier"		""
 //	"CrouchSpreadMultiplier"		""
 //	"CrouchMoveSpreadMultiplier"	""
@@ -167,17 +150,23 @@ WeaponData
 		"Up_max" 			""
 		"Right_max"			""
 	}
-//	"ViewSlideRecoilTransitionTimeSeconds"		""
+//	"ViewSlideRecoilTransitionTimeSeconds"		"" // how fast the aiming recoil will change when you start/stop ADS
 	//---
 	
+//	"UseScopecamera"			""
+//	"BlurScope"					"" // bool - do we blur around the scope?
+//	"DofFocusDist"				"" // override depth of field focal distance
+//	"DofScale"					"" // override depth of field strength when aiming
+
 	// aiming down sights:	
-	"IronSight"						"0" // 0 - not available to ADS with
+	"IronSight"						"0" // 0 - not available to ADS with ; 1 - available to ADS
 //	"IronsightSpeedScale"			"" // how long ADS transition will last in seconds
-//	"IronsightedFovOffset"			"" // degrees added when ADS
-//	"ScopeLensFov"					"" // degrees fov (base 60, engine default 79.5)
+//	"IronsightedFovOffset"			"" // degrees added when ADS (without a scope)
+//	"ScopeLensFov"					"" // degrees fov, absolute value
 //	"ScopeLensFov2"					"" // ditto for second zoom level
 //	"ScopeLensTeleFovScale"			"" // render-target scale for expensive scopes. best to experiment in-game.
-	// viewmodel offsets when ADS
+	
+	// viewmodel offsets when ADS - both ironsight and scope - all in units
 //	"ironsightforward"			""
 //	"ironsightright"			""
 //	"ironsightup"				""
@@ -185,11 +174,11 @@ WeaponData
 //	"ironsightyaw"				""
 //	"ironsightroll"				""
 	//---
-//	"ironsightwalkbobbingstrength"	""
+//	"ironsightwalkbobbingstrength"	"" // strength/amplitude of head-bobbing effect when walking while ADS
 	
 	// non-projectile-based weapons only
-//	"CrosshairMinDistance"			""
-//	"CrosshairDeltaDistance"		""
+//	"CrosshairMinDistance"			"" // 1-16
+//	"CrosshairDeltaDistance"		"" // 1-16
 	//---
 
 	// viewmodel offset in non-ironsighted case
@@ -208,7 +197,7 @@ WeaponData
 //	"recoilpushbackvalue"			""
 
 	// Zombie Mode
-	"ZMBuyPrice"	 "1"
+	"ZMBuyPrice"	 "1" // price to buy in zombie mode
 	"ZMWeight"		 "0"
 	// if anything is modified for zombies mode:
 	//zombie_stats
@@ -261,16 +250,7 @@ WeaponData
 	////////////////////////////
 	
 //	"SmokeColor"			"" // R G B
-	// OR:
-	"SmokeColors"
-	{
-		"0"					"" // R G B
-		"1"					"" // R G B
-		"2"					"" // R G B
-		"3"					"" // R G B
-		"4"					"" // R G B
-		"5"					"" // R G B
-	}
+	// OR: "SmokeColors" group 0 through 5
 		
  	"MuzzleParticle"					"" // "null" will disable
  	"MuzzleParticle_Smoke"				"" // "null" will disable
