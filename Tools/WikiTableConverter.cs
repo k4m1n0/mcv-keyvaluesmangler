@@ -332,7 +332,7 @@ public static class WikiTableConverter
         if (!isExplosive)
         {
             var clipMatch = Regex.Match(clean, @"^(\d+).*?/\s*(\d+)$");
-            if (clipMatch.Success && v.TryGetValue("clip_size", out var clip) && !string.IsNullOrEmpty(clip) && clip != "-1" && clip != "0/0" && clip.Contains('/'))
+            if (clipMatch.Success && v.TryGetValue("clip_size", out var clip) && !string.IsNullOrEmpty(clip) && clip != "-1" && clip != "0/0" && !clip.StartsWith("-1/") && clip.Contains('/'))
             {
                 var parts = clip.Split('/');
                 if (parts.Length == 2)
@@ -345,7 +345,8 @@ public static class WikiTableConverter
         }
 
         bool isStandardGun = GetDouble(v, "damagegeneric") > 0 && GetDouble(v, "damageheadmultiplier") > 0;
-        if ((isExplosive || isStandardGun) && Regex.IsMatch(clean, @"^[1-9]\d*\.?\d*$"))
+        bool isDamageColumn = col == 5 || col == 6;
+        if (isDamageColumn && (isExplosive || isStandardGun) && Regex.IsMatch(clean, @"^[1-9]\d*\.?\d*$"))
         {
             string key = (col == 6 && v.ContainsKey("__head_dmg")) ? "__head_dmg" : "__chest_dmg";
             if (v.TryGetValue(key, out var dmgStr) && double.TryParse(dmgStr, NumberStyles.Float, CultureInfo.InvariantCulture, out double dmgVal)
