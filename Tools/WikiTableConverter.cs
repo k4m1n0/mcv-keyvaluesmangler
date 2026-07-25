@@ -269,7 +269,7 @@ public static class WikiTableConverter
             return hasZombie ? cell + zombieSuffix : cell;
 
         double pellets = Math.Max(GetDouble(v, "bullets_per_shot"), 1.0);
-        if (pellets > 1 && col == 0)
+        if (pellets > 1 && (col == 0 || col == 5))
         {
             double dgVal = GetDouble(v, "damagegeneric");
             if (dgVal > 0)
