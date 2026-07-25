@@ -268,6 +268,17 @@ public static class WikiTableConverter
         if (cell.Contains("<br>"))
             return hasZombie ? cell + zombieSuffix : cell;
 
+        double pellets = Math.Max(GetDouble(v, "bullets_per_shot"), 1.0);
+        if (pellets > 1 && col == 0)
+        {
+            double dgVal = GetDouble(v, "damagegeneric");
+            if (dgVal > 0)
+            {
+                return Regex.Replace(cell, @"\d+\.?\d*[Xx]?\d*\.?\d*",
+                    $"{FormatDouble(dgVal)}x{FormatDouble(pellets)}");
+            }
+        }
+
         bool isExplosive = GetDouble(v, "explosiondamage") > 0;
 
         var dmgMatch = Regex.Match(clean, @"^x(\d+\.?\d*)\s*=\s*(\d+\.?\d*)$");
@@ -277,7 +288,6 @@ public static class WikiTableConverter
             if (col < DamageMultiplierKeys.Length && GetDouble(v, DamageMultiplierKeys[col]) is double sm && sm > 0) mult = sm;
             if (GetDouble(v, "damagegeneric") is double bd && bd > 0)
             {
-                double pellets = Math.Max(GetDouble(v, "bullets_per_shot"), 1.0);
                 double totalDmg = Math.Round(bd * mult * pellets, 2);
                 return Regex.Replace(cell, @"x\d+\.?\d*\s*=\s*\d+\.?\d*",
                     $"x{FormatDouble(mult)} = {FormatDouble(totalDmg)}")
@@ -297,6 +307,28 @@ public static class WikiTableConverter
                 + MakeZombie(v, hasZombie, "<br><span style=\"color:#ff6905;\">{0} / {1} [[ADS]]</span>",
                     FormatDouble(GetDouble(v, "zombie_bulletspreaddegrees")),
                     FormatDouble(GetDouble(v, "zombie_bulletspreaddegreesironsighted")));
+
+        //机枪散布 Hip° & BipodHip° [[ADS]] 或 ADS° & BipodADS° [[ADS]]
+        var bipodMatch = Regex.Match(clean, @"^(\d+\.?\d*)°?\s*&\s*(\d+\.?\d*)°?\s*\[\[ADS\]\]$");
+        if (bipodMatch.Success)
+        {
+            double v1 = double.Parse(bipodMatch.Groups[1].Value, CultureInfo.InvariantCulture);
+            double hip = GetDouble(v, "bulletspreaddegrees");
+            double ads = GetDouble(v, "bulletspreaddegreesironsighted");
+            //用第一个数值更接近hip还是ads来判断行类型
+            if (Math.Abs(v1 - hip) <= Math.Abs(v1 - ads) && hip > 0)
+            {
+                double bipod = GetDouble(v, "bulletspreaddegreesbipod");
+                return Regex.Replace(cell, @"\d+\.?\d*°?\s*&\s*\d+\.?\d*°?\s*\[\[ADS\]\]",
+                    $"{FormatDouble(hip)}° & {FormatDouble(bipod)}° [[ADS]]");
+            }
+            else if (ads > 0)
+            {
+                double bipodAds = GetDouble(v, "bulletspreaddegreesbipodironsighted");
+                return Regex.Replace(cell, @"\d+\.?\d*°?\s*&\s*\d+\.?\d*°?\s*\[\[ADS\]\]",
+                    $"{FormatDouble(ads)}° & {FormatDouble(bipodAds)}° [[ADS]]");
+            }
+        }
 
         if (Regex.IsMatch(clean, @"^0\.\d+$") && GetDouble(v, "rangemodifier") is double rm && rm > 0)
             return Regex.Replace(cell, @"0\.\d+", FormatDouble(rm))
@@ -348,6 +380,7 @@ public static class WikiTableConverter
         bool isDamageColumn = col == 5 || col == 6;
         if (isDamageColumn && (isExplosive || isStandardGun) && Regex.IsMatch(clean, @"^[1-9]\d*\.?\d*$"))
         {
+            //容差<100防止替换弹药数量等非伤害数字
             string key = (col == 6 && v.ContainsKey("__head_dmg")) ? "__head_dmg" : "__chest_dmg";
             if (v.TryGetValue(key, out var dmgStr) && double.TryParse(dmgStr, NumberStyles.Float, CultureInfo.InvariantCulture, out double dmgVal)
                 && Math.Abs(double.Parse(clean, CultureInfo.InvariantCulture) - dmgVal) < 100)

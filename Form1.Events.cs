@@ -439,6 +439,20 @@ public partial class Form1
 
         var lblPage = new Label { Text = "Page:", Location = new Point(12, 14), Size = new Size(38, 20), TextAlign = ContentAlignment.MiddleRight };
         var txtPage = new TextBox { Location = new Point(56, 12), Size = new Size(200, 22), Text = "Weapons of Vietnam" };
+        txtPage.TextChanged += (_, _) =>
+        {
+            string t = txtPage.Text;
+            var m = Regex.Match(t, @"(?:wiki/|title=)([^?#&]+)");
+            if (m.Success)
+            {
+                string extracted = Uri.UnescapeDataString(m.Groups[1].Value).Replace('_', ' ');
+                if (t != extracted)
+                {
+                    txtPage.Text = extracted;
+                    txtPage.SelectionStart = extracted.Length;
+                }
+            }
+        };
         var btnFetch = new Button { Text = "Fetch", Location = new Point(262, 11), Size = new Size(55, 24) };
         var lblStatus = new Label { Location = new Point(324, 14), AutoSize = true, ForeColor = Color.DarkGreen };
 
