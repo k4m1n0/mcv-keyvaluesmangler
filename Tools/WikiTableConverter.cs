@@ -360,7 +360,13 @@ public static class WikiTableConverter
                     FormatDouble(Math.Round(GetDouble(v, "zombie_bullet_weight") * 1000, 1)),
                     FormatDouble(Math.Round(GetDouble(v, "zombie_bullet_weight") * 15432.36, 2)));
 
-        //爆炸武器的弹药列不替换 保留原始格式
+        var fireModeMatch = Regex.Match(clean, @"^[A-Za-z]+(\+[A-Za-z]+)*$");
+        if (fireModeMatch.Success && v.TryGetValue("SupportedFireModes", out var fm) && !string.IsNullOrEmpty(fm))
+        {
+            if (clean != fm)
+                return Regex.Replace(cell, @"[A-Za-z]+(\+[A-Za-z]+)*", fm);
+        }
+
         if (!isExplosive)
         {
             var clipMatch = Regex.Match(clean, @"^(\d+).*?/\s*(\d+)$");
