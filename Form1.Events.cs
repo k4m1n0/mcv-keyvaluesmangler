@@ -439,20 +439,7 @@ public partial class Form1
 
         var lblPage = new Label { Text = "Page:", Location = new Point(12, 14), Size = new Size(38, 20), TextAlign = ContentAlignment.MiddleRight };
         var txtPage = new TextBox { Location = new Point(56, 12), Size = new Size(200, 22), Text = "Weapons of Vietnam" };
-        txtPage.TextChanged += (_, _) =>
-        {
-            string t = txtPage.Text;
-            var m = Regex.Match(t, @"(?:wiki/|title=)([^?#&]+)");
-            if (m.Success)
-            {
-                string extracted = Uri.UnescapeDataString(m.Groups[1].Value).Replace('_', ' ');
-                if (t != extracted)
-                {
-                    txtPage.Text = extracted;
-                    txtPage.SelectionStart = extracted.Length;
-                }
-            }
-        };
+        string lastPageText = txtPage.Text;
         var btnFetch = new Button { Text = "Fetch", Location = new Point(262, 11), Size = new Size(55, 24) };
         var lblStatus = new Label { Location = new Point(324, 14), AutoSize = true, ForeColor = Color.DarkGreen };
 
@@ -480,6 +467,32 @@ public partial class Form1
         bool dryRunDone = false, batchDryDone = false;
         CancellationTokenSource? dryRunCts = null, batchCts = null;
 
+        //page改变时清空source和状态
+        txtPage.TextChanged += (_, _) =>
+        {
+            string t = txtPage.Text;
+            var m = Regex.Match(t, @"(?:wiki/|title=)([^?#&]+)");
+            if (m.Success)
+            {
+                string extracted = Uri.UnescapeDataString(m.Groups[1].Value).Replace('_', ' ');
+                if (t != extracted)
+                {
+                    txtPage.Text = extracted;
+                    txtPage.SelectionStart = extracted.Length;
+                    t = extracted;
+                }
+            }
+            if (t != lastPageText)
+            {
+                lastPageText = t;
+                txtInput.Clear();
+                txtOutput.Clear();
+                _titleToScript = null;
+                if (dryRunDone) { dryRunDone = false; btnDryRun.Text = "DryRun"; btnDryRun.BackColor = SystemColors.Control; SetEditControlsEnabled(true); }
+                if (batchDryDone) { batchDryDone = false; btnBatchDR.Text = "BatchDR"; btnBatchDR.BackColor = SystemColors.Control; SetEditControlsEnabled(true); }
+            }
+        };
+
         void ResetBatchState()
         {
             batchDryDone = false; btnBatchDR.Text = "BatchDR"; btnBatchDR.BackColor = SystemColors.Control;
@@ -501,56 +514,43 @@ public partial class Form1
             if (fbd.ShowDialog() == DialogResult.OK) { selectedDir = fbd.SelectedPath; lblDir.Text = selectedDir; }
         }
 
+        //反查脚本名
+        string? ReverseLookup(string input)
+        {
+            if (_titleToScript == null || _titleToScript.Count == 0) return null;
+            string inputNoExt = Path.GetFileNameWithoutExtension(input);
+            if (_titleToScript.ContainsKey(input)) return input;
+            foreach (var kv in _titleToScript)
+            {
+                string sn = kv.Value;
+                string snNoExt = Path.GetFileNameWithoutExtension(sn);
+                string snStem = snNoExt.StartsWith("weapon_", StringComparison.OrdinalIgnoreCase) ? snNoExt.Substring(7) : snNoExt;
+                if (sn.Equals(input, StringComparison.OrdinalIgnoreCase)
+                    || snNoExt.Equals(input, StringComparison.OrdinalIgnoreCase)
+                    || snNoExt.Equals(inputNoExt, StringComparison.OrdinalIgnoreCase)
+                    || snStem.Equals(inputNoExt, StringComparison.OrdinalIgnoreCase))
+                    return kv.Key;
+            }
+            return _titleToScript.Keys.FirstOrDefault(k => k.Equals(input, StringComparison.OrdinalIgnoreCase));
+        }
+
         async Task<bool> EnsureSource()
         {
             if (!string.IsNullOrWhiteSpace(txtInput.Text)) return true;
             var src = await WikiApiService.GetPageSourceAsync(txtPage.Text);
             if (src == null)
             {
-                //反查脚本名
-                if (_titleToScript == null)
-                {
-                    try { _titleToScript = await BuildTitleToScriptMap(); } catch { }
-                }
-                string? foundTitle = null;
-                string input = txtPage.Text.Trim();
-                string inputNoExt = Path.GetFileNameWithoutExtension(input);
-                if (_titleToScript != null)
-                {
-                    foreach (var kv in _titleToScript)
-                    {
-                        string sn = kv.Value;
-                        string snNoExt = Path.GetFileNameWithoutExtension(sn);
-                        string snStem = snNoExt.StartsWith("weapon_", StringComparison.OrdinalIgnoreCase) ? snNoExt.Substring(7) : snNoExt;
-                        if (sn.Equals(input, StringComparison.OrdinalIgnoreCase)
-                            || snNoExt.Equals(input, StringComparison.OrdinalIgnoreCase)
-                            || snNoExt.Equals(inputNoExt, StringComparison.OrdinalIgnoreCase)
-                            || snStem.Equals(inputNoExt, StringComparison.OrdinalIgnoreCase))
-                        {
-                            foundTitle = kv.Key;
-                            break;
-                        }
-                    }
-                    //精确匹配失败 尝试模糊匹配页面标题
-                    if (foundTitle == null)
-                    {
-                        foundTitle = _titleToScript.Keys.FirstOrDefault(k =>
-                            k.Replace("_", " ").StartsWith(input, StringComparison.OrdinalIgnoreCase)
-                            || k.IndexOf(input, StringComparison.OrdinalIgnoreCase) >= 0);
-                    }
-                }
+                if (_titleToScript == null) { try { _titleToScript = await BuildTitleToScriptMap(); } catch { } }
+                string? foundTitle = ReverseLookup(txtPage.Text.Trim());
                 if (foundTitle != null)
                 {
+                    lastPageText = foundTitle;
                     txtPage.Text = foundTitle;
                     src = await WikiApiService.GetPageSourceAsync(foundTitle);
                 }
                 if (src == null) { lblStatus.Text = "Page not found"; return false; }
             }
-            //索引未构建则构建
-            if (_titleToScript == null)
-            {
-                try { _titleToScript = await BuildTitleToScriptMap(); } catch { }
-            }
+            if (_titleToScript == null) { try { _titleToScript = await BuildTitleToScriptMap(); } catch { } }
             txtInput.Text = src;
             lblStatus.Text = $"OK: {txtPage.Text}" + (_titleToScript?.Count > 0 ? $" (+{_titleToScript.Count} idx)" : "");
             return true;
@@ -595,23 +595,12 @@ public partial class Form1
 
         btnConvert.Click += async (_, _) =>
         {
-            if (dryRunDone || batchDryDone)
-            {
-                lblStatus.Text = "Cannot convert while upload is pending. Complete or cancel first.";
-                return;
-            }
+            if (dryRunDone || batchDryDone) { lblStatus.Text = "Cannot convert while upload is pending."; return; }
             if (selectedDir == null || !Directory.Exists(selectedDir)) PickDir();
             if (selectedDir == null) return;
-            //如果没有索引映射 尝试从wiki拉取
             if (_titleToScript == null && !string.IsNullOrWhiteSpace(txtInput.Text))
             {
-                try
-                {
-                    _titleToScript = await BuildTitleToScriptMap();
-                    if (_titleToScript != null)
-                        lblStatus.Text = $"索引已加载 ({_titleToScript.Count} 个武器)";
-                }
-                catch { }
+                try { _titleToScript = await BuildTitleToScriptMap(); if (_titleToScript != null) lblStatus.Text = $"索引已加载 ({_titleToScript.Count} 个武器)"; } catch { }
             }
             try { txtOutput.Text = DoConvert(txtInput.Text, selectedDir, _titleToScript).Replace("\n", "\r\n"); }
             catch (Exception ex) { txtOutput.Text = $"Error: {ex.Message}"; }
@@ -624,9 +613,7 @@ public partial class Form1
             if (dryRunCts != null) { dryRunCts.Cancel(); dryRunCts.Dispose(); dryRunCts = null; }
             if (batchCts != null) { batchCts.Cancel(); batchCts.Dispose(); batchCts = null; }
             txtPage.Text = "Weapons of Vietnam";
-            txtInput.Clear();
-            txtOutput.Clear();
-            _titleToScript = null;
+            txtInput.Clear(); txtOutput.Clear(); _titleToScript = null;
             dryRunDone = false; btnDryRun.Text = "DryRun"; btnDryRun.BackColor = SystemColors.Control;
             batchDryDone = false; btnBatchDR.Text = "BatchDR"; btnBatchDR.BackColor = SystemColors.Control;
             SetEditControlsEnabled(true);
@@ -635,12 +622,14 @@ public partial class Form1
 
         btnFetch.Click += async (_, _) =>
         {
-            if (dryRunDone || batchDryDone)
-            {
-                lblStatus.Text = "Cannot fetch while upload is pending. Complete or cancel first.";
-                return;
-            }
+            if (dryRunDone || batchDryDone) { lblStatus.Text = "Cannot fetch while upload is pending."; return; }
+            if (_titleToScript == null) { try { _titleToScript = await BuildTitleToScriptMap(); } catch { } }
             var source = await WikiApiService.GetPageSourceAsync(txtPage.Text);
+            if (source == null && _titleToScript != null)
+            {
+                string? foundTitle = ReverseLookup(txtPage.Text.Trim());
+                if (foundTitle != null) { txtPage.Text = foundTitle; source = await WikiApiService.GetPageSourceAsync(foundTitle); }
+            }
             if (source == null) { lblStatus.Text = "Page not found"; return; }
             _titleToScript = await BuildTitleToScriptMap();
             txtInput.Text = source; txtOutput.Clear(); ResetBatchState();
@@ -649,30 +638,11 @@ public partial class Form1
 
         btnDryRun.Click += async (_, _) =>
         {
-            if (dryRunCts != null)
-            {
-                dryRunCts.Cancel();
-                dryRunCts.Dispose();
-                dryRunCts = null;
-                btnDryRun.Text = dryRunDone ? "Upload" : "DryRun";
-                btnDryRun.BackColor = dryRunDone ? Color.LightSalmon : SystemColors.Control;
-                lblStatus.Text = "Cancelled";
-                return;
-            }
+            if (dryRunCts != null) { dryRunCts.Cancel(); dryRunCts.Dispose(); dryRunCts = null; btnDryRun.Text = dryRunDone ? "Upload" : "DryRun"; btnDryRun.BackColor = dryRunDone ? Color.LightSalmon : SystemColors.Control; lblStatus.Text = "Cancelled"; return; }
             if (batchCts != null) { lblStatus.Text = "Batch is running"; return; }
+            if (batchDryDone) { batchDryDone = false; btnBatchDR.Text = "BatchDR"; btnBatchDR.BackColor = SystemColors.Control; }
+            if (dryRunDone && string.IsNullOrWhiteSpace(txtOutput.Text)) { lblStatus.Text = "Result is empty."; return; }
 
-            if (batchDryDone)
-            {
-                batchDryDone = false; btnBatchDR.Text = "BatchDR"; btnBatchDR.BackColor = SystemColors.Control;
-            }
-
-            if (dryRunDone && string.IsNullOrWhiteSpace(txtOutput.Text))
-            {
-                lblStatus.Text = "Result is empty. Run DryRun first.";
-                return;
-            }
-
-            //如果是upload模式但还没有dryrun 结果先自动转换
             if (!dryRunDone && string.IsNullOrWhiteSpace(txtOutput.Text))
             {
                 if (selectedDir == null || !Directory.Exists(selectedDir)) PickDir();
@@ -684,73 +654,36 @@ public partial class Form1
 
             dryRunCts = new CancellationTokenSource(); var token = dryRunCts.Token;
             EventHandler? h = null; EnterCancel(btnDryRun, dryRunCts, ref h);
-
             try
             {
-                if (!dryRunDone)
-                {
-                    await Task.Run(() => token.ThrowIfCancellationRequested(), token);
-                    lblStatus.Text = $"Ready: {txtPage.Text} (click Upload to save)";
-                }
+                if (!dryRunDone) { await Task.Run(() => token.ThrowIfCancellationRequested(), token); lblStatus.Text = $"Ready: {txtPage.Text} (click Upload)"; }
                 else
                 {
-                    string content = txtOutput.Text;
                     if (!await EnsureLogin(txtUser.Text, txtPw.Text, lblStatus)) return;
                     token.ThrowIfCancellationRequested();
-                    if (await WikiApiService.IsSameContentAsync(txtPage.Text, content))
-                    {
-                        lblStatus.Text = "Unchanged, skip";
-                    }
-                    else
-                    {
-                        bool ok = await WikiApiService.SavePageAsync(txtPage.Text, content, "Update weapon data from scripts");
-                        lblStatus.Text = ok ? "Saved!" : "Save failed";
-                    }
+                    if (await WikiApiService.IsSameContentAsync(txtPage.Text, txtOutput.Text)) { lblStatus.Text = "Unchanged, skip"; }
+                    else { lblStatus.Text = await WikiApiService.SavePageAsync(txtPage.Text, txtOutput.Text, "Update weapon data from scripts") ? "Saved!" : "Save failed"; }
                 }
-                ToggleDryRun();
-                ExitCancel(btnDryRun, btnDryRun.Text, btnDryRun.BackColor, h);
+                ToggleDryRun(); ExitCancel(btnDryRun, btnDryRun.Text, btnDryRun.BackColor, h);
             }
-            catch (OperationCanceledException)
-            {
-                lblStatus.Text = "Cancelled";
-                ExitCancel(btnDryRun, dryRunDone ? "Upload" : "DryRun",
-                        dryRunDone ? Color.LightSalmon : SystemColors.Control, h);
-            }
+            catch (OperationCanceledException) { lblStatus.Text = "Cancelled"; ExitCancel(btnDryRun, dryRunDone ? "Upload" : "DryRun", dryRunDone ? Color.LightSalmon : SystemColors.Control, h); }
             finally { dryRunCts?.Dispose(); dryRunCts = null; }
         };
 
         btnBatchDR.Click += async (_, _) =>
         {
-            if (batchCts != null)
-            {
-                batchCts.Cancel();
-                batchCts.Dispose();
-                batchCts = null;
-                btnBatchDR.Text = batchDryDone ? "BatchUp" : "BatchDR";
-                btnBatchDR.BackColor = batchDryDone ? Color.LightSalmon : SystemColors.Control;
-                lblStatus.Text = "Batch cancelled";
-                return;
-            }
+            if (batchCts != null) { batchCts.Cancel(); batchCts.Dispose(); batchCts = null; btnBatchDR.Text = batchDryDone ? "BatchUp" : "BatchDR"; btnBatchDR.BackColor = batchDryDone ? Color.LightSalmon : SystemColors.Control; lblStatus.Text = "Batch cancelled"; return; }
             if (dryRunCts != null) { lblStatus.Text = "DryRun is running"; return; }
-
-            if (dryRunDone)
-            {
-                dryRunDone = false; btnDryRun.Text = "DryRun"; btnDryRun.BackColor = SystemColors.Control;
-            }
+            if (dryRunDone) { dryRunDone = false; btnDryRun.Text = "DryRun"; btnDryRun.BackColor = SystemColors.Control; }
 
             batchCts = new CancellationTokenSource(); var token = batchCts.Token;
             EventHandler? h = null; EnterCancel(btnBatchDR, batchCts, ref h);
-
             try
             {
                 if (selectedDir == null || !Directory.Exists(selectedDir)) PickDir();
                 if (selectedDir == null) return;
                 if (!await EnsureSource()) return;
-                if (!Regex.IsMatch(txtInput.Text, @"^=\[\[.+\]\]=\s*$", RegexOptions.Multiline))
-                {
-                    lblStatus.Text = "Not a summary page. Batch requires a weapon list page.";
-                    return;
-                }
+                if (!Regex.IsMatch(txtInput.Text, @"^=\[\[.+\]\]=\s*$", RegexOptions.Multiline)) { lblStatus.Text = "Not a summary page."; return; }
                 var links = ExtractWeaponLinks(txtInput.Text, _titleToScript);
                 if (links.Count == 0) { lblStatus.Text = "No weapon links found"; return; }
 
@@ -767,16 +700,8 @@ public partial class Form1
                         try
                         {
                             string? src = await WikiApiService.GetPageSourceAsync(link);
-                            if (src == null)
-                            {
-                                fail++; log.AppendLine($"FAIL fetch: {link}");
-                            }
-                            else
-                            {
-                                string converted = Tools.WikiTableConverter.Convert(src, selectedDir);
-                                SaveToWikiDir(link.Replace(" ", "_").Replace("/", "_") + ".txt", converted);
-                                done++; log.AppendLine($"OK: {link}");
-                            }
+                            if (src == null) { fail++; log.AppendLine($"FAIL fetch: {link}"); }
+                            else { string converted = Tools.WikiTableConverter.Convert(src, selectedDir); SaveToWikiDir(link.Replace(" ", "_").Replace("/", "_") + ".txt", converted); done++; log.AppendLine($"OK: {link}"); }
                         }
                         catch { fail++; log.AppendLine($"FAIL: {link}"); }
                         lblStatus.Text = $"DR [{done + fail}/{links.Count}]";
@@ -794,22 +719,15 @@ public partial class Form1
                         if (!File.Exists(fp)) { skip++; log.AppendLine($"SKIP (no file): {link}"); continue; }
                         string content = File.ReadAllText(fp);
                         if (await WikiApiService.IsSameContentAsync(link, content)) { skip++; log.AppendLine($"SKIP (unchanged): {link}"); continue; }
-                        var ok = await WikiApiService.SavePageAsync(link, content, "Update weapon data from scripts");
-                        if (ok) { done++; log.AppendLine($"OK: {link}"); } else { fail++; log.AppendLine($"FAIL upload: {link}"); }
+                        if (await WikiApiService.SavePageAsync(link, content, "Update weapon data from scripts")) { done++; log.AppendLine($"OK: {link}"); } else { fail++; log.AppendLine($"FAIL upload: {link}"); }
                         lblStatus.Text = $"Up [{done + fail}/{links.Count - skip}]";
                     }
                     log.AppendLine($"Done: {done} ok, {fail} fail, {skip} skip");
                 }
                 txtOutput.Text = log.ToString();
-                ToggleBatch();
-                ExitCancel(btnBatchDR, btnBatchDR.Text, btnBatchDR.BackColor, h);
+                ToggleBatch(); ExitCancel(btnBatchDR, btnBatchDR.Text, btnBatchDR.BackColor, h);
             }
-            catch (OperationCanceledException)
-            {
-                lblStatus.Text = "Batch cancelled";
-                ExitCancel(btnBatchDR, batchDryDone ? "BatchUp" : "BatchDR",
-                        batchDryDone ? Color.LightSalmon : SystemColors.Control, h);
-            }
+            catch (OperationCanceledException) { lblStatus.Text = "Batch cancelled"; ExitCancel(btnBatchDR, batchDryDone ? "BatchUp" : "BatchDR", batchDryDone ? Color.LightSalmon : SystemColors.Control, h); }
             finally { batchCts?.Dispose(); batchCts = null; }
         };
 
@@ -856,7 +774,7 @@ public partial class Form1
             if (idx == null) return null;
             idx = idx.Replace("\r\n", "\n").Replace('\r', '\n');
             var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (Match m in Regex.Matches(idx, @"\|\s*(weapon_[^\s|]+)\s*\n\|\s*\[\[([^\]|]+)"))
+            foreach (Match m in Regex.Matches(idx, @"\|\s*(weapon_[^\s|]+)\s*\n\|\s*\[\[([^\]]+)\]\]"))
                 map[m.Groups[2].Value.Trim()] = m.Groups[1].Value;
             return map;
         }
