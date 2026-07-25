@@ -269,7 +269,7 @@ public static class WikiTableConverter
             return hasZombie ? cell + zombieSuffix : cell;
 
         double pellets = Math.Max(GetDouble(v, "bullets_per_shot"), 1.0);
-        if (pellets > 1 && (col == 0 || col == 5))
+        if (pellets > 1 && col == 0)
         {
             double dgVal = GetDouble(v, "damagegeneric");
             if (dgVal > 0)
@@ -278,25 +278,42 @@ public static class WikiTableConverter
                     $"{FormatDouble(dgVal)}x{FormatDouble(pellets)}");
             }
         }
+        else if (pellets > 1 && col == 5 && Regex.IsMatch(clean, @"^\d+\.?\d*[Xx]\d+\.?\d*$"))
+        {
+            double dgVal = GetDouble(v, "damagegeneric");
+            if (dgVal > 0)
+            {
+                return Regex.Replace(cell, @"\d+\.?\d*[Xx]\d+\.?\d*",
+                    $"{FormatDouble(dgVal)}x{FormatDouble(pellets)}");
+            }
+        }
+        else if (col == 0)
+        {
+            double dgVal = GetDouble(v, "damagegeneric");
+            if (dgVal > 0 && Regex.IsMatch(clean, @"^[1-9]\d*\.?\d*$")
+                && Math.Abs(double.Parse(clean, CultureInfo.InvariantCulture) - dgVal) < 100)
+            {
+                return Regex.Replace(cell, @"\d+\.?\d*", FormatDouble(dgVal));
+            }
+        }
 
         bool isExplosive = GetDouble(v, "explosiondamage") > 0;
 
-        var dmgMatch = Regex.Match(clean, @"^x(\d+\.?\d*)\s*=\s*(\d+\.?\d*)$");
+        var dmgMatch = Regex.Match(clean, @"^[x×](\d+\.?\d*)\s*=\s*(\d+\.?\d*)$");
         if (dmgMatch.Success)
         {
             double mult = double.Parse(dmgMatch.Groups[1].Value, CultureInfo.InvariantCulture);
             if (col < DamageMultiplierKeys.Length && GetDouble(v, DamageMultiplierKeys[col]) is double sm && sm > 0) mult = sm;
             if (GetDouble(v, "damagegeneric") is double bd && bd > 0)
             {
-                double totalDmg = Math.Round(bd * mult * pellets, 2);
-                return Regex.Replace(cell, @"x\d+\.?\d*\s*=\s*\d+\.?\d*",
+                double totalDmg = Math.Round(bd * mult, 2);
+                return Regex.Replace(cell, @"[x×]\d+\.?\d*\s*=\s*\d+\.?\d*",
                     $"x{FormatDouble(mult)} = {FormatDouble(totalDmg)}")
                     + MakeZombie(v, hasZombie, "<br><span style=\"color:#ff6905;\">x{0} = {1}</span>",
                         FormatDouble(GetDouble(v, "zombie_" + DamageMultiplierKeys[Math.Min(col, DamageMultiplierKeys.Length - 1)])),
                         FormatDouble(Math.Round(
                             Math.Max(GetDouble(v, "zombie_damagegeneric"), 0)
-                            * Math.Max(GetDouble(v, "zombie_" + DamageMultiplierKeys[Math.Min(col, DamageMultiplierKeys.Length - 1)]), mult)
-                            * Math.Max(GetDouble(v, "zombie_bullets_per_shot"), pellets), 2)));
+                            * Math.Max(GetDouble(v, "zombie_" + DamageMultiplierKeys[Math.Min(col, DamageMultiplierKeys.Length - 1)]), mult), 2)));
             }
             return cell + (hasZombie ? zombieSuffix : "");
         }

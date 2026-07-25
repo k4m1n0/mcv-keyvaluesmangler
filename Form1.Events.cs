@@ -505,8 +505,52 @@ public partial class Form1
         {
             if (!string.IsNullOrWhiteSpace(txtInput.Text)) return true;
             var src = await WikiApiService.GetPageSourceAsync(txtPage.Text);
-            if (src == null) { lblStatus.Text = "Page not found"; return false; }
-            _titleToScript = await BuildTitleToScriptMap();
+            if (src == null)
+            {
+                //反查脚本名
+                if (_titleToScript == null)
+                {
+                    try { _titleToScript = await BuildTitleToScriptMap(); } catch { }
+                }
+                string? foundTitle = null;
+                string input = txtPage.Text.Trim();
+                string inputNoExt = Path.GetFileNameWithoutExtension(input);
+                if (_titleToScript != null)
+                {
+                    foreach (var kv in _titleToScript)
+                    {
+                        string sn = kv.Value;
+                        string snNoExt = Path.GetFileNameWithoutExtension(sn);
+                        string snStem = snNoExt.StartsWith("weapon_", StringComparison.OrdinalIgnoreCase) ? snNoExt.Substring(7) : snNoExt;
+                        if (sn.Equals(input, StringComparison.OrdinalIgnoreCase)
+                            || snNoExt.Equals(input, StringComparison.OrdinalIgnoreCase)
+                            || snNoExt.Equals(inputNoExt, StringComparison.OrdinalIgnoreCase)
+                            || snStem.Equals(inputNoExt, StringComparison.OrdinalIgnoreCase))
+                        {
+                            foundTitle = kv.Key;
+                            break;
+                        }
+                    }
+                    //精确匹配失败 尝试模糊匹配页面标题
+                    if (foundTitle == null)
+                    {
+                        foundTitle = _titleToScript.Keys.FirstOrDefault(k =>
+                            k.Replace("_", " ").StartsWith(input, StringComparison.OrdinalIgnoreCase)
+                            || k.IndexOf(input, StringComparison.OrdinalIgnoreCase) >= 0);
+                    }
+                }
+                if (foundTitle != null)
+                {
+                    txtPage.Text = foundTitle;
+                    src = await WikiApiService.GetPageSourceAsync(foundTitle);
+                }
+                if (src == null) { lblStatus.Text = "Page not found"; return false; }
+            }
+            //索引未构建则构建
+            if (_titleToScript == null)
+            {
+                try { _titleToScript = await BuildTitleToScriptMap(); } catch { }
+            }
             txtInput.Text = src;
             lblStatus.Text = $"OK: {txtPage.Text}" + (_titleToScript?.Count > 0 ? $" (+{_titleToScript.Count} idx)" : "");
             return true;
@@ -628,7 +672,7 @@ public partial class Form1
                 return;
             }
 
-            //如果是Upload模式但还没有DryRun 结果先自动转换
+            //如果是upload模式但还没有dryrun 结果先自动转换
             if (!dryRunDone && string.IsNullOrWhiteSpace(txtOutput.Text))
             {
                 if (selectedDir == null || !Directory.Exists(selectedDir)) PickDir();
@@ -810,6 +854,7 @@ public partial class Form1
         {
             string? idx = await WikiApiService.GetPageSourceAsync("Weapon Script Name");
             if (idx == null) return null;
+            idx = idx.Replace("\r\n", "\n").Replace('\r', '\n');
             var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (Match m in Regex.Matches(idx, @"\|\s*(weapon_[^\s|]+)\s*\n\|\s*\[\[([^\]|]+)"))
                 map[m.Groups[2].Value.Trim()] = m.Groups[1].Value;
