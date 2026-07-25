@@ -702,6 +702,11 @@ public partial class Form1
                 if (selectedDir == null || !Directory.Exists(selectedDir)) PickDir();
                 if (selectedDir == null) return;
                 if (!await EnsureSource()) return;
+                if (!Regex.IsMatch(txtInput.Text, @"^=\[\[.+\]\]=\s*$", RegexOptions.Multiline))
+                {
+                    lblStatus.Text = "Not a summary page. Batch requires a weapon list page.";
+                    return;
+                }
                 var links = ExtractWeaponLinks(txtInput.Text, _titleToScript);
                 if (links.Count == 0) { lblStatus.Text = "No weapon links found"; return; }
 
