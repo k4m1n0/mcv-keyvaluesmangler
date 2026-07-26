@@ -19,35 +19,37 @@ public partial class Form1
     {
         var dlg = new Form
         {
-            Text = "Wiki Stats Updater", Size = new Size(660, 580),
+            Text = "Wiki Stats Updater", Size = new Size(660, 680),
             StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedSingle,
             MinimizeBox = false, MaximizeBox = false
         };
 
         var lblPage = new Label { Text = "Page:", Location = new Point(12, 14), Size = new Size(38, 20), TextAlign = ContentAlignment.MiddleRight };
-        var txtPage = new TextBox { Location = new Point(56, 12), Size = new Size(200, 22), Text = "Weapons of Vietnam" };
+        var txtPage = new TextBox { Location = new Point(56, 12), Size = new Size(195, 22), Text = "Weapons of Vietnam" };
         string lastPageText = txtPage.Text;
-        var btnFetch = new Button { Text = "Fetch", Location = new Point(262, 11), Size = new Size(55, 24) };
-        var lblStatus = new Label { Location = new Point(324, 14), AutoSize = true, ForeColor = Color.DarkGreen };
+        var btnFetch = new Button { Text = "Fetch", Location = new Point(256, 11), Size = new Size(75, 24) };
+        var lblStatus = new Label { Location = new Point(336, 14), AutoSize = true, ForeColor = Color.DarkGreen };
 
-        var lblUser = new Label { Text = "User:", Location = new Point(12, 42), Size = new Size(38, 20), TextAlign = ContentAlignment.MiddleRight };
-        var txtUser = new TextBox { Location = new Point(56, 40), Size = new Size(80, 22) };
-        var lblPw = new Label { Text = "Pw:", Location = new Point(142, 42), Size = new Size(24, 20), TextAlign = ContentAlignment.MiddleRight };
-        var txtPw = new TextBox { Location = new Point(170, 40), Size = new Size(80, 22), PasswordChar = '*' };
+        var lblUser = new Label { Text = "User", Location = new Point(12, 42), Size = new Size(38, 20), TextAlign = ContentAlignment.MiddleRight };
+        var txtUser = new TextBox { Location = new Point(56, 40), Size = new Size(80, 22), Text = lastWikiUser ?? "" };
+        var lblPw = new Label { Text = "Pw", Location = new Point(142, 42), Size = new Size(24, 20), TextAlign = ContentAlignment.MiddleRight };
+        var txtPw = new TextBox { Location = new Point(170, 40), Size = new Size(80, 22), PasswordChar = '*', Text = lastWikiPw ?? "" };
         var btnDryRun = new Button { Text = "DryRun", Location = new Point(256, 39), Size = new Size(75, 24) };
         var btnBatchDR = new Button { Text = "BatchDR", Location = new Point(336, 39), Size = new Size(75, 24) };
         var btnGenerate = new Button { Text = "Generate", Location = new Point(416, 39), Size = new Size(75, 24) };
+        var chkIncludeExisting = new CheckBox { Text = "Incl. existing", Location = new Point(498, 41), Size = new Size(95, 20), Checked = false };
 
         var lblInput = new Label { Text = "Source:", Location = new Point(12, 74), AutoSize = true };
-        var txtInput = new TextBox { Location = new Point(12, 92), Size = new Size(620, 100), Multiline = true, ScrollBars = ScrollBars.Vertical, Font = new Font("Consolas", 9), MaxLength = 0 };
-        var lblOutput = new Label { Text = "Result:", Location = new Point(12, 198), AutoSize = true };
-        var txtOutput = new TextBox { Location = new Point(12, 216), Size = new Size(620, 240), Multiline = true, ScrollBars = ScrollBars.Vertical, Font = new Font("Consolas", 9), ReadOnly = true, MaxLength = 0 };
+        var txtInput = new TextBox { Location = new Point(12, 92), Size = new Size(620, 228), Multiline = true, ScrollBars = ScrollBars.Vertical, Font = new Font("Consolas", 9), MaxLength = 0 };
+        var lblOutput = new Label { Text = "Result:", Location = new Point(12, 326), AutoSize = true };
+        var txtOutput = new TextBox { Location = new Point(12, 344), Size = new Size(620, 228), Multiline = true, ScrollBars = ScrollBars.Vertical, Font = new Font("Consolas", 9), ReadOnly = true, MaxLength = 0 };
 
-        var btnSelectDir = new Button { Text = "Scripts...", Location = new Point(12, 464), Size = new Size(85, 26) };
-        var lblDir = new Label { Location = new Point(98, 469), AutoSize = true, ForeColor = Color.Gray };
-        var btnConvert = new Button { Text = "Convert", Location = new Point(12, 494), Size = new Size(85, 26) };
-        var btnCopy = new Button { Text = "Copy", Location = new Point(103, 494), Size = new Size(85, 26) };
-        var btnReset = new Button { Text = "Reset", Location = new Point(194, 494), Size = new Size(85, 26) };
+        var btnSelectDir = new Button { Text = "Scripts...", Location = new Point(12, 578), Size = new Size(85, 26) };
+        var lblDir = new Label { Location = new Point(98, 583), AutoSize = true, ForeColor = Color.Gray };
+        var chkSkipCached = new CheckBox { Text = "Skip cached", Location = new Point(290, 582), Size = new Size(90, 20), Checked = false };
+        var btnConvert = new Button { Text = "Convert", Location = new Point(12, 608), Size = new Size(85, 26) };
+        var btnCopy = new Button { Text = "Copy", Location = new Point(103, 608), Size = new Size(85, 26) };
+        var btnReset = new Button { Text = "Reset", Location = new Point(194, 608), Size = new Size(85, 26) };
 
         string? selectedDir = string.IsNullOrEmpty(lastScriptsDir) ? null : lastScriptsDir;
         if (selectedDir != null) lblDir.Text = selectedDir;
@@ -139,7 +141,7 @@ public partial class Form1
                 if (src == null) { lblStatus.Text = "Page not found"; return false; }
             }
             if (_titleToScript == null) { try { _titleToScript = await BuildTitleToScriptMap(); } catch { } }
-            txtInput.Text = src;
+            txtInput.Text = src.Replace("\n", "\r\n");
             lblStatus.Text = $"OK: {txtPage.Text}" + (_titleToScript?.Count > 0 ? $" (+{_titleToScript.Count} idx)" : "");
             return true;
         }
@@ -147,7 +149,7 @@ public partial class Form1
         void EnterCancel(Button btn, CancellationTokenSource cts, ref EventHandler? h)
         {
             btn.Text = "Cancel"; btn.BackColor = Color.LightCoral;
-            h = (_, _) => { if (cts is { IsCancellationRequested: false }) { btn.Text = "Cancel"; btn.BackColor = Color.LightCoral; } };
+            h = (_, _) => { try { if (cts is { IsCancellationRequested: false }) { btn.Text = "Cancel"; btn.BackColor = Color.LightCoral; } } catch { } };
             btn.MouseLeave += h;
         }
 
@@ -183,22 +185,32 @@ public partial class Form1
 
         btnGenerate.Click += async (_, _) =>
         {
-            // Upload 模式
-            if (btnGenerate.Tag is List<Tools.WikiPageGenerator.GeneratedPage> uploadList)
+            if (btnGenerate.Tag is string uploadDir && Directory.Exists(uploadDir))
             {
                 btnGenerate.Enabled = false;
                 lblStatus.Text = "Uploading...";
                 try
                 {
-                    if (!await EnsureLogin(txtUser.Text, txtPw.Text, lblStatus)) return;
+                    if (!await EnsureLogin(txtUser.Text, txtPw.Text, lblStatus)) { btnGenerate.Text = "Generate"; btnGenerate.BackColor = SystemColors.Control; btnGenerate.Tag = null; btnGenerate.Enabled = true; return; }
+                    var files = Directory.GetFiles(uploadDir, "*.txt");
                     int upOk = 0, upFail = 0;
-                    foreach (var p in uploadList)
+                    txtOutput.Clear();
+                    void Out(string s) { txtOutput.AppendText(s + "\r\n"); }
+                    Out($"Upload — {files.Length} files — {DateTime.Now:HH:mm:ss}");
+                    Out(new string('-', 40));
+                    foreach (string fp in files)
                     {
-                        bool ok = await WikiApiService.SavePageAsync(p.Title, p.Content, "Create weapon page from game data");
-                        if (ok) upOk++; else upFail++;
-                        lblStatus.Text = $"Upload [{upOk + upFail}/{uploadList.Count}]";
+                        string title = Uri.UnescapeDataString(Path.GetFileNameWithoutExtension(fp)).Replace("_", " ");
+                        string content = File.ReadAllText(fp);
+                        var sw = System.Diagnostics.Stopwatch.StartNew();
+                        bool ok = await WikiApiService.SavePageAsync(title, content, "Create weapon page from game data");
+                        sw.Stop();
+                        if (ok) { upOk++; Out($"OK  {title,-30}  {sw.ElapsedMilliseconds}ms"); }
+                        else { upFail++; Out($"FAIL {title,-30}"); }
+                        lblStatus.Text = $"Upload [{upOk + upFail}/{files.Length}]";
                     }
-                    txtOutput.AppendText($"\r\n\r\n=== Upload: {upOk} ok, {upFail} fail ===");
+                    Out(new string('-', 40));
+                    Out($"Upload done: {upOk} ok, {upFail} fail  {DateTime.Now:HH:mm:ss}");
                     lblStatus.Text = $"Upload done: {upOk} ok, {upFail} fail";
                 }
                 catch (Exception ex) { lblStatus.Text = $"Upload error: {ex.Message}"; }
@@ -225,18 +237,28 @@ public partial class Form1
             lblStatus.Text = "Loading...";
             try
             {
-                var tokens = LocalizationService.LoadTokens(Path.Combine(resourceDir, "vietnam_english.txt"));
-                var loadout = LoadoutService.LoadAll(resourceDir);
-                // 构建索引
-                if (_titleToScript == null) { try { _titleToScript = await BuildTitleToScriptMap(); } catch { } }
-                string detailTemplate = await WikiApiService.FetchTemplateAsync("https://wiki.militaryconflictvietnam.com/index.php?title=Template:Weapon_New&action=raw")
-                                        ?? "Template fetch failed";
-                string shortTemplate = await WikiApiService.FetchTemplateAsync("https://wiki.militaryconflictvietnam.com/index.php?title=Template:WeaponShort&action=raw")
-                                        ?? "Template fetch failed";
+                txtOutput.Clear();
+                void Out(string s) { txtOutput.AppendText(s + "\r\n"); }
 
-                var generated = Tools.WikiPageGenerator.GenerateAll(selectedDir, resourceDir, tokens, loadout, detailTemplate, shortTemplate, new HashSet<string>(), _titleToScript);
-                
-                // 用索引映射构建Wiki标题列表去查已存在页面
+                Out($"Generate started — {DateTime.Now:HH:mm:ss}");
+                var tokens = LocalizationService.LoadTokens(Path.Combine(resourceDir, "vietnam_english.txt"));
+                Out($"Tokens loaded: {tokens.Count}");
+                lblStatus.Text = "Loading loadout...";
+                var loadout = LoadoutService.LoadAll(resourceDir);
+                Out($"Loadout loaded: {loadout.Count}");
+                if (_titleToScript == null) { try { _titleToScript = await BuildTitleToScriptMap(); } catch { } }
+                Out($"Index: {_titleToScript?.Count ?? 0} entries");
+                lblStatus.Text = "Fetching templates...";
+                string defaultTemplate = await WikiApiService.FetchTemplateAsync(Tools.WikiPageGenerator.DefaultTemplateUrl) ?? "Template fetch failed";
+                string lmgTemplate = await WikiApiService.FetchTemplateAsync(Tools.WikiPageGenerator.LmgTemplateUrl) ?? defaultTemplate;
+                string pistolTemplate = await WikiApiService.FetchTemplateAsync(Tools.WikiPageGenerator.PistolTemplateUrl) ?? defaultTemplate;
+                string shortTemplate = await WikiApiService.FetchTemplateAsync(Tools.WikiPageGenerator.ShortTemplateUrl) ?? "Template fetch failed";
+                Out("Templates fetched");
+                lblStatus.Text = "Generating pages...";
+                var generated = Tools.WikiPageGenerator.GenerateAll(selectedDir, resourceDir, tokens, loadout,
+                    defaultTemplate, lmgTemplate, pistolTemplate, shortTemplate, new HashSet<string>(), _titleToScript);
+                Out($"Scripts processed: {generated.Count}");
+
                 var checkTitles = new List<string>();
                 foreach (var p in generated)
                 {
@@ -248,9 +270,11 @@ public partial class Form1
                     }
                     checkTitles.Add(wikiTitle ?? p.Title);
                 }
+                lblStatus.Text = $"Checking {checkTitles.Count} titles on wiki...";
                 var existing = await WikiApiService.GetExistingTitlesAsync(checkTitles);
-                
-                // 用脚本名判定是否已存在
+                Out($"Existing on wiki: {existing.Count}");
+                //筛选新页面并保存到generated目录
+
                 var newPages = new List<Tools.WikiPageGenerator.GeneratedPage>();
                 foreach (var p in generated)
                 {
@@ -262,33 +286,31 @@ public partial class Form1
                     }
                     bool exists = existing.Contains(wikiTitle ?? p.Title)
                                || (wikiTitle != null && _titleToScript != null && _titleToScript.ContainsKey(wikiTitle));
-                    if (!exists) newPages.Add(p);
+                    if (!exists || chkIncludeExisting.Checked) newPages.Add(p);
                 }
-                
-                string genDir = Path.Combine(AppContext.BaseDirectory, "generated_pages");
+
+                string genDir = Path.Combine(AppContext.BaseDirectory, "generated");
                 Directory.CreateDirectory(genDir);
-                var log = new StringBuilder();
-                log.AppendLine($"生成了 {generated.Count} 个武器");
-                log.AppendLine($"Tokens: {tokens.Count}  Loadout: {loadout.Count}  索引: {_titleToScript?.Count ?? 0}");
-                log.AppendLine($"已存在: {existing.Count}  新页面: {newPages.Count}");
-                log.AppendLine();
+                Out(new string('-', 40));
+                Out($"Pages to write: {newPages.Count}{(chkIncludeExisting.Checked ? " (incl. existing)" : "")}");
                 foreach (var p in newPages)
                 {
                     string filename = p.Title.Replace(" ", "_").Replace("/", "_") + ".txt";
                     File.WriteAllText(Path.Combine(genDir, filename), p.Content, new UTF8Encoding(false));
-                    log.AppendLine($"OK: {p.ScriptName} → {p.Title}");
+                    Out($"OK  {p.ScriptName,-30} > {p.Title}");
                 }
+                Out(new string('-', 40));
+                Out($"Done: {newPages.Count} new, {existing.Count} existing  {DateTime.Now:HH:mm:ss}");
 
-                txtOutput.Text = log.ToString();
                 if (newPages.Count > 0)
                 {
                     btnGenerate.Text = "Upload New";
                     btnGenerate.BackColor = Color.LightSalmon;
-                    btnGenerate.Tag = newPages;
+                    btnGenerate.Tag = genDir;
                 }
                 lblStatus.Text = $"Done: {newPages.Count} new, {existing.Count} existing";
             }
-            catch (Exception ex) { txtOutput.Text = $"Error: {ex.Message}"; lblStatus.Text = "Generate failed"; }
+            catch (Exception ex) { txtOutput.AppendText($"\r\nError: {ex.Message}\r\n"); lblStatus.Text = "Generate failed"; }
             finally { btnGenerate.Enabled = true; }
         };
 
@@ -315,6 +337,7 @@ public partial class Form1
             txtInput.Clear(); txtOutput.Clear(); _titleToScript = null;
             dryRunDone = false; btnDryRun.Text = "DryRun"; btnDryRun.BackColor = SystemColors.Control;
             batchDryDone = false; btnBatchDR.Text = "BatchDR"; btnBatchDR.BackColor = SystemColors.Control;
+            btnGenerate.Text = "Generate"; btnGenerate.BackColor = SystemColors.Control; btnGenerate.Tag = null;
             SetEditControlsEnabled(btnConvert, btnSelectDir, btnFetch, true);
             lblStatus.Text = "";
         };
@@ -331,7 +354,7 @@ public partial class Form1
             }
             if (source == null) { lblStatus.Text = "Page not found"; return; }
             _titleToScript = await BuildTitleToScriptMap();
-            txtInput.Text = source; txtOutput.Clear(); ResetBatchState();
+            txtInput.Text = source.Replace("\n", "\r\n"); txtOutput.Clear(); ResetBatchState();
             lblStatus.Text = $"OK: {txtPage.Text}" + (_titleToScript?.Count > 0 ? $" (+{_titleToScript.Count} idx)" : "");
         };
 
@@ -358,10 +381,17 @@ public partial class Form1
                 if (!dryRunDone) { await Task.Run(() => token.ThrowIfCancellationRequested(), token); lblStatus.Text = $"Ready: {txtPage.Text} (click Upload)"; }
                 else
                 {
-                    if (!await EnsureLogin(txtUser.Text, txtPw.Text, lblStatus)) return;
+                    if (!await EnsureLogin(txtUser.Text, txtPw.Text, lblStatus)) { ExitCancel(btnDryRun, dryRunDone ? "Upload" : "DryRun", dryRunDone ? Color.LightSalmon : SystemColors.Control, h); return; }
                     token.ThrowIfCancellationRequested();
+                    //与wiki现有内容比较 未变更则跳过
                     if (await WikiApiService.IsSameContentAsync(txtPage.Text, txtOutput.Text)) { lblStatus.Text = "Unchanged, skip"; }
-                    else { lblStatus.Text = await WikiApiService.SavePageAsync(txtPage.Text, txtOutput.Text, "Update weapon data from scripts") ? "Saved!" : "Save failed"; }
+                    else
+                    {
+                        var sw = System.Diagnostics.Stopwatch.StartNew();
+                        bool ok = await WikiApiService.SavePageAsync(txtPage.Text, txtOutput.Text, "Update weapon data from scripts");
+                        sw.Stop();
+                        lblStatus.Text = ok ? $"Saved! ({sw.ElapsedMilliseconds}ms)" : "Save failed";
+                    }
                 }
                 ToggleDryRun(); ExitCancel(btnDryRun, btnDryRun.Text, btnDryRun.BackColor, h);
             }
@@ -387,43 +417,77 @@ public partial class Form1
                 if (links.Count == 0) { lblStatus.Text = "No weapon links found"; return; }
 
                 string wikiDir = Path.Combine(AppContext.BaseDirectory, "wiki"); Directory.CreateDirectory(wikiDir);
-                var log = new StringBuilder(); int done = 0, fail = 0, skip = 0;
+                int done = 0, fail = 0, skip = 0;
+                txtOutput.Clear();
+                void Out(string s) { txtOutput.AppendText(s + "\r\n"); }
 
                 if (!batchDryDone)
                 {
-                    if (!await EnsureLogin(txtUser.Text, txtPw.Text, lblStatus)) return;
-                    log.AppendLine($"=== Batch DryRun: {links.Count} pages ===");
+                    if (!await EnsureLogin(txtUser.Text, txtPw.Text, lblStatus)) { ExitCancel(btnBatchDR, "BatchDR", SystemColors.Control, h); return; }
+                    string resumeTag = chkSkipCached.Checked ? " [skip cached]" : "";
+                    Out($"Batch DryRun — {links.Count} pages — {DateTime.Now:HH:mm:ss}{resumeTag}");
+                    Out(new string('-', 40));
+                    int skippedCached = 0;
                     foreach (var link in links)
                     {
                         token.ThrowIfCancellationRequested();
+                        string fn = link.Replace(" ", "_").Replace("/", "_") + ".txt";
+                        string fp = Path.Combine(wikiDir, fn);
+                        if (chkSkipCached.Checked && File.Exists(fp))
+                        {
+                            skippedCached++;
+                            Out($"SKIP (cached)  {link}");
+                            lblStatus.Text = $"DR [{done + fail + skippedCached}/{links.Count}]";
+                            continue;
+                        }
                         try
                         {
+                            //拉取页面源码 转换并保存到wiki目录
                             string? src = await WikiApiService.GetPageSourceAsync(link);
-                            if (src == null) { fail++; log.AppendLine($"FAIL fetch: {link}"); }
-                            else { string converted = Tools.WikiTableConverter.Convert(src, selectedDir); SaveToWikiDir(link.Replace(" ", "_").Replace("/", "_") + ".txt", converted); done++; log.AppendLine($"OK: {link}"); }
+                            if (src == null) { fail++; Out($"FAIL fetch: {link}"); }
+                            else
+                            {
+                                string converted = Tools.WikiTableConverter.Convert(src, selectedDir);
+                                SaveToWikiDir(fn, converted);
+                                done++;
+                                int origLines = src.Split('\n').Length;
+                                int convLines = converted.Split('\n').Length;
+                                Out($"OK  {link,-30}  {origLines} > {convLines} lines");
+                            }
                         }
-                        catch { fail++; log.AppendLine($"FAIL: {link}"); }
-                        lblStatus.Text = $"DR [{done + fail}/{links.Count}]";
+                        catch (Exception ex) { fail++; Out($"ERR {link,-30}  {ex.Message}"); }
+                        lblStatus.Text = $"DR [{done + fail + skippedCached}/{links.Count}]";
                     }
-                    log.AppendLine($"Done: {done} ok, {fail} fail");
+                    Out(new string('-', 40));
+                    string cachedInfo = skippedCached > 0 ? $", {skippedCached} cached" : "";
+                    Out($"Done: {done} ok, {fail} fail{cachedInfo}  {DateTime.Now:HH:mm:ss}");
                 }
                 else
                 {
-                    if (!await EnsureLogin(txtUser.Text, txtPw.Text, lblStatus)) return;
-                    log.AppendLine($"=== Batch Upload: {links.Count} pages ===");
+                    if (!await EnsureLogin(txtUser.Text, txtPw.Text, lblStatus)) { ExitCancel(btnBatchDR, "BatchUp", Color.LightSalmon, h); return; }
+                    Out($"Batch Upload — {links.Count} pages — {DateTime.Now:HH:mm:ss}");
+                    Out(new string('-', 40));
                     foreach (var link in links)
                     {
                         token.ThrowIfCancellationRequested();
                         string fp = Path.Combine(wikiDir, link.Replace(" ", "_").Replace("/", "_") + ".txt");
-                        if (!File.Exists(fp)) { skip++; log.AppendLine($"SKIP (no file): {link}"); continue; }
+                        if (!File.Exists(fp)) { skip++; Out($"SKIP no file: {link}"); continue; }
                         string content = File.ReadAllText(fp);
-                        if (await WikiApiService.IsSameContentAsync(link, content)) { skip++; log.AppendLine($"SKIP (unchanged): {link}"); continue; }
-                        if (await WikiApiService.SavePageAsync(link, content, "Update weapon data from scripts")) { done++; log.AppendLine($"OK: {link}"); } else { fail++; log.AppendLine($"FAIL upload: {link}"); }
+                        if (await WikiApiService.IsSameContentAsync(link, content)) { skip++; Out($"SKIP unchanged: {link}"); continue; }
+                        try
+                        {
+                            var sw = System.Diagnostics.Stopwatch.StartNew();
+                            bool ok = await WikiApiService.SavePageAsync(link, content, "Update weapon data from scripts");
+                            sw.Stop();
+                            if (ok) { done++; Out($"OK  {link,-30}  {sw.ElapsedMilliseconds}ms"); }
+                            else { fail++; Out($"FAIL upload: {link,-30}"); }
+                        }
+                        catch (Exception ex) { fail++; Out($"ERR {link,-30}  {ex.Message}"); }
                         lblStatus.Text = $"Up [{done + fail}/{links.Count - skip}]";
                     }
-                    log.AppendLine($"Done: {done} ok, {fail} fail, {skip} skip");
+                    Out(new string('-', 40));
+                    Out($"Done: {done} ok, {fail} fail, {skip} skip  {DateTime.Now:HH:mm:ss}");
                 }
-                txtOutput.Text = log.ToString();
                 ToggleBatch(); ExitCancel(btnBatchDR, btnBatchDR.Text, btnBatchDR.BackColor, h);
             }
             catch (OperationCanceledException) { lblStatus.Text = "Batch cancelled"; ExitCancel(btnBatchDR, batchDryDone ? "BatchUp" : "BatchDR", batchDryDone ? Color.LightSalmon : SystemColors.Control, h); }
@@ -432,10 +496,16 @@ public partial class Form1
 
         dlg.Controls.AddRange(new Control[] {
             lblPage, txtPage, btnFetch, lblStatus,
-            lblUser, txtUser, lblPw, txtPw, btnDryRun, btnBatchDR,
+            lblUser, txtUser, lblPw, txtPw, btnDryRun, btnBatchDR, btnGenerate, chkIncludeExisting,
             lblInput, txtInput, lblOutput, txtOutput,
-            btnSelectDir, lblDir, btnConvert, btnCopy, btnReset, btnGenerate
+            btnSelectDir, lblDir, chkSkipCached, btnConvert, btnCopy, btnReset
         });
+
+        dlg.FormClosing += (_, _) =>
+        {
+            if (dryRunCts != null) { dryRunCts.Cancel(); dryRunCts.Dispose(); dryRunCts = null; }
+            if (batchCts != null) { batchCts.Cancel(); batchCts.Dispose(); batchCts = null; }
+        };
         dlg.ShowDialog(this);
     }
 
@@ -461,8 +531,17 @@ public partial class Form1
     private static async Task<bool> EnsureLogin(string user, string pw, Label status)
     {
         if (WikiApiService.IsLoggedIn) return true;
+        if (string.IsNullOrWhiteSpace(user) || string.IsNullOrWhiteSpace(pw))
+        {
+            status.Text = "Please enter username and passwd";
+            return false;
+        }
+        status.Text = "Logging in...";
         if (!await WikiApiService.LoginAsync(user, pw)) { status.Text = "Login failed"; return false; }
-        status.Text = "Logged in"; return true;
+        lastWikiUser = user;
+        lastWikiPw = pw;
+        status.Text = "Logged in";
+        return true;
     }
 
     private static async Task<Dictionary<string, string>?> BuildTitleToScriptMap()

@@ -25,15 +25,17 @@ public static class WikiApiService
     {
         _csrfToken = null;
 
-        using var loginTokenResp = await Client.GetAsync(
-            "/api.php?action=query&meta=tokens&type=login&format=json");
-        var loginTokenJson = await loginTokenResp.Content.ReadAsStringAsync();
-        string? loginToken;
-        using (var doc = JsonDocument.Parse(loginTokenJson))
-            loginToken = doc.RootElement.GetProperty("query").GetProperty("tokens")
-                .GetProperty("logintoken").GetString();
+        try
+        {
+            using var loginTokenResp = await Client.GetAsync(
+                "/api.php?action=query&meta=tokens&type=login&format=json");
+            var loginTokenJson = await loginTokenResp.Content.ReadAsStringAsync();
+            string? loginToken;
+            using (var doc = JsonDocument.Parse(loginTokenJson))
+                loginToken = doc.RootElement.GetProperty("query").GetProperty("tokens")
+                    .GetProperty("logintoken").GetString();
 
-        if (loginToken == null) return false;
+            if (loginToken == null) return false;
 
         var loginContent = new FormUrlEncodedContent(new Dictionary<string, string>
         {
@@ -53,7 +55,9 @@ public static class WikiApiService
         _csrfToken = csrfDoc.RootElement.GetProperty("query").GetProperty("tokens")
             .GetProperty("csrftoken").GetString();
 
-        return true;
+            return true;
+        }
+        catch { return false; }
     }
 
     public static void Logout() => _csrfToken = null;
@@ -136,29 +140,38 @@ public static class WikiApiService
     {
         var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var list = titles.ToList();
-        for (int i = 0; i < list.Count; i += 50)
+        using var semaphore = new SemaphoreSlim(3);
+
+        async Task ProcessBatch(IEnumerable<string> batch)
         {
-            var batch = list.Skip(i).Take(50);
-            string query = string.Join("|", batch);
-            var resp = await Client.GetAsync(
-                $"/api.php?action=query&titles={Uri.EscapeDataString(query)}&format=json&formatversion=2&redirects=1");
-            var json = await resp.Content.ReadAsStringAsync();
-            using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.TryGetProperty("query", out var queryEl) &&
-                queryEl.TryGetProperty("pages", out var pages))
+            await semaphore.WaitAsync();
+            try
             {
-                foreach (var page in pages.EnumerateArray())
+                string apiUrl = $"/api.php?action=query&titles={Uri.EscapeDataString(string.Join("|", batch))}&format=json&formatversion=2&redirects=1";
+
+                for (int retry = 0; retry < 3; retry++)
                 {
-                    if (!page.TryGetProperty("missing", out _))
+                    try
                     {
-                        string title = page.GetProperty("title").GetString()!;
-                        existing.Add(title);
-                        // 同时添加去掉下划线版本
-                        existing.Add(title.Replace("_", " "));
+                        var json = await (await Client.GetAsync(apiUrl)).Content.ReadAsStringAsync();
+                        using var doc = JsonDocument.Parse(json);
+                        if (doc.RootElement.TryGetProperty("query", out var q) && q.TryGetProperty("pages", out var pages))
+                            lock (existing)
+                                foreach (var page in pages.EnumerateArray())
+                                    if (!page.TryGetProperty("missing", out _))
+                                    {
+                                        var t = page.GetProperty("title").GetString()!;
+                                        existing.Add(t); existing.Add(t.Replace("_", " "));
+                                    }
+                        break;
                     }
+                    catch when (retry < 2) { await Task.Delay(3000); }
                 }
             }
+            finally { semaphore.Release(); }
         }
+
+        await Task.WhenAll(list.Chunk(20).Select(ProcessBatch));
         return existing;
     }
 }
