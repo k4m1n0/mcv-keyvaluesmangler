@@ -37,7 +37,7 @@ public partial class Form1
         var btnDryRun = new Button { Text = "DryRun", Location = new Point(256, 39), Size = new Size(75, 24) };
         var btnBatchDR = new Button { Text = "BatchDR", Location = new Point(336, 39), Size = new Size(75, 24) };
         var btnGenerate = new Button { Text = "Generate", Location = new Point(416, 39), Size = new Size(75, 24) };
-        var chkIncludeExisting = new CheckBox { Text = "Incl. existing", Location = new Point(498, 41), Size = new Size(95, 20), Checked = false };
+        var chkOverwriteExisting = new CheckBox { Text = "Overwrite existing", Location = new Point(498, 41), Size = new Size(110, 24), Checked = false, AutoSize = true };
 
         var lblInput = new Label { Text = "Source:", Location = new Point(12, 74), AutoSize = true };
         var txtInput = new TextBox { Location = new Point(12, 92), Size = new Size(620, 228), Multiline = true, ScrollBars = ScrollBars.Vertical, Font = new Font("Consolas", 9), MaxLength = 0 };
@@ -46,10 +46,10 @@ public partial class Form1
 
         var btnSelectDir = new Button { Text = "Scripts...", Location = new Point(12, 578), Size = new Size(85, 26) };
         var lblDir = new Label { Location = new Point(98, 583), AutoSize = true, ForeColor = Color.Gray };
-        var chkSkipCached = new CheckBox { Text = "Skip cached", Location = new Point(290, 582), Size = new Size(90, 20), Checked = false };
         var btnConvert = new Button { Text = "Convert", Location = new Point(12, 608), Size = new Size(85, 26) };
         var btnCopy = new Button { Text = "Copy", Location = new Point(103, 608), Size = new Size(85, 26) };
         var btnReset = new Button { Text = "Reset", Location = new Point(194, 608), Size = new Size(85, 26) };
+        var chkSkipCached = new CheckBox { Text = "Skip cached", Location = new Point(290, 610), Size = new Size(100, 24), Checked = false, AutoSize = true };
 
         string? selectedDir = string.IsNullOrEmpty(lastScriptsDir) ? null : lastScriptsDir;
         if (selectedDir != null) lblDir.Text = selectedDir;
@@ -109,7 +109,6 @@ public partial class Form1
         {
             if (_titleToScript == null || _titleToScript.Count == 0) return null;
             string inputNoExt = Path.GetFileNameWithoutExtension(input);
-            if (_titleToScript.ContainsKey(input)) return input;
             foreach (var kv in _titleToScript)
             {
                 string sn = kv.Value;
@@ -286,13 +285,13 @@ public partial class Form1
                     }
                     bool exists = existing.Contains(wikiTitle ?? p.Title)
                                || (wikiTitle != null && _titleToScript != null && _titleToScript.ContainsKey(wikiTitle));
-                    if (!exists || chkIncludeExisting.Checked) newPages.Add(p);
+                    if (!exists || chkOverwriteExisting.Checked) newPages.Add(p);
                 }
 
                 string genDir = Path.Combine(AppContext.BaseDirectory, "generated");
                 Directory.CreateDirectory(genDir);
                 Out(new string('-', 40));
-                Out($"Pages to write: {newPages.Count}{(chkIncludeExisting.Checked ? " (incl. existing)" : "")}");
+                Out($"Pages to write: {newPages.Count}{(chkOverwriteExisting.Checked ? " (Overwrite existing)" : "")}");
                 foreach (var p in newPages)
                 {
                     string filename = p.Title.Replace(" ", "_").Replace("/", "_") + ".txt";
@@ -405,17 +404,17 @@ public partial class Form1
             if (dryRunCts != null) { lblStatus.Text = "DryRun is running"; return; }
             if (dryRunDone) { dryRunDone = false; btnDryRun.Text = "DryRun"; btnDryRun.BackColor = SystemColors.Control; }
 
+            if (selectedDir == null || !Directory.Exists(selectedDir)) PickDir();
+            if (selectedDir == null) return;
+            if (!await EnsureSource()) return;
+            if (!Regex.IsMatch(txtInput.Text, @"^=\[\[.+\]\]=\s*$", RegexOptions.Multiline)) { lblStatus.Text = "Not a summary page."; return; }
+            var links = ExtractWeaponLinks(txtInput.Text, _titleToScript);
+            if (links.Count == 0) { lblStatus.Text = "No weapon links found"; return; }
+
             batchCts = new CancellationTokenSource(); var token = batchCts.Token;
             EventHandler? h = null; EnterCancel(btnBatchDR, batchCts, ref h);
             try
             {
-                if (selectedDir == null || !Directory.Exists(selectedDir)) PickDir();
-                if (selectedDir == null) return;
-                if (!await EnsureSource()) return;
-                if (!Regex.IsMatch(txtInput.Text, @"^=\[\[.+\]\]=\s*$", RegexOptions.Multiline)) { lblStatus.Text = "Not a summary page."; return; }
-                var links = ExtractWeaponLinks(txtInput.Text, _titleToScript);
-                if (links.Count == 0) { lblStatus.Text = "No weapon links found"; return; }
-
                 string wikiDir = Path.Combine(AppContext.BaseDirectory, "wiki"); Directory.CreateDirectory(wikiDir);
                 int done = 0, fail = 0, skip = 0;
                 txtOutput.Clear();
@@ -496,7 +495,7 @@ public partial class Form1
 
         dlg.Controls.AddRange(new Control[] {
             lblPage, txtPage, btnFetch, lblStatus,
-            lblUser, txtUser, lblPw, txtPw, btnDryRun, btnBatchDR, btnGenerate, chkIncludeExisting,
+            lblUser, txtUser, lblPw, txtPw, btnDryRun, btnBatchDR, btnGenerate, chkOverwriteExisting,
             lblInput, txtInput, lblOutput, txtOutput,
             btnSelectDir, lblDir, chkSkipCached, btnConvert, btnCopy, btnReset
         });
