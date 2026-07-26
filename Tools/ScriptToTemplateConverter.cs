@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using WeaponDamageCalc.Services;
 
 namespace WeaponDamageCalc.Tools;
 
@@ -39,7 +40,7 @@ public static class ScriptToTemplateConverter
             string name = Path.GetFileName(path);
             try
             {
-                string script = File.ReadAllText(path, Encoding.UTF8);
+                string script = WeaponScriptService.ReadScriptFile(path);
                 string result = ConvertSingle(script, templateLines, opts);
                 DumpDebugInfo(name, script, templateLines, result, log);
                 File.WriteAllText(path, result, new UTF8Encoding(false));
@@ -65,7 +66,7 @@ public static class ScriptToTemplateConverter
             string externalPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "preset_file.txt");
             if (File.Exists(externalPath))
             {
-                var lines = File.ReadAllText(externalPath, Encoding.UTF8)
+                var lines = WeaponScriptService.ReadScriptFile(externalPath)
                                .Replace("\r\n", "\n")
                                .Replace('\r', '\n')
                                .Split('\n');
@@ -724,17 +725,19 @@ public static class ScriptToTemplateConverter
     private static string? GetLineCommentFromScript(string text, string key)
     {
         if (string.IsNullOrEmpty(text)) return null;
-        var lines = text.Split('\n');
-        foreach (var rawLine in lines)
+        foreach (var rawLine in text.Split('\n'))
         {
             string line = rawLine.Trim();
             if (line.StartsWith("//")) continue;
-            if (line.Contains($"\"{key}\""))
+            if (!line.Contains($"\"{key}\"")) continue;
+            bool inQuote = false;
+            for (int i = 0; i < line.Length - 1; i++)
             {
-                int commentIdx = line.IndexOf("//", StringComparison.Ordinal);
-                if (commentIdx >= 0) return line.Substring(commentIdx + 2).Trim();
-                return null;
+                if (line[i] == '"' && (i == 0 || line[i - 1] != '\\')) inQuote = !inQuote;
+                if (!inQuote && line[i] == '/' && line[i + 1] == '/')
+                    return line.Substring(i + 2).Trim();
             }
+            return null;
         }
         return null;
     }

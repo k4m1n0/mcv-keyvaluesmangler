@@ -13,6 +13,18 @@ public static class WeaponScriptService
 {
     #region 字段映射表
 
+    internal static string ReadScriptFile(string path)
+    {
+        byte[] bytes = File.ReadAllBytes(path);
+        if (bytes.Length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE)
+            return Encoding.Unicode.GetString(bytes);
+        if (bytes.Length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF)
+            return Encoding.BigEndianUnicode.GetString(bytes);
+        if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
+            return Encoding.UTF8.GetString(bytes);
+        return Encoding.UTF8.GetString(bytes);
+    }
+
     //备选数值模式 dov_stats和zombie_stats在游戏内互斥 但结构完全相同
     public enum AltStatMode { Dov, Zombie }
 
@@ -152,6 +164,58 @@ public static class WeaponScriptService
     }
 
     #endregion
+    #region 公共工具
+
+    //解析WeaponData块的顶层键值对 只收集不嵌套在子块内的键
+    public static Dictionary<string, string> ParseWeaponDataPairs(string content)
+    {
+        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        int wd = content.IndexOf("WeaponData", StringComparison.Ordinal);
+        if (wd < 0) return values;
+        int bs = content.IndexOf('{', wd);
+        if (bs < 0) return values;
+        int be = FindMatchingBrace(content, bs);
+        if (be < 0 || bs + 1 >= be) return values;
+        string block = content.Substring(bs + 1, be - bs - 1);
+
+        foreach (Match m in Regex.Matches(block, @"""([^""]+)""\s+""([^""]*)""", RegexOptions.Multiline))
+        {
+            string before = block.Substring(0, m.Index);
+            int ob = 0, cb = 0;
+            for (int j = 0; j < before.Length; j++)
+            { if (before[j] == '{') ob++; else if (before[j] == '}') cb++; }
+            if (ob == cb) values[m.Groups[1].Value] = m.Groups[2].Value;
+        }
+        return values;
+    }
+
+    //大括号匹配 忽略字符串内的{}
+    public static int FindMatchingBrace(string text, int start)
+    {
+        int depth = 0; bool inStr = false;
+        for (int i = start; i < text.Length; i++)
+        {
+            if (text[i] == '"' && (i == 0 || text[i - 1] != '\\')) inStr = !inStr;
+            if (!inStr) { if (text[i] == '{') depth++; else if (text[i] == '}') { depth--; if (depth == 0) return i; } }
+        }
+        return -1;
+    }
+
+    public static string FormatDouble(double d) => d.ToString("0.####", CultureInfo.InvariantCulture);
+
+    public static string FormatClipSize(string raw, string extraChamber)
+    {
+        if (string.IsNullOrEmpty(raw) || raw == "-1" || raw == "-1/-1" || raw == "0/0") return "N/A";
+        if (!raw.Contains('/')) return raw;
+        var parts = raw.Split('/');
+        string marker = extraChamber == "1" ? "[[+1]]" : "";
+        return $"{parts[0].Trim()}{marker} / {parts[1].Trim()}";
+    }
+
+    public static double GetDoubleVal(Dictionary<string, string> vals, string key) =>
+        vals.TryGetValue(key, out var s) && double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out double d) ? d : 0;
+
+    #endregion
     #region 导出导入
 
     public static string ExportCsvToScripts(string csvFilePath, string scriptsDir)
@@ -187,7 +251,7 @@ public static class WeaponScriptService
                 continue;
             }
 
-            string content = File.ReadAllText(scriptPath);
+            string content = ReadScriptFile(scriptPath);
             int updated = 0;
 
             foreach (var map in CsvToScriptMap)
@@ -234,7 +298,7 @@ public static class WeaponScriptService
             if (string.IsNullOrEmpty(weapon.ScriptName)) continue;
             string scriptPath = Path.Combine(scriptsDir, weapon.ScriptName);
             if (!File.Exists(scriptPath)) continue;
-            string content = File.ReadAllText(scriptPath);
+            string content = ReadScriptFile(scriptPath);
             if (!content.Contains(blockName)) continue;
             foreach (var map in CsvToScriptMap)
             {
@@ -281,7 +345,7 @@ public static class WeaponScriptService
 
             try
             {
-                string content = File.ReadAllText(path, Encoding.UTF8);
+                string content = ReadScriptFile(path);
 
                 if (!IsStandardFirearm(name, content))
                 {

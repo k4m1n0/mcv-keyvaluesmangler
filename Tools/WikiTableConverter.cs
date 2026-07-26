@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
+using WeaponDamageCalc.Services;
 
 namespace WeaponDamageCalc.Tools;
 
@@ -325,7 +326,6 @@ public static class WikiTableConverter
                     FormatDouble(GetDouble(v, "zombie_bulletspreaddegrees")),
                     FormatDouble(GetDouble(v, "zombie_bulletspreaddegreesironsighted")));
 
-        //机枪散布 Hip° & BipodHip° [[ADS]] 或 ADS° & BipodADS° [[ADS]]
         var bipodMatch = Regex.Match(clean, @"^(\d+\.?\d*)°?\s*&\s*(\d+\.?\d*)°?\s*\[\[ADS\]\]$");
         if (bipodMatch.Success)
         {
@@ -454,12 +454,12 @@ public static class WikiTableConverter
         foreach (var path in Directory.GetFiles(scriptsDir, "weapon_*.txt"))
         {
             var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            string content = File.ReadAllText(path, Encoding.UTF8).Replace("\r\n", "\n");
+            string content = WeaponScriptService.ReadScriptFile(path).Replace("\r\n", "\n");
             int wd = content.IndexOf("WeaponData", StringComparison.Ordinal);
             if (wd < 0) continue;
             int bs = content.IndexOf('{', wd);
             if (bs < 0) continue;
-            int be = FindMatchingBrace(content, bs);
+            int be = WeaponScriptService.FindMatchingBrace(content, bs);
             if (be < 0) continue;
             string block = content.Substring(bs + 1, be - bs - 1);
             foreach (Match m in ScriptKvRegex.Matches(block))
@@ -521,30 +521,20 @@ public static class WikiTableConverter
     {
         int bs = content.IndexOf('{', blockIdx);
         if (bs < 0) return;
-        int be = FindMatchingBrace(content, bs);
+        int be = WeaponScriptService.FindMatchingBrace(content, bs);
         if (be < 0) return;
         foreach (Match m in ScriptKvRegex.Matches(content.Substring(bs + 1, be - bs - 1)))
             values[prefix + m.Groups[1].Value] = m.Groups[2].Value;
     }
 
-    private static int FindMatchingBrace(string text, int start)
-    {
-        int depth = 0; bool inStr = false;
-        for (int i = start; i < text.Length; i++)
-        {
-            if (text[i] == '"' && (i == 0 || text[i - 1] != '\\')) inStr = !inStr;
-            if (!inStr) { if (text[i] == '{') depth++; else if (text[i] == '}') { depth--; if (depth == 0) return i; } }
-        }
-        return -1;
-    }
+    private static double GetDouble(Dictionary<string, string> v, string key) =>
+        WeaponScriptService.GetDoubleVal(v, key);
+
+    private static string FormatDouble(double d) =>
+        WeaponScriptService.FormatDouble(d);
 
     #endregion
     #region 辅助
-
-    private static double GetDouble(Dictionary<string, string> v, string key) =>
-        v.TryGetValue(key, out var s) && double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out double d) ? d : 0;
-
-    private static string FormatDouble(double d) => d.ToString("0.##", CultureInfo.InvariantCulture);
 
     private static string StripWikiMarkup(string cell)
     {
@@ -552,5 +542,6 @@ public static class WikiTableConverter
         s = Regex.Replace(s, @"\[\[([^\]]+)\]\]", "$1");
         return Regex.Replace(s, @"<[^>]+>", "");
     }
+
     #endregion
 }

@@ -120,4 +120,45 @@ public static class WikiApiService
         if (source == null) return true;
         return source.Replace("\r\n", "\n").Trim() == localContent.Replace("\r\n", "\n").Trim();
     }
+
+    public static async Task<string?> FetchTemplateAsync(string url)
+    {
+        try
+        {
+            var resp = await Client.GetAsync(url);
+            if (!resp.IsSuccessStatusCode) return null;
+            return await resp.Content.ReadAsStringAsync();
+        }
+        catch { return null; }
+    }
+
+    public static async Task<HashSet<string>> GetExistingTitlesAsync(IEnumerable<string> titles)
+    {
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var list = titles.ToList();
+        for (int i = 0; i < list.Count; i += 50)
+        {
+            var batch = list.Skip(i).Take(50);
+            string query = string.Join("|", batch);
+            var resp = await Client.GetAsync(
+                $"/api.php?action=query&titles={Uri.EscapeDataString(query)}&format=json&formatversion=2&redirects=1");
+            var json = await resp.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("query", out var queryEl) &&
+                queryEl.TryGetProperty("pages", out var pages))
+            {
+                foreach (var page in pages.EnumerateArray())
+                {
+                    if (!page.TryGetProperty("missing", out _))
+                    {
+                        string title = page.GetProperty("title").GetString()!;
+                        existing.Add(title);
+                        // 同时添加去掉下划线版本
+                        existing.Add(title.Replace("_", " "));
+                    }
+                }
+            }
+        }
+        return existing;
+    }
 }
