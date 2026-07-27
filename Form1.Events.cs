@@ -27,7 +27,7 @@ public partial class Form1
         if (!isRapid)
         {
             bool wasRapid = _rapidStartLeft != null;
-            if (!wasRapid && currentWeaponLeft != null && HasUnsavedChanges(true))
+            if (currentWeaponLeft != null && HasUnsavedChanges(true))
             {
                 var result = MessageBox.Show("Unsaved changes to left weapon. Discard?",
                     "Unsaved Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
@@ -84,7 +84,7 @@ public partial class Form1
         if (!isRapid)
         {
             bool wasRapid = _rapidStartRight != null;
-            if (!wasRapid && currentWeaponRight != null && HasUnsavedChanges(false))
+            if (currentWeaponRight != null && HasUnsavedChanges(false))
             {
                 var result = MessageBox.Show("Unsaved changes to right weapon. Discard?",
                     "Unsaved Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
@@ -313,7 +313,16 @@ public partial class Form1
                 if (currentWeaponRight != null && !ReferenceEquals(currentWeaponLeft, currentWeaponRight))
                     SyncAltStatFields(currentWeaponRight, currentAltStatMode);
             }
-            PushUndo();
+            //栈顶已是当前状态则不入栈 避免连续保存产生重复条目
+            bool sameAsTop = _undoStack.Count > 0;
+            if (sameAsTop)
+            {
+                var last = _undoStack.Last!.Value;
+                var tempL = new WeaponData(); SaveControlsToWeapon(tempL, true);
+                var tempR = new WeaponData(); SaveControlsToWeapon(tempR, false);
+                sameAsTop = WeaponDataEquals(tempL, last.LeftData) && WeaponDataEquals(tempR, last.RightData);
+            }
+            if (!sameAsTop) PushUndo();
             ClearRedo();
             var savedTitle = this.Text;
             this.Text = "Saved!";
@@ -500,7 +509,7 @@ public partial class Form1
 
     private void Form1_KeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Control && e.Shift && e.KeyCode == Keys.S) { e.SuppressKeyPress = true; BtnQuickExport_Click(sender, e); }
+        if (e.Control && e.Shift && e.KeyCode == Keys.S) { e.SuppressKeyPress = true; BtnSave_Click(sender, e); BtnQuickExport_Click(sender, e); }
         else if (e.Control && e.KeyCode == Keys.S) { e.SuppressKeyPress = true; BtnSave_Click(sender, e); }
         else if (e.Control && e.KeyCode == Keys.Y) { e.SuppressKeyPress = true; PopRedo(); }
         else if (e.Control && e.KeyCode == Keys.Z) { e.SuppressKeyPress = true; PopUndo(); }

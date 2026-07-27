@@ -115,6 +115,12 @@ public partial class Form1 : Form
 
             this.Shown += (s, e) =>
             {
+                var originalTitle = this.Text;
+                this.Text = "Keyvalues Mangler™ 5000 — Ctrl+T to toggle topmost/minimize";
+                var titleTimer = new System.Windows.Forms.Timer { Interval = 1919 };
+                titleTimer.Tick += (_, _) => { this.Text = originalTitle; titleTimer.Stop(); titleTimer.Dispose(); };
+                titleTimer.Start();
+
                 if (weapons.Count > 0)
                 {
                     cmbWeaponsL.DataSource = null;
@@ -214,12 +220,12 @@ public partial class Form1 : Form
         this.Controls.Add(btnWiki);
 
         var tooltip = new ToolTip();
-        tooltip.SetToolTip(btnSave, "Save current weapon data to CSV (Ctrl+S)");
+        tooltip.SetToolTip(btnSave, "Save current weapon data to CSV (Ctrl+S)\nCtrl+Z/Y to undo/redo");
         tooltip.SetToolTip(btnCsvToScripts, "Export CSV data to weapon script files");
         tooltip.SetToolTip(btnScriptsToCsv, "Import weapon script files to CSV");
         tooltip.SetToolTip(btnRefresh, "Reload weapon list from CSV (Ctrl+R)");
         tooltip.SetToolTip(btnCopy, "Copy left panel values to right");
-        tooltip.SetToolTip(btnCopyCvar, "Quick export: save CSV and export to scripts\nRight-click to cancel");
+        tooltip.SetToolTip(btnCopyCvar, "Quick export: save CSV and export to scripts (Ctrl+Shift+S)\nRight-click to cancel");
         tooltip.SetToolTip(btnConvertToTemplate, "Convert old scripts to preset_file template format");
         tooltip.SetToolTip(btnToggleDov, "Toggle Day of Victory alternate stats");
         tooltip.SetToolTip(btnToggleZombie, "Toggle Zombie Mode alternate stats");
@@ -378,6 +384,13 @@ public partial class Form1 : Form
             ShowingAltStats = showingAltStats,
             AltMode = currentAltStatMode
         };
+        //备选模式下先将控件值同步到备选字段再入栈
+        if (showingAltStats)
+        {
+            if (currentWeaponLeft != null) SyncAltStatFields(currentWeaponLeft, currentAltStatMode);
+            if (currentWeaponRight != null && !ReferenceEquals(currentWeaponLeft, currentWeaponRight))
+                SyncAltStatFields(currentWeaponRight, currentAltStatMode);
+        }
         SaveControlsToWeapon(entry.LeftData, true);
         SaveControlsToWeapon(entry.RightData, false);
 
