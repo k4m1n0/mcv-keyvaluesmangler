@@ -475,7 +475,8 @@ public partial class Form1
 
     private void Form1_KeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Control && e.KeyCode == Keys.S) { e.SuppressKeyPress = true; BtnSave_Click(sender, e); }
+        if (e.Control && e.Shift && e.KeyCode == Keys.S) { e.SuppressKeyPress = true; BtnQuickExport_Click(sender, e); }
+        else if (e.Control && e.KeyCode == Keys.S) { e.SuppressKeyPress = true; BtnSave_Click(sender, e); }
         else if (e.Control && e.KeyCode == Keys.D1) { e.SuppressKeyPress = true; cmbWeaponsL.Focus(); cmbWeaponsL.DroppedDown = true; }
         else if (e.Control && e.KeyCode == Keys.D2) { e.SuppressKeyPress = true; cmbWeaponsR.Focus(); cmbWeaponsR.DroppedDown = true; }
         else if (e.Control && e.KeyCode == Keys.Z) { e.SuppressKeyPress = true; RestoreSnapshot(IsControlOnLeft(this.ActiveControl)); }
