@@ -30,6 +30,7 @@ public static class WikiTableConverter
         var result = new StringBuilder();
 
         var scriptNames = ExtractScriptNames(tables);
+        LogService.Info($"Convert: {tables.Count} tables, {scriptNames.Count} script names found");
         foreach (var table in tables)
         {
             if (!table.IsTable) { result.Append(table.Content); continue; }
@@ -49,6 +50,7 @@ public static class WikiTableConverter
         var tables = SplitTables(wikiText);
         var result = new StringBuilder();
 
+        LogService.Info($"ConvertSummaryPage: {tables.Count} tables, {titleToScript.Count} title mappings");
         foreach (var table in tables)
         {
             if (!table.IsTable) { result.Append(table.Content); continue; }
@@ -450,36 +452,51 @@ public static class WikiTableConverter
     private static Dictionary<string, Dictionary<string, string>> LoadAllScripts(string scriptsDir)
     {
         var result = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
-        if (!Directory.Exists(scriptsDir)) return result;
+        if (!Directory.Exists(scriptsDir))
+        {
+            LogService.Warn($"LoadAllScripts: scripts directory not found: {scriptsDir}");
+            return result;
+        }
+
+        var files = Directory.GetFiles(scriptsDir, "weapon_*.txt");
+        LogService.Info($"LoadAllScripts: loading {files.Length} weapon scripts...");
         foreach (var path in Directory.GetFiles(scriptsDir, "weapon_*.txt"))
         {
-            var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            string content = WeaponScriptService.ReadScriptFile(path).Replace("\r\n", "\n");
-            int wd = content.IndexOf("WeaponData", StringComparison.Ordinal);
-            if (wd < 0) continue;
-            int bs = content.IndexOf('{', wd);
-            if (bs < 0) continue;
-            int be = WeaponScriptService.FindMatchingBrace(content, bs);
-            if (be < 0) continue;
-            string block = content.Substring(bs + 1, be - bs - 1);
-            foreach (Match m in ScriptKvRegex.Matches(block))
+            try
             {
-                //只收集顶层键值对 通过大括号计数跳过嵌套块内的同名键
-                string before = block.Substring(0, m.Index);
-                int ob = 0, cb = 0;
-                for (int j = 0; j < before.Length; j++)
-                { if (before[j] == '{') ob++; else if (before[j] == '}') cb++; }
-                if (ob == cb) values[m.Groups[1].Value] = m.Groups[2].Value;
-            }
-            int zi = content.IndexOf("zombie_stats", be, StringComparison.Ordinal);
-            if (zi >= 0) { LoadSubBlock(values, content, zi, "zombie_"); }
+                var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                string content = WeaponScriptService.ReadScriptFile(path).Replace("\r\n", "\n");
+                int wd = content.IndexOf("WeaponData", StringComparison.Ordinal);
+                if (wd < 0) continue;
+                int bs = content.IndexOf('{', wd);
+                if (bs < 0) continue;
+                int be = WeaponScriptService.FindMatchingBrace(content, bs);
+                if (be < 0) continue;
+                string block = content.Substring(bs + 1, be - bs - 1);
+                foreach (Match m in ScriptKvRegex.Matches(block))
+                {
+                    //只收集顶层键值对 通过大括号计数跳过嵌套块内的同名键
+                    string before = block.Substring(0, m.Index);
+                    int ob = 0, cb = 0;
+                    for (int j = 0; j < before.Length; j++)
+                    { if (before[j] == '{') ob++; else if (before[j] == '}') cb++; }
+                    if (ob == cb) values[m.Groups[1].Value] = m.Groups[2].Value;
+                }
+                int zi = content.IndexOf("zombie_stats", be, StringComparison.Ordinal);
+                if (zi >= 0) { LoadSubBlock(values, content, zi, "zombie_"); }
 
-            if (values.Count > 0)
+                if (values.Count > 0)
+                {
+                    PrecomputeDamageValues(values);
+                    result[Path.GetFileNameWithoutExtension(path)] = values;
+                }
+            }
+            catch (Exception ex)
             {
-                PrecomputeDamageValues(values);
-                result[Path.GetFileNameWithoutExtension(path)] = values;
+                LogService.Error(ex, $"WikiTableConverter.LoadAllScripts: {Path.GetFileName(path)}");
             }
         }
+        LogService.Info($"LoadAllScripts: {result.Count} scripts loaded");
         return result;
     }
 

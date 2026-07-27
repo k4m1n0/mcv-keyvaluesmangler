@@ -41,15 +41,25 @@ public static class WikiPageGenerator
         HashSet<string> existingTitles, Dictionary<string, string>? titleToScript = null)
     {
         var pages = new List<GeneratedPage>();
-        foreach (string path in Directory.GetFiles(scriptsDir, "weapon_*.txt"))
+        var files = Directory.GetFiles(scriptsDir, "weapon_*.txt");
+        LogService.Info($"GenerateAll: {files.Length} weapon scripts found, {existingTitles.Count} existing titles");
+        int skipped = 0;
+
+        foreach (string path in files)
         {
             string scriptName = Path.GetFileNameWithoutExtension(path);
-            if (scriptName.Contains("_zombie") || scriptName.Contains("_cubemap") || scriptName.Contains("_riflegrenade")) continue;
+            if (scriptName.Contains("_zombie") || scriptName.Contains("_cubemap") || scriptName.Contains("_riflegrenade"))
+            {
+                skipped++;
+                continue;
+            }
             var page = GenerateSingle(path, scriptName, resourceDir, tokens, loadout,
                 defaultTemplate, lmgTemplate, pistolTemplate, shortTemplate, titleToScript);
             if (page != null && !existingTitles.Contains(page.Title))
                 pages.Add(page);
         }
+
+        LogService.Info($"GenerateAll: {pages.Count} pages generated, {skipped} skipped");
         return pages;
     }
 
@@ -61,7 +71,11 @@ public static class WikiPageGenerator
     {
         string content = WeaponScriptService.ReadScriptFile(scriptPath);
         var vals = WeaponScriptService.ParseWeaponDataPairs(content);
-        if (vals.Count == 0) return null;
+        if (vals.Count == 0)
+        {
+            LogService.Warn($"GenerateSingle: no WeaponData KV pairs in {scriptName}");
+            return null;
+        }
 
         var info = loadout.TryGetValue(scriptName, out var li) ? li : new LoadoutInfo();
         string printName = vals.TryGetValue("printname", out var pn) ? pn : scriptName;
@@ -73,7 +87,11 @@ public static class WikiPageGenerator
             var match = titleToScript.FirstOrDefault(kv => kv.Value.Equals(scriptName, StringComparison.OrdinalIgnoreCase));
             if (!string.IsNullOrEmpty(match.Key)) title = match.Key;
         }
-        if (string.IsNullOrEmpty(title)) return null;
+        if (string.IsNullOrEmpty(title))
+        {
+            LogService.Warn($"GenerateSingle: no title found for {scriptName} (printname: {printName})");
+            return null;
+        }
 
         string ammoDisplay = LocalizationService.Lookup(tokens, vals.GetValueOrDefault("ammo_id_display", ""));
         string originRaw = vals.GetValueOrDefault("origin", "");

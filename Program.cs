@@ -29,7 +29,9 @@ internal static class Program
     {
         if (args.Length > 0)
         {
+            LogService.Enabled = true;//cli模式强制开启日志
             AllocConsole();
+            LogService.Info($"CLI started: {string.Join(" ", args)}");
             int code = Task.Run(() => RunCli(args)).GetAwaiter().GetResult();
             Console.Out.Flush();
             if (!Console.IsOutputRedirected && args.Length > 0 && (args[0].Equals("--help", StringComparison.OrdinalIgnoreCase)
@@ -44,6 +46,7 @@ internal static class Program
             return code;
         }
 
+        LogService.Info("GUI started");
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
         Application.Run(new Form1());
@@ -134,6 +137,7 @@ Without arguments, launches the GUI
     {
         var cmd = args[0].ToLowerInvariant();
         bool verbose = HasFlag(args, "--verbose");
+        LogService.Info($"CLI command: {cmd}, verbose={verbose}");
 
         try
         {
@@ -261,6 +265,7 @@ Without arguments, launches the GUI
         }
         catch (Exception ex)
         {
+            LogService.Error(ex, $"RunCli: {cmd}");
             Console.Error.WriteLine($"Error: {ex.Message}");
             return ERR_EXCEPTION;
         }
@@ -271,7 +276,6 @@ Without arguments, launches the GUI
         Verbose($"Fetching summary: {summaryPage}", verbose);
         var source = await WikiApiService.GetPageSourceAsync(summaryPage);
         if (source == null) { Console.WriteLine($"Page not found: {summaryPage}"); return ERR_PAGE_NOT_FOUND; }
-        //构建索引 与GUI行为一致
         Verbose("Building script index...", verbose);
         var index = await WikiService.BuildScriptIndexAsync();
         var links = WikiService.ExtractWeaponLinks(source, index);
@@ -306,12 +310,18 @@ Without arguments, launches the GUI
                     Console.WriteLine($"OK  {link}");
                 }
             }
-            catch (Exception ex) { fail++; Console.WriteLine($"ERR {link}: {ex.Message}"); }
+            catch (Exception ex)
+            {
+                fail++;
+                Console.WriteLine($"ERR {link}: {ex.Message}");
+                LogService.Error(ex, $"RunBatchDryrun: {link}");
+            }
         }
 
         Console.WriteLine(new string('-', 40));
         string cachedInfo = skipped > 0 ? $", {skipped} cached" : "";
         Console.WriteLine($"Done: {done} ok, {fail} fail{cachedInfo}");
+        LogService.Info($"RunBatchDryrun done: {done} ok, {fail} fail, {skipped} cached");
         return fail > 0 ? ERR_EXCEPTION : OK;
     }
 
@@ -320,7 +330,6 @@ Without arguments, launches the GUI
         Verbose($"Fetching summary: {summaryPage}", verbose);
         var source = await WikiApiService.GetPageSourceAsync(summaryPage);
         if (source == null) { Console.WriteLine($"Page not found: {summaryPage}"); return ERR_PAGE_NOT_FOUND; }
-        //构建索引 与GUI行为一致
         Verbose("Building script index...", verbose);
         var index = await WikiService.BuildScriptIndexAsync();
         var links = WikiService.ExtractWeaponLinks(source, index);
@@ -349,11 +358,17 @@ Without arguments, launches the GUI
                 if (ok) { done++; Console.WriteLine($"OK  {link}"); }
                 else { fail++; Console.WriteLine($"FAIL upload: {link}"); }
             }
-            catch (Exception ex) { fail++; Console.WriteLine($"ERR {link}: {ex.Message}"); }
+            catch (Exception ex)
+            {
+                fail++;
+                Console.WriteLine($"ERR {link}: {ex.Message}");
+                LogService.Error(ex, $"RunBatchUpload: {link}");
+            }
         }
 
         Console.WriteLine(new string('-', 40));
         Console.WriteLine($"Done: {done} ok, {fail} fail, {skip} skip");
+        LogService.Info($"RunBatchUpload done: {done} ok, {fail} fail, {skip} skip");
         return fail > 0 ? ERR_EXCEPTION : OK;
     }
 
@@ -392,7 +407,7 @@ Without arguments, launches the GUI
         if (checkWiki)
         {
             Verbose("Checking wiki for existing pages...", verbose);
-            //用索引映射获取Wiki真实标题 否则用生成器标题
+            //用索引映射获取wiki真实标题 否则用生成器标题
             var titles = generated.Select(p =>
             {
                 if (index != null)
@@ -429,6 +444,7 @@ Without arguments, launches the GUI
 
         string status = checkWiki ? $", {existing.Count} existing" : "";
         Console.WriteLine($"Done: {written} written{status} -> {outputDir}");
+        LogService.Info($"RunGenerate done: {written} written{status} -> {outputDir}");
         return OK;
     }
 }

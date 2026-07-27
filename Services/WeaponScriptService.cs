@@ -15,14 +15,22 @@ public static class WeaponScriptService
 
     internal static string ReadScriptFile(string path)
     {
-        byte[] bytes = File.ReadAllBytes(path);
-        if (bytes.Length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE)
-            return Encoding.Unicode.GetString(bytes);
-        if (bytes.Length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF)
-            return Encoding.BigEndianUnicode.GetString(bytes);
-        if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
+        try
+        {
+            byte[] bytes = File.ReadAllBytes(path);
+            if (bytes.Length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE)
+                return Encoding.Unicode.GetString(bytes);
+            if (bytes.Length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF)
+                return Encoding.BigEndianUnicode.GetString(bytes);
+            if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
+                return Encoding.UTF8.GetString(bytes);
             return Encoding.UTF8.GetString(bytes);
-        return Encoding.UTF8.GetString(bytes);
+        }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, $"WeaponScriptService.ReadScriptFile: {path}");
+            return string.Empty;
+        }
     }
 
     //备选数值模式 dov_stats和zombie_stats在游戏内互斥 但结构完全相同
@@ -159,7 +167,10 @@ public static class WeaponScriptService
                     map[w.ScriptName] = w.PrintName;
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, "WeaponScriptService.LoadPrintNameMap");
+        }
         return map;
     }
 
@@ -170,21 +181,28 @@ public static class WeaponScriptService
     public static Dictionary<string, string> ParseWeaponDataPairs(string content)
     {
         var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        int wd = content.IndexOf("WeaponData", StringComparison.Ordinal);
-        if (wd < 0) return values;
-        int bs = content.IndexOf('{', wd);
-        if (bs < 0) return values;
-        int be = FindMatchingBrace(content, bs);
-        if (be < 0 || bs + 1 >= be) return values;
-        string block = content.Substring(bs + 1, be - bs - 1);
-
-        foreach (Match m in Regex.Matches(block, @"""([^""]+)""\s+""([^""]*)""", RegexOptions.Multiline))
+        try
         {
-            string before = block.Substring(0, m.Index);
-            int ob = 0, cb = 0;
-            for (int j = 0; j < before.Length; j++)
-            { if (before[j] == '{') ob++; else if (before[j] == '}') cb++; }
-            if (ob == cb) values[m.Groups[1].Value] = m.Groups[2].Value;
+            int wd = content.IndexOf("WeaponData", StringComparison.Ordinal);
+            if (wd < 0) return values;
+            int bs = content.IndexOf('{', wd);
+            if (bs < 0) return values;
+            int be = FindMatchingBrace(content, bs);
+            if (be < 0 || bs + 1 >= be) return values;
+            string block = content.Substring(bs + 1, be - bs - 1);
+
+            foreach (Match m in Regex.Matches(block, @"""([^""]+)""\s+""([^""]*)""", RegexOptions.Multiline))
+            {
+                string before = block.Substring(0, m.Index);
+                int ob = 0, cb = 0;
+                for (int j = 0; j < before.Length; j++)
+                { if (before[j] == '{') ob++; else if (before[j] == '}') cb++; }
+                if (ob == cb) values[m.Groups[1].Value] = m.Groups[2].Value;
+            }
+        }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, "WeaponScriptService.ParseWeaponDataPairs");
         }
         return values;
     }
@@ -221,10 +239,13 @@ public static class WeaponScriptService
     public static string ExportCsvToScripts(string csvFilePath, string scriptsDir)
     {
         var log = new List<string>();
+        LogService.Info($"ExportCsvToScripts: {csvFilePath} -> {scriptsDir}");
         var weapons = CsvService.LoadWeapons(csvFilePath);
         int total = weapons.Count;
         int success = 0;
         int skipped = 0;
+        int skippedNoScript = 0;
+        int skippedEmptyName = 0;
 
         log.Add($"CSV -> 脚本导出");
         log.Add($"CSV: {csvFilePath}");
@@ -240,6 +261,7 @@ public static class WeaponScriptService
             if (string.IsNullOrEmpty(scriptName))
             {
                 skipped++;
+                skippedEmptyName++;
                 continue;
             }
 
@@ -248,83 +270,113 @@ public static class WeaponScriptService
             if (!File.Exists(scriptPath))
             {
                 skipped++;
+                skippedNoScript++;
+                LogService.Warn($"ExportCsvToScripts: script not found: {scriptName}");
                 continue;
             }
 
-            string content = ReadScriptFile(scriptPath);
-            int updated = 0;
-
-            foreach (var map in CsvToScriptMap)
+            try
             {
-                string? csvValue = GetFieldValue(weapon, map.Key, null);
-                if (csvValue == null) continue;
-                string newContent = ReplaceKeyValue(content, map.Value, csvValue);
-                if (newContent != content) { content = newContent; updated++; }
-            }
+                string content = ReadScriptFile(scriptPath);
+                int updated = 0;
 
-            string? ru = GetFieldValue(weapon, "ViewSlideRecoil.Up", null);
-            string? rr = GetFieldValue(weapon, "ViewSlideRecoil.Right", null);
-            if (ru != null || rr != null)
+                foreach (var map in CsvToScriptMap)
+                {
+                    string? csvValue = GetFieldValue(weapon, map.Key, null);
+                    if (csvValue == null) continue;
+                    string newContent = ReplaceKeyValue(content, map.Value, csvValue);
+                    if (newContent != content) { content = newContent; updated++; }
+                }
+
+                string? ru = GetFieldValue(weapon, "ViewSlideRecoil.Up", null);
+                string? rr = GetFieldValue(weapon, "ViewSlideRecoil.Right", null);
+                if (ru != null || rr != null)
+                {
+                    content = ReplaceRecoilBlock(content, "ViewSlideRecoil", ru, rr);
+                    updated++;
+                }
+
+                string? au = GetFieldValue(weapon, "ViewSlideRecoilIronsight.Up", null);
+                string? ar = GetFieldValue(weapon, "ViewSlideRecoilIronsight.Right", null);
+                if (au != null || ar != null)
+                {
+                    content = ReplaceRecoilBlock(content, "ViewSlideRecoilIronsight", au, ar);
+                    updated++;
+                }
+
+                File.WriteAllText(scriptPath, content, new UTF8Encoding(false));
+                success++;
+                log.Add($"[{i + 1}/{total}] {scriptName} ({updated} 字段)");
+            }
+            catch (Exception ex)
             {
-                content = ReplaceRecoilBlock(content, "ViewSlideRecoil", ru, rr);
-                updated++;
+                skipped++;
+                log.Add($"[{i + 1}/{total}] 失败: {scriptName} - {ex.Message}");
+                LogService.Error(ex, $"ExportCsvToScripts: {scriptName}");
             }
-
-            string? au = GetFieldValue(weapon, "ViewSlideRecoilIronsight.Up", null);
-            string? ar = GetFieldValue(weapon, "ViewSlideRecoilIronsight.Right", null);
-            if (au != null || ar != null)
-            {
-                content = ReplaceRecoilBlock(content, "ViewSlideRecoilIronsight", au, ar);
-                updated++;
-            }
-
-            File.WriteAllText(scriptPath, content, new UTF8Encoding(false));
-            success++;
-            log.Add($"[{i + 1}/{total}] {scriptName} ({updated} 字段)");
         }
 
         log.Add(new string('-', 50));
-        log.Add($"完成: 成功 {success}, 跳过 {skipped}, 总计 {total}");
-        return string.Join("\n", log);
+        log.Add($"完成: 成功 {success}, 跳过 {skipped} (空名{skippedEmptyName} 无脚本{skippedNoScript}), 总计 {total}");
+        string result = string.Join("\n", log);
+        LogService.Info($"ExportCsvToScripts done: {success} ok, {skipped} skip, {total} total");
+        return result;
     }
 
     //导出备选数值到脚本的dov_stats或zombie_stats块
     public static void ExportAltStatsToScripts(string csvFilePath, string scriptsDir, AltStatMode mode)
     {
         string blockName = AltStatBlockNames[mode];
+        LogService.Info($"ExportAltStatsToScripts: {csvFilePath} -> {scriptsDir}, mode={mode}");
         var weapons = CsvService.LoadWeapons(csvFilePath);
+        int updated = 0, skipped = 0;
+
         foreach (var weapon in weapons)
         {
             if (string.IsNullOrEmpty(weapon.ScriptName)) continue;
             string scriptPath = Path.Combine(scriptsDir, weapon.ScriptName);
             if (!File.Exists(scriptPath)) continue;
-            string content = ReadScriptFile(scriptPath);
-            if (!content.Contains(blockName)) continue;
-            foreach (var map in CsvToScriptMap)
+            try
             {
-                string? csvValue = GetFieldValue(weapon, map.Key, mode);
-                if (csvValue == null) continue;
-                content = WriteAltStatBlockValue(content, map.Value, csvValue, mode);
+                string content = ReadScriptFile(scriptPath);
+                if (!content.Contains(blockName)) continue;
+                foreach (var map in CsvToScriptMap)
+                {
+                    string? csvValue = GetFieldValue(weapon, map.Key, mode);
+                    if (csvValue == null) continue;
+                    content = WriteAltStatBlockValue(content, map.Value, csvValue, mode);
+                }
+                string? ru = GetFieldValue(weapon, "ViewSlideRecoil.Up", mode);
+                string? rr = GetFieldValue(weapon, "ViewSlideRecoil.Right", mode);
+                if (ru != null || rr != null)
+                    content = WriteAltStatRecoilBlock(content, "ViewSlideRecoil", ru, rr, mode);
+                string? au = GetFieldValue(weapon, "ViewSlideRecoilIronsight.Up", mode);
+                string? ar = GetFieldValue(weapon, "ViewSlideRecoilIronsight.Right", mode);
+                if (au != null || ar != null)
+                    content = WriteAltStatRecoilBlock(content, "ViewSlideRecoilIronsight", au, ar, mode);
+                File.WriteAllText(scriptPath, content, new UTF8Encoding(false));
+                updated++;
             }
-            string? ru = GetFieldValue(weapon, "ViewSlideRecoil.Up", mode);
-            string? rr = GetFieldValue(weapon, "ViewSlideRecoil.Right", mode);
-            if (ru != null || rr != null)
-                content = WriteAltStatRecoilBlock(content, "ViewSlideRecoil", ru, rr, mode);
-            string? au = GetFieldValue(weapon, "ViewSlideRecoilIronsight.Up", mode);
-            string? ar = GetFieldValue(weapon, "ViewSlideRecoilIronsight.Right", mode);
-            if (au != null || ar != null)
-                content = WriteAltStatRecoilBlock(content, "ViewSlideRecoilIronsight", au, ar, mode);
-            File.WriteAllText(scriptPath, content, new UTF8Encoding(false));
+            catch (Exception ex)
+            {
+                skipped++;
+                LogService.Error(ex, $"ExportAltStatsToScripts: {weapon.ScriptName}");
+            }
         }
+        LogService.Info($"ExportAltStatsToScripts done: {updated} updated, {skipped} errors");
     }
 
     //正则地狱
     public static string ImportScriptsToCsv(string scriptsDir, string outputCsvPath)
     {
         var log = new List<string>();
+        LogService.Info($"ImportScriptsToCsv: {scriptsDir} -> {outputCsvPath}");
 
         if (!Directory.Exists(scriptsDir))
+        {
+            LogService.Error($"ImportScriptsToCsv: directory not found: {scriptsDir}");
             return $"错误: 目录不存在 - {scriptsDir}";
+        }
 
         var oldPrintNames = LoadPrintNameMap(outputCsvPath);
 
@@ -389,6 +441,7 @@ public static class WeaponScriptService
             {
                 failed++;
                 log.Add($"[{i + 1}/{total}] 失败: {name} - {ex.GetType().Name}: {ex.Message}");
+                LogService.Error(ex, $"ImportScriptsToCsv: {name}");
             }
         }
 
@@ -417,20 +470,42 @@ public static class WeaponScriptService
                     list = ordered;
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                LogService.Error(ex, "ImportScriptsToCsv: failed to restore old weapon order");
+            }
         }
 
-        CsvService.SaveWeapons(outputCsvPath, list);
-        log.Add($"保存完成: 共 {list.Count} 把武器写入 CSV");
-        return string.Join("\n", log);
+        try
+        {
+            CsvService.SaveWeapons(outputCsvPath, list);
+            log.Add($"保存完成: 共 {list.Count} 把武器写入 CSV");
+        }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, "ImportScriptsToCsv: CSV save failed");
+            log.Add($"CSV保存失败: {ex.Message}");
+        }
+
+        string result = string.Join("\n", log);
+        LogService.Info($"ImportScriptsToCsv done: {success} ok, {failed} fail, {skipped} skip, {list.Count} total");
+        return result;
     }
 
     public static string? ReadAltStatBlockValue(string content, string key, AltStatMode mode)
     {
-        string blockName = AltStatBlockNames[mode];
-        var blockMatch = Regex.Match(content, $@"{Regex.Escape(blockName)}\s*\{{([^}}]*(?:\{{[^}}]*\}}[^}}]*)*)\}}", RegexOptions.Singleline);
-        if (!blockMatch.Success) return null;
-        return ExtractValue(blockMatch.Groups[1].Value, key);
+        try
+        {
+            string blockName = AltStatBlockNames[mode];
+            var blockMatch = Regex.Match(content, $@"{Regex.Escape(blockName)}\s*\{{([^}}]*(?:\{{[^}}]*\}}[^}}]*)*)\}}", RegexOptions.Singleline);
+            if (!blockMatch.Success) return null;
+            return ExtractValue(blockMatch.Groups[1].Value, key);
+        }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, $"WeaponScriptService.ReadAltStatBlockValue: key={key}, mode={mode}");
+            return null;
+        }
     }
 
     public static string WriteAltStatBlockValue(string content, string key, string value, AltStatMode mode)
@@ -520,124 +595,131 @@ public static class WeaponScriptService
 
     private static void ImportAltStatBlock(WeaponData w, string content, AltStatMode mode)
     {
-        string blockName = AltStatBlockNames[mode];
-        int dovIdx = content.IndexOf(blockName, StringComparison.Ordinal);
-        if (dovIdx < 0) return;
-        int braceStart = content.IndexOf('{', dovIdx);
-        if (braceStart < 0) return;
-        int depth = 1;
-        int i = braceStart + 1;
-        while (i < content.Length && depth > 0)
+        try
         {
-            if (content[i] == '{') depth++;
-            else if (content[i] == '}') depth--;
-            i++;
-        }
-        string block = content.Substring(braceStart + 1, i - braceStart - 2);
+            string blockName = AltStatBlockNames[mode];
+            int dovIdx = content.IndexOf(blockName, StringComparison.Ordinal);
+            if (dovIdx < 0) return;
+            int braceStart = content.IndexOf('{', dovIdx);
+            if (braceStart < 0) return;
+            int depth = 1;
+            int i = braceStart + 1;
+            while (i < content.Length && depth > 0)
+            {
+                if (content[i] == '{') depth++;
+                else if (content[i] == '}') depth--;
+                i++;
+            }
+            string block = content.Substring(braceStart + 1, i - braceStart - 2);
 
-        if (mode == AltStatMode.Dov)
-        {
-            TrySetInt(block, "ExtraBulletChamber", out int? i1); w.DovExtraBulletChamber = i1;
-            TrySetInt(block, "FireRate", out int? i2); w.DovFireRate = i2;
-            TrySetDouble(block, "BulletSpreadDegrees", out double? d1); w.DovBulletSpread = d1;
-            TrySetDouble(block, "BulletSpreadDegreesIronsighted", out double? d2); w.DovBulletSpreadDegreesIronsighted = d2;
-            TrySetDouble(block, "BulletSpreadDegreesBipod", out double? d18); w.DovBulletSpreadDegreesBipod = d18;
-            TrySetDouble(block, "BulletSpreadDegreesBipodIronsighted", out double? d19); w.DovBulletSpreadDegreesBipodIronsighted = d19;
-            TrySetDouble(block, "rangemodifier", out double? d3); w.DovRangeModifier = d3;
-            TrySetDouble(block, "IronsightSpeedScale", out double? d4); w.DovIronsightSpeedScale = d4;
-            TrySetDouble(block, "CrouchSpreadMultiplier", out double? d5); w.DovCrouchSpreadMultiplier = d5;
-            TrySetDouble(block, "ProneSpreadMultiplier", out double? d6); w.DovProneSpreadMultiplier = d6;
-            TrySetDouble(block, "StandMoveSpreadMultiplier", out double? d7); w.DovStandMoveSpreadMultiplier = d7;
-            TrySetDouble(block, "SneakMoveSpreadMultiplier", out double? d8); w.DovSneakMoveSpreadMultiplier = d8;
-            TrySetDouble(block, "CrouchMoveSpreadMultiplier", out double? d9); w.DovCrouchMoveSpreadMultiplier = d9;
-            TrySetDouble(block, "JumpSpreadMultiplier", out double? d10); w.DovJumpSpreadMultiplier = d10;
-            TrySetDouble(block, "DamageHeadMultiplier", out double? d11); w.DovDamageHeadMultiplier = d11;
-            TrySetDouble(block, "DamageChestMultiplier", out double? d12); w.DovDamageChestMultiplier = d12;
-            TrySetDouble(block, "DamageStomachMultiplier", out double? d13); w.DovDamageStomachMultiplier = d13;
-            TrySetDouble(block, "DamageLegMultiplier", out double? d14); w.DovDamageLegMultiplier = d14;
-            TrySetDouble(block, "DamageArmMultiplier", out double? d15); w.DovDamageArmMultiplier = d15;
-            TrySetDouble(block, "DamageGeneric", out double? d16); w.DovDamageGeneric = d16;
-            TrySetDouble(block, "ShakeScale", out double? d20); w.DovShakeScale = d20;
-            TrySetDouble(block, "ShakeFreq", out double? d21); w.DovShakeFreq = d21;
-            TrySetDouble(block, "ShakeDuration", out double? d22); w.DovShakeDuration = d22;
-            TrySetInt(block, "CrosshairMinDistance", out int? i3); w.DovCrosshairMinDistance = i3;
-            TrySetInt(block, "CrosshairDeltaDistance", out int? i4); w.DovCrosshairDeltaDistance = i4;
-            TrySetDouble(block, "weight", out double? d17); w.DovWeight = d17;
-            TrySetInt(block, "ZMBuyPrice", out int? i5); w.DovZMBuyPrice = i5;
-            TrySetInt(block, "ZMWeight", out int? i6); w.DovZMWeight = i6;
-            TrySetDouble(block, "recoilpushbackvalue", out double? d23); w.DovRecoilPushbackValue = d23;
-            TrySetDouble(block, "ironsightwalkbobbingstrength", out double? d24); w.DovIronsightWalkBobbingStrength = d24;
-            TrySetDouble(block, "MetalPenetrationDepth", out double? d25); w.DovMetalPenetrationDepth = d25;
-            TrySetDouble(block, "GlassPenetrationDepth", out double? d26); w.DovGlassPenetrationDepth = d26;
-            TrySetDouble(block, "ConcretePenetrationDepth", out double? d27); w.DovConcretePenetrationDepth = d27;
-            TrySetDouble(block, "WoodPenetrationDepth", out double? d28); w.DovWoodPenetrationDepth = d28;
-            TrySetDouble(block, "OtherPenetrationDepth", out double? d29); w.DovOtherPenetrationDepth = d29;
-            TrySetDouble(block, "MetalDamageModifier", out double? d30); w.DovMetalDamageModifier = d30;
-            TrySetDouble(block, "GlassDamageModifier", out double? d31); w.DovGlassDamageModifier = d31;
-            TrySetDouble(block, "ConcreteDamageModifier", out double? d32); w.DovConcreteDamageModifier = d32;
-            TrySetDouble(block, "WoodDamageModifier", out double? d33); w.DovWoodDamageModifier = d33;
-            TrySetDouble(block, "OtherDamageModifier", out double? d34); w.DovOtherDamageModifier = d34;
-            TrySetInt(block, "NearwallDistance", out int? i7); w.DovNearwallDistance = i7;
-            w.DovFireModes = ExtractValue(block, "SupportedFireModes") ?? "";
-            w.DovClipSize = ExtractValue(block, "clip_size") ?? "";
-            w.DovViewSlideRecoilUp = ParseRecoilBlockInAltStat(block, "ViewSlideRecoil", "Up");
-            w.DovViewSlideRecoilRight = ParseRecoilBlockInAltStat(block, "ViewSlideRecoil", "Right");
-            w.DovViewSlideRecoilIronsightUp = ParseRecoilBlockInAltStat(block, "ViewSlideRecoilIronsight", "Up");
-            w.DovViewSlideRecoilIronsightRight = ParseRecoilBlockInAltStat(block, "ViewSlideRecoilIronsight", "Right");
-            TrySetInt(block, "SecondaryFireRate", out int? i8); w.DovSecondaryFireRate = i8;
-            TrySetInt(block, "IronSight", out int? i9); w.DovIronSight = i9;
+            if (mode == AltStatMode.Dov)
+            {
+                TrySetInt(block, "ExtraBulletChamber", out int? i1); w.DovExtraBulletChamber = i1;
+                TrySetInt(block, "FireRate", out int? i2); w.DovFireRate = i2;
+                TrySetDouble(block, "BulletSpreadDegrees", out double? d1); w.DovBulletSpread = d1;
+                TrySetDouble(block, "BulletSpreadDegreesIronsighted", out double? d2); w.DovBulletSpreadDegreesIronsighted = d2;
+                TrySetDouble(block, "BulletSpreadDegreesBipod", out double? d18); w.DovBulletSpreadDegreesBipod = d18;
+                TrySetDouble(block, "BulletSpreadDegreesBipodIronsighted", out double? d19); w.DovBulletSpreadDegreesBipodIronsighted = d19;
+                TrySetDouble(block, "rangemodifier", out double? d3); w.DovRangeModifier = d3;
+                TrySetDouble(block, "IronsightSpeedScale", out double? d4); w.DovIronsightSpeedScale = d4;
+                TrySetDouble(block, "CrouchSpreadMultiplier", out double? d5); w.DovCrouchSpreadMultiplier = d5;
+                TrySetDouble(block, "ProneSpreadMultiplier", out double? d6); w.DovProneSpreadMultiplier = d6;
+                TrySetDouble(block, "StandMoveSpreadMultiplier", out double? d7); w.DovStandMoveSpreadMultiplier = d7;
+                TrySetDouble(block, "SneakMoveSpreadMultiplier", out double? d8); w.DovSneakMoveSpreadMultiplier = d8;
+                TrySetDouble(block, "CrouchMoveSpreadMultiplier", out double? d9); w.DovCrouchMoveSpreadMultiplier = d9;
+                TrySetDouble(block, "JumpSpreadMultiplier", out double? d10); w.DovJumpSpreadMultiplier = d10;
+                TrySetDouble(block, "DamageHeadMultiplier", out double? d11); w.DovDamageHeadMultiplier = d11;
+                TrySetDouble(block, "DamageChestMultiplier", out double? d12); w.DovDamageChestMultiplier = d12;
+                TrySetDouble(block, "DamageStomachMultiplier", out double? d13); w.DovDamageStomachMultiplier = d13;
+                TrySetDouble(block, "DamageLegMultiplier", out double? d14); w.DovDamageLegMultiplier = d14;
+                TrySetDouble(block, "DamageArmMultiplier", out double? d15); w.DovDamageArmMultiplier = d15;
+                TrySetDouble(block, "DamageGeneric", out double? d16); w.DovDamageGeneric = d16;
+                TrySetDouble(block, "ShakeScale", out double? d20); w.DovShakeScale = d20;
+                TrySetDouble(block, "ShakeFreq", out double? d21); w.DovShakeFreq = d21;
+                TrySetDouble(block, "ShakeDuration", out double? d22); w.DovShakeDuration = d22;
+                TrySetInt(block, "CrosshairMinDistance", out int? i3); w.DovCrosshairMinDistance = i3;
+                TrySetInt(block, "CrosshairDeltaDistance", out int? i4); w.DovCrosshairDeltaDistance = i4;
+                TrySetDouble(block, "weight", out double? d17); w.DovWeight = d17;
+                TrySetInt(block, "ZMBuyPrice", out int? i5); w.DovZMBuyPrice = i5;
+                TrySetInt(block, "ZMWeight", out int? i6); w.DovZMWeight = i6;
+                TrySetDouble(block, "recoilpushbackvalue", out double? d23); w.DovRecoilPushbackValue = d23;
+                TrySetDouble(block, "ironsightwalkbobbingstrength", out double? d24); w.DovIronsightWalkBobbingStrength = d24;
+                TrySetDouble(block, "MetalPenetrationDepth", out double? d25); w.DovMetalPenetrationDepth = d25;
+                TrySetDouble(block, "GlassPenetrationDepth", out double? d26); w.DovGlassPenetrationDepth = d26;
+                TrySetDouble(block, "ConcretePenetrationDepth", out double? d27); w.DovConcretePenetrationDepth = d27;
+                TrySetDouble(block, "WoodPenetrationDepth", out double? d28); w.DovWoodPenetrationDepth = d28;
+                TrySetDouble(block, "OtherPenetrationDepth", out double? d29); w.DovOtherPenetrationDepth = d29;
+                TrySetDouble(block, "MetalDamageModifier", out double? d30); w.DovMetalDamageModifier = d30;
+                TrySetDouble(block, "GlassDamageModifier", out double? d31); w.DovGlassDamageModifier = d31;
+                TrySetDouble(block, "ConcreteDamageModifier", out double? d32); w.DovConcreteDamageModifier = d32;
+                TrySetDouble(block, "WoodDamageModifier", out double? d33); w.DovWoodDamageModifier = d33;
+                TrySetDouble(block, "OtherDamageModifier", out double? d34); w.DovOtherDamageModifier = d34;
+                TrySetInt(block, "NearwallDistance", out int? i7); w.DovNearwallDistance = i7;
+                w.DovFireModes = ExtractValue(block, "SupportedFireModes") ?? "";
+                w.DovClipSize = ExtractValue(block, "clip_size") ?? "";
+                w.DovViewSlideRecoilUp = ParseRecoilBlockInAltStat(block, "ViewSlideRecoil", "Up");
+                w.DovViewSlideRecoilRight = ParseRecoilBlockInAltStat(block, "ViewSlideRecoil", "Right");
+                w.DovViewSlideRecoilIronsightUp = ParseRecoilBlockInAltStat(block, "ViewSlideRecoilIronsight", "Up");
+                w.DovViewSlideRecoilIronsightRight = ParseRecoilBlockInAltStat(block, "ViewSlideRecoilIronsight", "Right");
+                TrySetInt(block, "SecondaryFireRate", out int? i8); w.DovSecondaryFireRate = i8;
+                TrySetInt(block, "IronSight", out int? i9); w.DovIronSight = i9;
+            }
+            else
+            {
+                TrySetInt(block, "ExtraBulletChamber", out int? i1); w.ZombieExtraBulletChamber = i1;
+                TrySetInt(block, "FireRate", out int? i2); w.ZombieFireRate = i2;
+                TrySetDouble(block, "BulletSpreadDegrees", out double? d1); w.ZombieBulletSpread = d1;
+                TrySetDouble(block, "BulletSpreadDegreesIronsighted", out double? d2); w.ZombieBulletSpreadDegreesIronsighted = d2;
+                TrySetDouble(block, "BulletSpreadDegreesBipod", out double? d18); w.ZombieBulletSpreadDegreesBipod = d18;
+                TrySetDouble(block, "BulletSpreadDegreesBipodIronsighted", out double? d19); w.ZombieBulletSpreadDegreesBipodIronsighted = d19;
+                TrySetDouble(block, "rangemodifier", out double? d3); w.ZombieRangeModifier = d3;
+                TrySetDouble(block, "IronsightSpeedScale", out double? d4); w.ZombieIronsightSpeedScale = d4;
+                TrySetDouble(block, "CrouchSpreadMultiplier", out double? d5); w.ZombieCrouchSpreadMultiplier = d5;
+                TrySetDouble(block, "ProneSpreadMultiplier", out double? d6); w.ZombieProneSpreadMultiplier = d6;
+                TrySetDouble(block, "StandMoveSpreadMultiplier", out double? d7); w.ZombieStandMoveSpreadMultiplier = d7;
+                TrySetDouble(block, "SneakMoveSpreadMultiplier", out double? d8); w.ZombieSneakMoveSpreadMultiplier = d8;
+                TrySetDouble(block, "CrouchMoveSpreadMultiplier", out double? d9); w.ZombieCrouchMoveSpreadMultiplier = d9;
+                TrySetDouble(block, "JumpSpreadMultiplier", out double? d10); w.ZombieJumpSpreadMultiplier = d10;
+                TrySetDouble(block, "DamageHeadMultiplier", out double? d11); w.ZombieDamageHeadMultiplier = d11;
+                TrySetDouble(block, "DamageChestMultiplier", out double? d12); w.ZombieDamageChestMultiplier = d12;
+                TrySetDouble(block, "DamageStomachMultiplier", out double? d13); w.ZombieDamageStomachMultiplier = d13;
+                TrySetDouble(block, "DamageLegMultiplier", out double? d14); w.ZombieDamageLegMultiplier = d14;
+                TrySetDouble(block, "DamageArmMultiplier", out double? d15); w.ZombieDamageArmMultiplier = d15;
+                TrySetDouble(block, "DamageGeneric", out double? d16); w.ZombieDamageGeneric = d16;
+                TrySetDouble(block, "ShakeScale", out double? d20); w.ZombieShakeScale = d20;
+                TrySetDouble(block, "ShakeFreq", out double? d21); w.ZombieShakeFreq = d21;
+                TrySetDouble(block, "ShakeDuration", out double? d22); w.ZombieShakeDuration = d22;
+                TrySetInt(block, "CrosshairMinDistance", out int? i3); w.ZombieCrosshairMinDistance = i3;
+                TrySetInt(block, "CrosshairDeltaDistance", out int? i4); w.ZombieCrosshairDeltaDistance = i4;
+                TrySetDouble(block, "weight", out double? d17); w.ZombieWeight = d17;
+                TrySetInt(block, "ZMBuyPrice", out int? i5); w.ZombieZMBuyPrice = i5;
+                TrySetInt(block, "ZMWeight", out int? i6); w.ZombieZMWeight = i6;
+                TrySetDouble(block, "recoilpushbackvalue", out double? d23); w.ZombieRecoilPushbackValue = d23;
+                TrySetDouble(block, "ironsightwalkbobbingstrength", out double? d24); w.ZombieIronsightWalkBobbingStrength = d24;
+                TrySetDouble(block, "MetalPenetrationDepth", out double? d25); w.ZombieMetalPenetrationDepth = d25;
+                TrySetDouble(block, "GlassPenetrationDepth", out double? d26); w.ZombieGlassPenetrationDepth = d26;
+                TrySetDouble(block, "ConcretePenetrationDepth", out double? d27); w.ZombieConcretePenetrationDepth = d27;
+                TrySetDouble(block, "WoodPenetrationDepth", out double? d28); w.ZombieWoodPenetrationDepth = d28;
+                TrySetDouble(block, "OtherPenetrationDepth", out double? d29); w.ZombieOtherPenetrationDepth = d29;
+                TrySetDouble(block, "MetalDamageModifier", out double? d30); w.ZombieMetalDamageModifier = d30;
+                TrySetDouble(block, "GlassDamageModifier", out double? d31); w.ZombieGlassDamageModifier = d31;
+                TrySetDouble(block, "ConcreteDamageModifier", out double? d32); w.ZombieConcreteDamageModifier = d32;
+                TrySetDouble(block, "WoodDamageModifier", out double? d33); w.ZombieWoodDamageModifier = d33;
+                TrySetDouble(block, "OtherDamageModifier", out double? d34); w.ZombieOtherDamageModifier = d34;
+                TrySetInt(block, "NearwallDistance", out int? i7); w.ZombieNearwallDistance = i7;
+                w.ZombieFireModes = ExtractValue(block, "SupportedFireModes") ?? "";
+                w.ZombieClipSize = ExtractValue(block, "clip_size") ?? "";
+                w.ZombieViewSlideRecoilUp = ParseRecoilBlockInAltStat(block, "ViewSlideRecoil", "Up");
+                w.ZombieViewSlideRecoilRight = ParseRecoilBlockInAltStat(block, "ViewSlideRecoil", "Right");
+                w.ZombieViewSlideRecoilIronsightUp = ParseRecoilBlockInAltStat(block, "ViewSlideRecoilIronsight", "Up");
+                w.ZombieViewSlideRecoilIronsightRight = ParseRecoilBlockInAltStat(block, "ViewSlideRecoilIronsight", "Right");
+                TrySetInt(block, "SecondaryFireRate", out int? i8); w.ZombieSecondaryFireRate = i8;
+                TrySetInt(block, "IronSight", out int? i9); w.ZombieIronSight = i9;
+            }
         }
-        else
+        catch (Exception ex)
         {
-            TrySetInt(block, "ExtraBulletChamber", out int? i1); w.ZombieExtraBulletChamber = i1;
-            TrySetInt(block, "FireRate", out int? i2); w.ZombieFireRate = i2;
-            TrySetDouble(block, "BulletSpreadDegrees", out double? d1); w.ZombieBulletSpread = d1;
-            TrySetDouble(block, "BulletSpreadDegreesIronsighted", out double? d2); w.ZombieBulletSpreadDegreesIronsighted = d2;
-            TrySetDouble(block, "BulletSpreadDegreesBipod", out double? d18); w.ZombieBulletSpreadDegreesBipod = d18;
-            TrySetDouble(block, "BulletSpreadDegreesBipodIronsighted", out double? d19); w.ZombieBulletSpreadDegreesBipodIronsighted = d19;
-            TrySetDouble(block, "rangemodifier", out double? d3); w.ZombieRangeModifier = d3;
-            TrySetDouble(block, "IronsightSpeedScale", out double? d4); w.ZombieIronsightSpeedScale = d4;
-            TrySetDouble(block, "CrouchSpreadMultiplier", out double? d5); w.ZombieCrouchSpreadMultiplier = d5;
-            TrySetDouble(block, "ProneSpreadMultiplier", out double? d6); w.ZombieProneSpreadMultiplier = d6;
-            TrySetDouble(block, "StandMoveSpreadMultiplier", out double? d7); w.ZombieStandMoveSpreadMultiplier = d7;
-            TrySetDouble(block, "SneakMoveSpreadMultiplier", out double? d8); w.ZombieSneakMoveSpreadMultiplier = d8;
-            TrySetDouble(block, "CrouchMoveSpreadMultiplier", out double? d9); w.ZombieCrouchMoveSpreadMultiplier = d9;
-            TrySetDouble(block, "JumpSpreadMultiplier", out double? d10); w.ZombieJumpSpreadMultiplier = d10;
-            TrySetDouble(block, "DamageHeadMultiplier", out double? d11); w.ZombieDamageHeadMultiplier = d11;
-            TrySetDouble(block, "DamageChestMultiplier", out double? d12); w.ZombieDamageChestMultiplier = d12;
-            TrySetDouble(block, "DamageStomachMultiplier", out double? d13); w.ZombieDamageStomachMultiplier = d13;
-            TrySetDouble(block, "DamageLegMultiplier", out double? d14); w.ZombieDamageLegMultiplier = d14;
-            TrySetDouble(block, "DamageArmMultiplier", out double? d15); w.ZombieDamageArmMultiplier = d15;
-            TrySetDouble(block, "DamageGeneric", out double? d16); w.ZombieDamageGeneric = d16;
-            TrySetDouble(block, "ShakeScale", out double? d20); w.ZombieShakeScale = d20;
-            TrySetDouble(block, "ShakeFreq", out double? d21); w.ZombieShakeFreq = d21;
-            TrySetDouble(block, "ShakeDuration", out double? d22); w.ZombieShakeDuration = d22;
-            TrySetInt(block, "CrosshairMinDistance", out int? i3); w.ZombieCrosshairMinDistance = i3;
-            TrySetInt(block, "CrosshairDeltaDistance", out int? i4); w.ZombieCrosshairDeltaDistance = i4;
-            TrySetDouble(block, "weight", out double? d17); w.ZombieWeight = d17;
-            TrySetInt(block, "ZMBuyPrice", out int? i5); w.ZombieZMBuyPrice = i5;
-            TrySetInt(block, "ZMWeight", out int? i6); w.ZombieZMWeight = i6;
-            TrySetDouble(block, "recoilpushbackvalue", out double? d23); w.ZombieRecoilPushbackValue = d23;
-            TrySetDouble(block, "ironsightwalkbobbingstrength", out double? d24); w.ZombieIronsightWalkBobbingStrength = d24;
-            TrySetDouble(block, "MetalPenetrationDepth", out double? d25); w.ZombieMetalPenetrationDepth = d25;
-            TrySetDouble(block, "GlassPenetrationDepth", out double? d26); w.ZombieGlassPenetrationDepth = d26;
-            TrySetDouble(block, "ConcretePenetrationDepth", out double? d27); w.ZombieConcretePenetrationDepth = d27;
-            TrySetDouble(block, "WoodPenetrationDepth", out double? d28); w.ZombieWoodPenetrationDepth = d28;
-            TrySetDouble(block, "OtherPenetrationDepth", out double? d29); w.ZombieOtherPenetrationDepth = d29;
-            TrySetDouble(block, "MetalDamageModifier", out double? d30); w.ZombieMetalDamageModifier = d30;
-            TrySetDouble(block, "GlassDamageModifier", out double? d31); w.ZombieGlassDamageModifier = d31;
-            TrySetDouble(block, "ConcreteDamageModifier", out double? d32); w.ZombieConcreteDamageModifier = d32;
-            TrySetDouble(block, "WoodDamageModifier", out double? d33); w.ZombieWoodDamageModifier = d33;
-            TrySetDouble(block, "OtherDamageModifier", out double? d34); w.ZombieOtherDamageModifier = d34;
-            TrySetInt(block, "NearwallDistance", out int? i7); w.ZombieNearwallDistance = i7;
-            w.ZombieFireModes = ExtractValue(block, "SupportedFireModes") ?? "";
-            w.ZombieClipSize = ExtractValue(block, "clip_size") ?? "";
-            w.ZombieViewSlideRecoilUp = ParseRecoilBlockInAltStat(block, "ViewSlideRecoil", "Up");
-            w.ZombieViewSlideRecoilRight = ParseRecoilBlockInAltStat(block, "ViewSlideRecoil", "Right");
-            w.ZombieViewSlideRecoilIronsightUp = ParseRecoilBlockInAltStat(block, "ViewSlideRecoilIronsight", "Up");
-            w.ZombieViewSlideRecoilIronsightRight = ParseRecoilBlockInAltStat(block, "ViewSlideRecoilIronsight", "Right");
-            TrySetInt(block, "SecondaryFireRate", out int? i8); w.ZombieSecondaryFireRate = i8;
-            TrySetInt(block, "IronSight", out int? i9); w.ZombieIronSight = i9;
+            LogService.Error(ex, $"WeaponScriptService.ImportAltStatBlock: mode={mode}");
         }
     }
 

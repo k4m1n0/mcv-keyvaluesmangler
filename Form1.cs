@@ -96,6 +96,7 @@ public partial class Form1 : Form
 
     public Form1()
     {
+        LogService.Info("Form1 constructor started");
         try
         {
             this.Text = "Keyvalues Mangler™ 5000";
@@ -106,6 +107,7 @@ public partial class Form1 : Form
 
             string csvPath = Path.Combine(AppContext.BaseDirectory, "weapons.csv");
             weapons = File.Exists(csvPath) ? CsvService.LoadWeapons(csvPath) : new List<WeaponData>();
+            LogService.Info($"Weapons loaded: {weapons.Count}");
 
             _undoTimer = new System.Windows.Forms.Timer { Interval = 300 };
             _undoTimer.Tick += (_, _) => { _undoTimer.Stop(); if (_undoPending) { PushUndo(); _undoPending = false; } };
@@ -145,12 +147,14 @@ public partial class Form1 : Form
                 }
                 initializing = false;
                 RegisterHotKey(this.Handle, hotkeyId, MOD_CONTROL, VK_T);
+                LogService.Info("Form1 ready");
             };
 
             this.FormClosed += (s, e) => UnregisterHotKey(this.Handle, hotkeyId);
         }
         catch (Exception ex)
         {
+            LogService.Error(ex, "Form1 constructor failed");
             MessageBox.Show($"Launch failed: {ex}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             Application.Exit();
         }
@@ -322,41 +326,48 @@ public partial class Form1 : Form
         const int WM_HOTKEY = 0x0312;
         if (m.Msg == WM_HOTKEY && m.WParam.ToInt32() == hotkeyId)
         {
-            bool mcvOrSelf = IsMcvForeground() || GetForegroundWindow() == this.Handle;
-            if (this.WindowState == FormWindowState.Minimized || !this.Visible)
+            try
             {
-                if (!mcvOrSelf) return;
-                this.Visible = true;
-                this.WindowState = FormWindowState.Normal;
-                ShowWindow(this.Handle, SW_RESTORE);
-                SetWindowPos(this.Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-                isTopmost = true;
-                this.Text = "Keyvalues Mangler™ 5000 [Topmost]";
-                this.Activate();
-            }
-            else if (isTopmost)
-            {
-                SetWindowPos(this.Handle, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-                if (mcvOrSelf)
-                    this.WindowState = FormWindowState.Minimized;
-                isTopmost = false;
-                this.Text = "Keyvalues Mangler™ 5000";
-            }
-            else
-            {
-                if (mcvOrSelf)
+                bool mcvOrSelf = IsMcvForeground() || GetForegroundWindow() == this.Handle;
+                if (this.WindowState == FormWindowState.Minimized || !this.Visible)
                 {
-                    this.WindowState = FormWindowState.Minimized;
-                    isTopmost = false;
-                    this.Text = "Keyvalues Mangler™ 5000";
-                }
-                else
-                {
+                    if (!mcvOrSelf) return;
+                    this.Visible = true;
+                    this.WindowState = FormWindowState.Normal;
+                    ShowWindow(this.Handle, SW_RESTORE);
                     SetWindowPos(this.Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
                     isTopmost = true;
                     this.Text = "Keyvalues Mangler™ 5000 [Topmost]";
                     this.Activate();
                 }
+                else if (isTopmost)
+                {
+                    SetWindowPos(this.Handle, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+                    if (mcvOrSelf)
+                        this.WindowState = FormWindowState.Minimized;
+                    isTopmost = false;
+                    this.Text = "Keyvalues Mangler™ 5000";
+                }
+                else
+                {
+                    if (mcvOrSelf)
+                    {
+                        this.WindowState = FormWindowState.Minimized;
+                        isTopmost = false;
+                        this.Text = "Keyvalues Mangler™ 5000";
+                    }
+                    else
+                    {
+                        SetWindowPos(this.Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+                        isTopmost = true;
+                        this.Text = "Keyvalues Mangler™ 5000 [Topmost]";
+                        this.Activate();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogService.Error(ex, "Form1.WndProc hotkey handler");
             }
         }
         base.WndProc(ref m);
@@ -372,7 +383,11 @@ public partial class Form1 : Form
             using var p = Process.GetProcessById((int)pid);
             return p.ProcessName.Equals("mcv_x64", StringComparison.OrdinalIgnoreCase);
         }
-        catch { return false; }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, "Form1.IsMcvForeground");
+            return false;
+        }
     }
 
     public void ScheduleUndo()
@@ -444,6 +459,10 @@ public partial class Form1 : Form
             _undoStack.RemoveLast();
             RestoreUndoEntry(entry);
         }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, "Form1.PopUndo");
+        }
         finally { _undoInProgress = false; }
     }
 
@@ -472,6 +491,10 @@ public partial class Form1 : Form
             if (_undoStack.Count > MaxUndo) _undoStack.RemoveFirst();
 
             RestoreUndoEntry(entry);
+        }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, "Form1.PopRedo");
         }
         finally { _undoInProgress = false; }
     }

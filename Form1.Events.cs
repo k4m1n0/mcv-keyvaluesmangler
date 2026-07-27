@@ -1,3 +1,4 @@
+using System;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Text;
@@ -273,6 +274,7 @@ public partial class Form1
         if (System.Threading.Interlocked.Exchange(ref saveLock, 1) != 0) return;
         try
         {
+            LogService.Info("BtnSave: saving weapons...");
             //强制提交活跃控件的待定输入 防止NUD焦点未移走导致值未更新
             var active = this.ActiveControl;
             if (active != null) { this.ActiveControl = null; active.Focus(); }
@@ -328,7 +330,11 @@ public partial class Form1
                 CsvService.SaveWeapons(Path.Combine(AppContext.BaseDirectory, "weapons.csv"), weapons);
                 await Task.Delay(1145);
             }
-            catch (Exception ex) { MessageBox.Show($"Save failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+            catch (Exception ex)
+            {
+                LogService.Error(ex, "BtnSave");
+                MessageBox.Show($"Save failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
             finally { this.Text = savedTitle; }
         }
         finally { System.Threading.Interlocked.Exchange(ref saveLock, 0); }
@@ -343,6 +349,7 @@ public partial class Form1
         string dir = dlg.SelectedPath;
         if (MessageBox.Show($"Overwrite all scripts in the folder below with CSV data?\n\n{dir}", "Confirm Overwrite", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
         string csv = Path.Combine(AppContext.BaseDirectory, "weapons.csv");
+        LogService.Info($"BtnCsvToScripts: exporting to {dir}");
         Task.Run(() =>
         {
             try
@@ -350,7 +357,11 @@ public partial class Form1
                 string log = WeaponScriptService.ExportCsvToScripts(csv, dir);
                 this.Invoke(() => { using var lf = new LogForm("Export Complete", log); lf.ShowDialog(this); });
             }
-            catch (Exception ex) { this.Invoke(() => MessageBox.Show($"Export failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error)); }
+            catch (Exception ex)
+            {
+                LogService.Error(ex, "BtnCsvToScripts");
+                this.Invoke(() => MessageBox.Show($"Export failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error));
+            }
         });
     }
 
@@ -370,6 +381,7 @@ public partial class Form1
                 }
                 btn.Text = "confirm"; btn.Tag = true; return;
             }
+            LogService.Info($"BtnQuickExport: exporting to {lastScriptsDir}, altStats={showingAltStats}");
             //强制提交活跃控件输入
             var active = this.ActiveControl;
             if (active != null) { this.ActiveControl = null; active.Focus(); }
@@ -422,7 +434,12 @@ public partial class Form1
                 btn.Text = "wpn_reload_script all"; btn.Tag = false;
                 this.Text = "Exported!"; await Task.Delay(1145);
             }
-            catch (Exception ex) { btn.Text = "wpn_reload_script all"; btn.Tag = false; MessageBox.Show($"Quick export failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+            catch (Exception ex)
+            {
+                LogService.Error(ex, "BtnQuickExport");
+                btn.Text = "wpn_reload_script all"; btn.Tag = false;
+                MessageBox.Show($"Quick export failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
             finally { this.Text = originalTitle; }
         }
         finally { System.Threading.Interlocked.Exchange(ref saveLock, 0); }
@@ -436,10 +453,19 @@ public partial class Form1
         lastScriptsDir = dlg.SelectedPath;
         string dir = dlg.SelectedPath;
         string csv = Path.Combine(AppContext.BaseDirectory, "weapons.csv");
+        LogService.Info($"BtnScriptsToCsv: importing from {dir}");
         Task.Run(() =>
         {
-            try { string log = WeaponScriptService.ImportScriptsToCsv(dir, csv); this.Invoke(() => { RefreshWeaponList(); ClearUndoHistory(); using var lf = new LogForm("Import Complete", log); lf.ShowDialog(this); }); }
-            catch (Exception ex) { this.Invoke(() => MessageBox.Show($"Import failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error)); }
+            try
+            {
+                string log = WeaponScriptService.ImportScriptsToCsv(dir, csv);
+                this.Invoke(() => { RefreshWeaponList(); ClearUndoHistory(); using var lf = new LogForm("Import Complete", log); lf.ShowDialog(this); });
+            }
+            catch (Exception ex)
+            {
+                LogService.Error(ex, "BtnScriptsToCsv");
+                this.Invoke(() => MessageBox.Show($"Import failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error));
+            }
         });
     }
 
@@ -453,10 +479,19 @@ public partial class Form1
             "Template Convert Mode", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
         if (result == DialogResult.Cancel) return;
         bool simpleMode = (result == DialogResult.No);
+        LogService.Info($"BtnConvertToTemplate: dir={dir}, simpleMode={simpleMode}");
         Task.Run(() =>
         {
-            try { string log = Tools.ScriptToTemplateConverter.ConvertAll(dir, simpleMode); this.Invoke(() => { RefreshWeaponList(); using var lf = new LogForm("Template Convert", log); lf.ShowDialog(this); }); }
-            catch (Exception ex) { this.Invoke(() => MessageBox.Show($"Template convert failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error)); }
+            try
+            {
+                string log = Tools.ScriptToTemplateConverter.ConvertAll(dir, simpleMode);
+                this.Invoke(() => { RefreshWeaponList(); using var lf = new LogForm("Template Convert", log); lf.ShowDialog(this); });
+            }
+            catch (Exception ex)
+            {
+                LogService.Error(ex, "BtnConvertToTemplate");
+                this.Invoke(() => MessageBox.Show($"Template convert failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error));
+            }
         });
     }
 
@@ -468,6 +503,7 @@ public partial class Form1
         refreshing = true;
         string leftName = currentWeaponLeft?.ScriptName ?? "";
         string rightName = currentWeaponRight?.ScriptName ?? "";
+        LogService.Info($"RefreshWeaponList: from CSV, restoring {leftName} / {rightName}");
         try
         {
             await Task.Run(() =>
@@ -497,7 +533,11 @@ public partial class Form1
                 });
             });
         }
-        catch (Exception ex) { this.Invoke(() => MessageBox.Show($"Refresh failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error)); }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, "RefreshWeaponList");
+            this.Invoke(() => MessageBox.Show($"Refresh failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error));
+        }
         finally { refreshing = false; }
     }
 
