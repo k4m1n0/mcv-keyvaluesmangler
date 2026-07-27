@@ -18,6 +18,7 @@ public partial class Form1
             {
                 currentWeaponLeft = initW;
                 LoadWeaponToControls(initW, true);
+                StoreSnapshot();
             }
             return;
             //初始化阶段直接加载不检查
@@ -49,6 +50,7 @@ public partial class Form1
         {
             currentWeaponLeft = w;
             LoadWeaponToControls(w, true);
+            StoreSnapshot();
             UpdateAllDamage();
             pnlSpread.Invalidate();
             pnlRecoil.Invalidate();
@@ -76,6 +78,7 @@ public partial class Form1
             {
                 currentWeaponRight = initW;
                 LoadWeaponToControls(initW, false);
+                StoreSnapshot();
             }
             return;
         }
@@ -105,6 +108,7 @@ public partial class Form1
         {
             currentWeaponRight = w;
             LoadWeaponToControls(w, false);
+            StoreSnapshot();
             UpdateAllDamage();
             pnlSpread.Invalidate();
             pnlRecoil.Invalidate();
@@ -126,28 +130,20 @@ public partial class Form1
 
     private bool HasUnsavedChanges(bool isLeft)
     {
-        if (_undoStack.Count == 0) return false;
-        var currentWeapon = isLeft ? currentWeaponLeft : currentWeaponRight;
-        //同一武器时只检查焦点侧 因为保存时也只保存焦点侧
+        var snap = isLeft ? _snapshotLeft : _snapshotRight;
+        if (snap == null) return false;
+        //同一武器时任意一侧有修改都算 不区分焦点
         if (currentWeaponLeft != null && currentWeaponRight != null
             && ReferenceEquals(currentWeaponLeft, currentWeaponRight))
         {
-            bool focusLeft = IsControlOnLeft(this.ActiveControl);
-            if (isLeft != focusLeft) return false;
+            var tempL = new WeaponData(); SaveControlsToWeapon(tempL, true);
+            var tempR = new WeaponData(); SaveControlsToWeapon(tempR, false);
+            return !WeaponDataEquals(tempL, _snapshotLeft) || !WeaponDataEquals(tempR, _snapshotRight);
         }
-        //从栈顶向下找第一个包含当前武器的条目
-        UndoEntry match = null!;
-        for (var node = _undoStack.Last; node != null; node = node.Previous)
-        {
-            var entry = node.Value;
-            if (isLeft && entry.LeftScriptName == currentWeapon?.ScriptName) { match = entry; break; }
-            if (!isLeft && entry.RightScriptName == currentWeapon?.ScriptName) { match = entry; break; }
-        }
-        if (match == null!) return false;
         var temp = new WeaponData();
         SaveControlsToWeapon(temp, isLeft);
-        return !WeaponDataEquals(temp, isLeft ? match.LeftData : match.RightData);
-        //控件值写入临时对象与最近一次包含该武器的栈条目比对
+        return !WeaponDataEquals(temp, snap);
+        //控件值写入临时对象与保存点快照比对
     }
 
     private static bool WeaponDataEquals(WeaponData a, WeaponData b)//双浮点比对容忍0.0001误差 防止SaveControlsToWeapon的SliderStep浮点往返造成假阳性
@@ -324,6 +320,7 @@ public partial class Form1
             }
             if (!sameAsTop) PushUndo();
             ClearRedo();
+            StoreSnapshot();
             var savedTitle = this.Text;
             this.Text = "Saved!";
             try
@@ -409,6 +406,7 @@ public partial class Form1
                     SyncAltStatFields(currentWeaponRight, currentAltStatMode);
             }
             ClearRedo();
+            StoreSnapshot();
             var originalTitle = this.Text;
             try
             {

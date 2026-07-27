@@ -37,12 +37,19 @@ public partial class Form1 : Form
     private bool showingAltStats = false;
     private WeaponScriptService.AltStatMode currentAltStatMode = WeaponScriptService.AltStatMode.Dov;
     private bool _undoInProgress;
+    private System.Windows.Forms.Timer _undoTimer = null!;
+    private bool _undoPending;
 
+    // 保存点快照 用于检测未保存修改
+    private WeaponData _snapshotLeft = null!;
+    private WeaponData _snapshotRight = null!;
+
+    // 滚轮快速切换追踪 记录起点武器和超时时间
     private string _rapidStartLeft = null!;
     private string _rapidStartRight = null!;
     private DateTime _rapidDeadlineL;
     private DateTime _rapidDeadlineR;
-    private const int RapidSettleMs = 400;
+    private const int RapidSettleMs = 300;
 
     private class UndoEntry
     {
@@ -102,6 +109,10 @@ public partial class Form1 : Form
             string csvPath = Path.Combine(AppContext.BaseDirectory, "weapons.csv");
             weapons = File.Exists(csvPath) ? CsvService.LoadWeapons(csvPath) : new List<WeaponData>();
 
+            // 防抖Timer：滚轮等高频操作延迟入栈
+            _undoTimer = new System.Windows.Forms.Timer { Interval = 300 };
+            _undoTimer.Tick += (_, _) => { _undoTimer.Stop(); if (_undoPending) { PushUndo(); _undoPending = false; } };
+
             InitLeftPanel(weapons);
             InitRightPanel(weapons);
             InitCenterPanels();
@@ -115,6 +126,7 @@ public partial class Form1 : Form
 
             this.Shown += (s, e) =>
             {
+                // 启动时短暂提示 Ctrl+T 功能
                 var originalTitle = this.Text;
                 this.Text = "Keyvalues Mangler™ 5000 — Ctrl+T to toggle topmost/minimize";
                 var titleTimer = new System.Windows.Forms.Timer { Interval = 1919 };
@@ -367,13 +379,29 @@ public partial class Form1 : Form
         catch { return false; }
     }
 
-    public void PushUndo()
+    // 防抖入栈：滚轮等高频操作使用
+    public void ScheduleUndo()
+    {
+        if (_undoInProgress || updatingControls || initializing) return;
+        _undoPending = true;
+        _undoTimer?.Stop();
+        _undoTimer?.Start();
+    }
+
+    // 立即入栈并取消防抖：鼠标松手等明确操作使用
+    public void PushUndoNow()
+    {
+        _undoTimer?.Stop();
+        _undoPending = false;
+        PushUndo();
+    }
+
+    public void PushUndo(bool clearRedo = true)
     {
         if (_undoInProgress || currentWeaponLeft == null) return;
-        //任何主动入栈结束rapid
         _rapidStartLeft = null;
         _rapidStartRight = null;
-        _redoStack.Clear();
+        if (clearRedo) _redoStack.Clear();
 
         var entry = new UndoEntry
         {
@@ -400,6 +428,7 @@ public partial class Form1 : Form
 
     private void PopUndo()
     {
+        if (_undoPending) { _undoTimer?.Stop(); PushUndo(); _undoPending = false; }
         if (_undoStack.Count == 0) return;
         _undoInProgress = true;
         try
@@ -426,14 +455,28 @@ public partial class Form1 : Form
 
     private void PopRedo()
     {
+        if (_undoPending) { _undoTimer?.Stop(); PushUndo(); _undoPending = false; }
         if (_redoStack.Count == 0) return;
         _undoInProgress = true;
         try
         {
             var entry = _redoStack.Last!.Value;
             _redoStack.RemoveLast();
-            PushUndo();
-            if (_undoStack.Count > 0) _undoStack.RemoveLast();
+
+            var undoEntry = new UndoEntry
+            {
+                LeftScriptName = currentWeaponLeft?.ScriptName,
+                RightScriptName = currentWeaponRight?.ScriptName,
+                LeftData = new WeaponData(),
+                RightData = new WeaponData(),
+                ShowingAltStats = showingAltStats,
+                AltMode = currentAltStatMode
+            };
+            SaveControlsToWeapon(undoEntry.LeftData, true);
+            SaveControlsToWeapon(undoEntry.RightData, false);
+            _undoStack.AddLast(undoEntry);
+            if (_undoStack.Count > MaxUndo) _undoStack.RemoveFirst();
+
             RestoreUndoEntry(entry);
         }
         finally { _undoInProgress = false; }
@@ -451,6 +494,17 @@ public partial class Form1 : Form
         _redoStack.Clear();
         _rapidStartLeft = null;
         _rapidStartRight = null;
+    }
+
+    // 更新保存点快照 在加载武器/保存后调用
+    public void StoreSnapshot()
+    {
+        // 备选模式下不更新快照 防止备选值覆盖普通快照
+        if (showingAltStats) return;
+        _snapshotLeft = new WeaponData();
+        _snapshotRight = new WeaponData();
+        SaveControlsToWeapon(_snapshotLeft, true);
+        SaveControlsToWeapon(_snapshotRight, false);
     }
 
     private void RestoreUndoEntry(UndoEntry entry)
@@ -489,6 +543,7 @@ public partial class Form1 : Form
             else ResetAltStatButtons();
         }
 
+        StoreSnapshot();
         UpdateAllDamage();
         pnlSpread.Invalidate();
         pnlRecoil.Invalidate();

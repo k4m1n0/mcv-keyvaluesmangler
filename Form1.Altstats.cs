@@ -13,30 +13,46 @@ public partial class Form1
         bool leftHas = WeaponHasAltStats(currentWeaponLeft, mode);
         bool rightHas = WeaponHasAltStats(currentWeaponRight, mode);
         if (!leftHas && !rightHas) return;
-        if ((currentWeaponLeft != null && HasUnsavedChanges(true)) || (currentWeaponRight != null && HasUnsavedChanges(false)))
-        {
-            if (MessageBox.Show("Unsaved changes will be lost. Switch stats mode?", "Unsaved Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
-        }
-
-        PushUndo();
 
         //如果正在显示同一种模式则关闭 否则切换到新模式
-            if (showingAltStats && currentAltStatMode == mode)
+        if (showingAltStats && currentAltStatMode == mode)
         {
+            //退出备选模式前检测是否有未保存修改
+            if ((currentWeaponLeft != null && HasUnsavedChanges(true))
+                || (currentWeaponRight != null && HasUnsavedChanges(false)))
+            {
+                var result = MessageBox.Show("Unsaved alt stat changes will be lost. Discard?",
+                    "Unsaved Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                if (result != DialogResult.Yes) return;
+            }
             showingAltStats = false;
             if (currentWeaponLeft != null) { LoadWeaponToControls(currentWeaponLeft, true); }
             if (currentWeaponRight != null) { LoadWeaponToControls(currentWeaponRight, false); }
             RestoreAllNudEnabled(true); RestoreAllNudEnabled(false);
             ResetAltStatButtons();
+            StoreSnapshot();
         }
         else
         {
+            //进入备选模式前检测普通模式下是否有未保存修改
+            if ((currentWeaponLeft != null && HasUnsavedChanges(true))
+                || (currentWeaponRight != null && HasUnsavedChanges(false)))
+            {
+                var result = MessageBox.Show("Unsaved changes will be lost. Switch stats mode?",
+                    "Unsaved Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                if (result != DialogResult.Yes) return;
+            }
+            PushUndo();
             showingAltStats = true; currentAltStatMode = mode;
             HighlightAltStatButton(mode);
             updatingControls = true;
             if (leftHas) { LoadAltStatsToControls(true, mode); SetAltStatReadonly(true, mode); }
             if (rightHas) { LoadAltStatsToControls(false, mode); SetAltStatReadonly(false, mode); }
             updatingControls = false;
+            _snapshotLeft = new WeaponData();
+            _snapshotRight = new WeaponData();
+            SaveControlsToWeapon(_snapshotLeft, true);
+            SaveControlsToWeapon(_snapshotRight, false);
         }
         UpdateAllDamage(); pnlSpread.Invalidate(); pnlRecoil.Invalidate();
     }
