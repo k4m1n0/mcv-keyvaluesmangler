@@ -487,6 +487,10 @@ public partial class Form1
                         RestoreComboSelection(cmbWeaponsR, rightName);
                         cmbWeaponsL.SelectedIndexChanged += WeaponSelectedL; cmbWeaponsR.SelectedIndexChanged += WeaponSelectedR;
                         RestoreComboSelection(cmbWeaponsL, leftName);
+                        if (currentWeaponLeft != null) { LoadWeaponToControls(currentWeaponLeft, true); UpdateAllDamage(); }
+                        if (currentWeaponRight != null) { LoadWeaponToControls(currentWeaponRight, false); UpdateAllDamage(); }
+                        pnlSpread.Invalidate();
+                        pnlRecoil.Invalidate();
                     }
                     else { cmbWeaponsL.SelectedIndexChanged += WeaponSelectedL; cmbWeaponsR.SelectedIndexChanged += WeaponSelectedR; }
                     UpdateC64Labels(weapons.Count > 0);
