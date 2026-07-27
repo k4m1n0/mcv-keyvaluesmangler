@@ -21,7 +21,6 @@ public partial class Form1
         lblC64_2 = new Label { Location = new Point(cx, 686), Size = new Size(300, 13), Font = new Font("Consolas", 8, FontStyle.Bold), ForeColor = Color.FromArgb(200, 200, 255), BackColor = Color.FromArgb(60, 60, 160), TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0), Padding = new Padding(0) };
         lblC64_3 = new Label { Location = new Point(cx, 697), Size = new Size(300, 13), Font = new Font("Consolas", 8, FontStyle.Bold), ForeColor = Color.FromArgb(200, 200, 255), BackColor = Color.FromArgb(60, 60, 160), TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0), Padding = new Padding(0) };
 
-        // 点击C64标签播放tada音效
         var tadaPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Media", "tada.wav");
         System.Media.SoundPlayer? tada = File.Exists(tadaPath) ? new System.Media.SoundPlayer(tadaPath) : null;
         void PlayTada() { try { tada?.Play(); } catch { } }
@@ -342,7 +341,7 @@ public partial class Form1
         return (tb, nud, lbl);
     }
 
-    // 给NUD绑定ScheduleUndo和PushUndoNow 统一处理
+    //给nud绑定ScheduleUndo和PushUndoNow统一处理
     private void BindNudUndo(NumericUpDown nud, EventHandler? extraHandler, bool isLeft)
     {
         nud.ValueChanged += (s, e) =>

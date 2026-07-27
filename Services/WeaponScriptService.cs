@@ -587,7 +587,7 @@ public static class WeaponScriptService
             TrySetInt(block, "SecondaryFireRate", out int? i8); w.DovSecondaryFireRate = i8;
             TrySetInt(block, "IronSight", out int? i9); w.DovIronSight = i9;
         }
-        else //Zombie
+        else
         {
             TrySetInt(block, "ExtraBulletChamber", out int? i1); w.ZombieExtraBulletChamber = i1;
             TrySetInt(block, "FireRate", out int? i2); w.ZombieFireRate = i2;
@@ -711,7 +711,7 @@ public static class WeaponScriptService
         _ => null
     };
 
-    //从顶层/Dov/Zombie中按mode选值 double版本
+    //double版本
     private static string? AltF(double? top, double? dov, double? zombie, AltStatMode? mode)
     {
         double? v = mode switch
@@ -724,7 +724,7 @@ public static class WeaponScriptService
         return F(v);
     }
 
-    //从顶层/Dov/Zombie中按mode选值 int版本
+    //int版本
     private static string? AltI(int? top, int? dov, int? zombie, AltStatMode? mode)
     {
         int? v = mode switch

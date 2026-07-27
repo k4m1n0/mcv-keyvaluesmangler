@@ -185,7 +185,7 @@ Without arguments, launches the GUI
                     var source = await WikiApiService.GetPageSourceAsync(page);
                     if (source == null)
                     {
-                        //尝试反向查找脚本名
+                        //反查脚本名
                         var idx = await WikiService.BuildScriptIndexAsync();
                         string? found = WikiService.ReverseLookup(page, idx);
                         if (found != null) { page = found; source = await WikiApiService.GetPageSourceAsync(found); }
@@ -212,7 +212,7 @@ Without arguments, launches the GUI
                     var source = await WikiApiService.GetPageSourceAsync(page);
                     if (source == null)
                     {
-                        //尝试反向查找脚本名
+                        //反查
                         var idx = await WikiService.BuildScriptIndexAsync();
                         string? found = WikiService.ReverseLookup(page, idx);
                         if (found != null) { page = found; source = await WikiApiService.GetPageSourceAsync(found); }

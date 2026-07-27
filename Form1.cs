@@ -40,11 +40,9 @@ public partial class Form1 : Form
     private System.Windows.Forms.Timer _undoTimer = null!;
     private bool _undoPending;
 
-    // 保存点快照 用于检测未保存修改
     private WeaponData _snapshotLeft = null!;
     private WeaponData _snapshotRight = null!;
 
-    // 滚轮快速切换追踪 记录起点武器和超时时间
     private string _rapidStartLeft = null!;
     private string _rapidStartRight = null!;
     private DateTime _rapidDeadlineL;
@@ -109,7 +107,6 @@ public partial class Form1 : Form
             string csvPath = Path.Combine(AppContext.BaseDirectory, "weapons.csv");
             weapons = File.Exists(csvPath) ? CsvService.LoadWeapons(csvPath) : new List<WeaponData>();
 
-            // 防抖Timer：滚轮等高频操作延迟入栈
             _undoTimer = new System.Windows.Forms.Timer { Interval = 300 };
             _undoTimer.Tick += (_, _) => { _undoTimer.Stop(); if (_undoPending) { PushUndo(); _undoPending = false; } };
 
@@ -126,7 +123,6 @@ public partial class Form1 : Form
 
             this.Shown += (s, e) =>
             {
-                // 启动时短暂提示 Ctrl+T 功能
                 var originalTitle = this.Text;
                 this.Text = "Keyvalues Mangler™ 5000 — Ctrl+T to toggle topmost/minimize";
                 var titleTimer = new System.Windows.Forms.Timer { Interval = 1919 };
@@ -379,7 +375,6 @@ public partial class Form1 : Form
         catch { return false; }
     }
 
-    // 防抖入栈：滚轮等高频操作使用
     public void ScheduleUndo()
     {
         if (_undoInProgress || updatingControls || initializing) return;
@@ -388,7 +383,6 @@ public partial class Form1 : Form
         _undoTimer?.Start();
     }
 
-    // 立即入栈并取消防抖：鼠标松手等明确操作使用
     public void PushUndoNow()
     {
         _undoTimer?.Stop();
@@ -482,7 +476,6 @@ public partial class Form1 : Form
         finally { _undoInProgress = false; }
     }
 
-    // 保存后清空redo
     public void ClearRedo()
     {
         _redoStack.Clear();
@@ -496,10 +489,9 @@ public partial class Form1 : Form
         _rapidStartRight = null;
     }
 
-    // 更新保存点快照 在加载武器/保存后调用
     public void StoreSnapshot()
     {
-        // 备选模式下不更新快照 防止备选值覆盖普通快照
+        //备选模式下不更新快照 防止备选值覆盖普通快照
         if (showingAltStats) return;
         _snapshotLeft = new WeaponData();
         _snapshotRight = new WeaponData();

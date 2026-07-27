@@ -43,7 +43,7 @@ public partial class Form1
         int pellets = (int)nudBulletsPerShotR.Value;
         double vest = chkVestR.Checked ? (pellets > 1 ? 0.8 : 0.9) : 1.0;
         int rpm = (int)nudFireRateR.Value;
-        // 如果 SecondaryFireRate NUD 有焦点且值为正整数，使用它
+        // 如果SecondaryFireRate的nud有焦点且值为正整数 使用它
         if (nudSecondaryFireRateR.Focused && nudSecondaryFireRateR.Value > 0)
             rpm = (int)nudSecondaryFireRateR.Value;
         var (burstCount, burstInterval) = ParseBurstInfo(txtFireModesR.Text);
@@ -139,7 +139,6 @@ public partial class Form1
             nudJumpSpreadL.Value = ClampNud((decimal)(w.JumpSpreadMultiplier ?? 0), nudJumpSpreadL);
             nudDamageGenericL.Value = ClampNud((decimal)(w.DamageGeneric ?? 0), nudDamageGenericL);
 
-            // IronSight == 0 时禁用 ADS 相关控件
             if (w.IronSight == 0)
             {
                 nudAdsSpreadL.Enabled = false;
@@ -193,7 +192,6 @@ public partial class Form1
             nudJumpSpreadR.Value = ClampNud((decimal)(w.JumpSpreadMultiplier ?? 0), nudJumpSpreadR);
             nudDamageGenericR.Value = ClampNud((decimal)(w.DamageGeneric ?? 0), nudDamageGenericR);
 
-            // IronSight == 0 时禁用 ADS 相关控件
             if (w.IronSight == 0)
             {
                 nudAdsSpreadR.Enabled = false;
