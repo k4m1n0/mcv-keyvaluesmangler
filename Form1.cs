@@ -16,8 +16,6 @@ public partial class Form1 : Form
     private List<WeaponData> weapons = null!;
     private WeaponData? currentWeaponLeft = null;
     private WeaponData? currentWeaponRight = null;
-    private WeaponData? snapshotLeft = null;
-    private WeaponData? snapshotRight = null;
     private static string? lastWikiUser = null;
     private static string? lastWikiPw = null;
 
@@ -38,6 +36,27 @@ public partial class Form1 : Form
     private bool isTopmost = false;
     private bool showingAltStats = false;
     private WeaponScriptService.AltStatMode currentAltStatMode = WeaponScriptService.AltStatMode.Dov;
+    private bool _undoInProgress;
+
+    private string _rapidStartLeft = null!;
+    private string _rapidStartRight = null!;
+    private DateTime _rapidDeadlineL;
+    private DateTime _rapidDeadlineR;
+    private const int RapidSettleMs = 400;
+
+    private class UndoEntry
+    {
+        public string LeftScriptName = null!;
+        public string RightScriptName = null!;
+        public WeaponData LeftData = null!;
+        public WeaponData RightData = null!;
+        public bool ShowingAltStats;
+        public WeaponScriptService.AltStatMode AltMode;
+    }
+
+    private LinkedList<UndoEntry> _undoStack = new();
+    private LinkedList<UndoEntry> _redoStack = new();
+    private const int MaxUndo = 50;
 
     private PanelRenderer spreadRenderer = null!;
     private PanelRenderer recoilRenderer = null!;
@@ -219,6 +238,8 @@ public partial class Form1 : Form
 
     private void Form1_FormClosing(object sender, FormClosingEventArgs e)
     {
+        //结束未完成的rapid 保存当前状态
+        if (_rapidStartLeft != null || _rapidStartRight != null) PushUndo();
         bool leftDirty = currentWeaponLeft != null && HasUnsavedChanges(true);
         bool rightDirty = currentWeaponRight != null && HasUnsavedChanges(false);
         if (leftDirty || rightDirty)
@@ -340,20 +361,121 @@ public partial class Form1 : Form
         catch { return false; }
     }
 
-    private void StoreSnapshot(bool isLeft)
+    public void PushUndo()
     {
-        var snap = new WeaponData();
-        SaveControlsToWeapon(snap, isLeft);
-        if (isLeft) snapshotLeft = snap; else snapshotRight = snap;
+        if (_undoInProgress || currentWeaponLeft == null) return;
+        //任何主动入栈结束rapid
+        _rapidStartLeft = null;
+        _rapidStartRight = null;
+        _redoStack.Clear();
+
+        var entry = new UndoEntry
+        {
+            LeftScriptName = currentWeaponLeft?.ScriptName,
+            RightScriptName = currentWeaponRight?.ScriptName,
+            LeftData = new WeaponData(),
+            RightData = new WeaponData(),
+            ShowingAltStats = showingAltStats,
+            AltMode = currentAltStatMode
+        };
+        SaveControlsToWeapon(entry.LeftData, true);
+        SaveControlsToWeapon(entry.RightData, false);
+
+        _undoStack.AddLast(entry);
+        if (_undoStack.Count > MaxUndo) _undoStack.RemoveFirst();
     }
 
-    private void RestoreSnapshot(bool isLeft)
+    private void PopUndo()
     {
-        var snap = isLeft ? snapshotLeft : snapshotRight;
-        if (snap == null) return;
-        var temp = new WeaponData();
-        CopyWeaponDataFields(snap, temp);
-        LoadWeaponToControls(temp, isLeft);
+        if (_undoStack.Count == 0) return;
+        _undoInProgress = true;
+        try
+        {
+            var redoEntry = new UndoEntry
+            {
+                LeftScriptName = currentWeaponLeft?.ScriptName,
+                RightScriptName = currentWeaponRight?.ScriptName,
+                LeftData = new WeaponData(),
+                RightData = new WeaponData(),
+                ShowingAltStats = showingAltStats,
+                AltMode = currentAltStatMode
+            };
+            SaveControlsToWeapon(redoEntry.LeftData, true);
+            SaveControlsToWeapon(redoEntry.RightData, false);
+            _redoStack.AddLast(redoEntry);
+
+            var entry = _undoStack.Last!.Value;
+            _undoStack.RemoveLast();
+            RestoreUndoEntry(entry);
+        }
+        finally { _undoInProgress = false; }
+    }
+
+    private void PopRedo()
+    {
+        if (_redoStack.Count == 0) return;
+        _undoInProgress = true;
+        try
+        {
+            var entry = _redoStack.Last!.Value;
+            _redoStack.RemoveLast();
+            PushUndo();
+            if (_undoStack.Count > 0) _undoStack.RemoveLast();
+            RestoreUndoEntry(entry);
+        }
+        finally { _undoInProgress = false; }
+    }
+
+    // 保存后清空redo
+    public void ClearRedo()
+    {
+        _redoStack.Clear();
+    }
+
+    public void ClearUndoHistory()
+    {
+        _undoStack.Clear();
+        _redoStack.Clear();
+        _rapidStartLeft = null;
+        _rapidStartRight = null;
+    }
+
+    private void RestoreUndoEntry(UndoEntry entry)
+    {
+        if (!string.IsNullOrEmpty(entry.LeftScriptName))
+        {
+            var w = weapons.FirstOrDefault(x => x.ScriptName == entry.LeftScriptName);
+            if (w != null && currentWeaponLeft?.ScriptName != w.ScriptName)
+            {
+                cmbWeaponsL.SelectedIndexChanged -= WeaponSelectedL;
+                currentWeaponLeft = w;
+                cmbWeaponsL.SelectedItem = w;
+                cmbWeaponsL.SelectedIndexChanged += WeaponSelectedL;
+            }
+        }
+        LoadWeaponToControls(entry.LeftData, true);
+
+        if (!string.IsNullOrEmpty(entry.RightScriptName))
+        {
+            var w = weapons.FirstOrDefault(x => x.ScriptName == entry.RightScriptName);
+            if (w != null && currentWeaponRight?.ScriptName != w.ScriptName)
+            {
+                cmbWeaponsR.SelectedIndexChanged -= WeaponSelectedR;
+                currentWeaponRight = w;
+                cmbWeaponsR.SelectedItem = w;
+                cmbWeaponsR.SelectedIndexChanged += WeaponSelectedR;
+            }
+        }
+        LoadWeaponToControls(entry.RightData, false);
+
+        if (entry.ShowingAltStats != showingAltStats || entry.AltMode != currentAltStatMode)
+        {
+            showingAltStats = entry.ShowingAltStats;
+            currentAltStatMode = entry.AltMode;
+            if (showingAltStats) HighlightAltStatButton(currentAltStatMode);
+            else ResetAltStatButtons();
+        }
+
         UpdateAllDamage();
         pnlSpread.Invalidate();
         pnlRecoil.Invalidate();
@@ -366,6 +488,7 @@ public partial class Form1 : Form
     {
         if (currentWeaponLeft != null && currentWeaponRight != null)
         {
+            PushUndo();
             var temp = new WeaponData();
             SaveControlsToWeapon(temp, true);
             LoadWeaponToControls(temp, false);
@@ -379,6 +502,7 @@ public partial class Form1 : Form
     {
         if (currentWeaponRight != null && currentWeaponLeft != null)
         {
+            PushUndo();
             var temp = new WeaponData();
             SaveControlsToWeapon(temp, false);
             LoadWeaponToControls(temp, true);

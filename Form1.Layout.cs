@@ -298,12 +298,18 @@ public partial class Form1
         if (isLeft)
         {
             tb.ValueChanged += SliderChangedL;
+            tb.MouseUp += (_, _) => PushUndo();
             nud.ValueChanged += NumericChangedL;
+            nud.MouseUp += (_, _) => PushUndo();
+            nud.Leave += (_, _) => PushUndo();
         }
         else
         {
             tb.ValueChanged += SliderChangedR;
+            tb.MouseUp += (_, _) => PushUndo();
             nud.ValueChanged += NumericChangedR;
+            nud.MouseUp += (_, _) => PushUndo();
+            nud.Leave += (_, _) => PushUndo();
         }
 
         y += 37;

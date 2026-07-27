@@ -18,12 +18,14 @@ public partial class Form1
             if (MessageBox.Show("Unsaved changes will be lost. Switch stats mode?", "Unsaved Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
         }
 
+        PushUndo();
+
         //如果正在显示同一种模式则关闭 否则切换到新模式
-        if (showingAltStats && currentAltStatMode == mode)
+            if (showingAltStats && currentAltStatMode == mode)
         {
             showingAltStats = false;
-            if (currentWeaponLeft != null) { LoadWeaponToControls(currentWeaponLeft, true); StoreSnapshot(true); }
-            if (currentWeaponRight != null) { LoadWeaponToControls(currentWeaponRight, false); StoreSnapshot(false); }
+            if (currentWeaponLeft != null) { LoadWeaponToControls(currentWeaponLeft, true); }
+            if (currentWeaponRight != null) { LoadWeaponToControls(currentWeaponRight, false); }
             RestoreAllNudEnabled(true); RestoreAllNudEnabled(false);
             ResetAltStatButtons();
         }
@@ -32,8 +34,8 @@ public partial class Form1
             showingAltStats = true; currentAltStatMode = mode;
             HighlightAltStatButton(mode);
             updatingControls = true;
-            if (leftHas) { LoadAltStatsToControls(true, mode); StoreSnapshot(true); SetAltStatReadonly(true, mode); }
-            if (rightHas) { LoadAltStatsToControls(false, mode); StoreSnapshot(false); SetAltStatReadonly(false, mode); }
+            if (leftHas) { LoadAltStatsToControls(true, mode); SetAltStatReadonly(true, mode); }
+            if (rightHas) { LoadAltStatsToControls(false, mode); SetAltStatReadonly(false, mode); }
             updatingControls = false;
         }
         UpdateAllDamage(); pnlSpread.Invalidate(); pnlRecoil.Invalidate();
