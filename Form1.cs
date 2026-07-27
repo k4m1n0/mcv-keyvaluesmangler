@@ -118,7 +118,7 @@ public partial class Form1 : Form
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Launch failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show($"Launch failed: {ex}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             Application.Exit();
         }
     }
@@ -193,6 +193,19 @@ public partial class Form1 : Form
         var btnWiki = new Button { Text = "Wiki", Location = new Point(cx + 228, 644), Size = new Size(48, 24) };
         btnWiki.Click += BtnWiki_Click;
         this.Controls.Add(btnWiki);
+
+        var tooltip = new ToolTip();
+        tooltip.SetToolTip(btnSave, "Save current weapon data to CSV (Ctrl+S)");
+        tooltip.SetToolTip(btnCsvToScripts, "Export CSV data to weapon script files");
+        tooltip.SetToolTip(btnScriptsToCsv, "Import weapon script files to CSV");
+        tooltip.SetToolTip(btnRefresh, "Reload weapon list from CSV (Ctrl+R)");
+        tooltip.SetToolTip(btnCopy, "Copy left panel values to right");
+        tooltip.SetToolTip(btnCopyCvar, "Quick export: save CSV and export to scripts\nRight-click to cancel");
+        tooltip.SetToolTip(btnConvertToTemplate, "Convert old scripts to preset_file template format");
+        tooltip.SetToolTip(btnToggleDov, "Toggle Day of Victory alternate stats");
+        tooltip.SetToolTip(btnToggleZombie, "Toggle Zombie Mode alternate stats");
+        tooltip.SetToolTip(btnCopyR, "Copy right panel values to left");
+        tooltip.SetToolTip(btnWiki, "Open Wiki Stats Updater");
     }
 
     private static void CancelConfirm(Button btn)

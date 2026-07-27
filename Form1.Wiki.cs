@@ -104,33 +104,14 @@ public partial class Form1
             if (fbd.ShowDialog() == DialogResult.OK) { selectedDir = fbd.SelectedPath; lblDir.Text = selectedDir; }
         }
 
-        //反查脚本名
-        string? ReverseLookup(string input)
-        {
-            if (_titleToScript == null || _titleToScript.Count == 0) return null;
-            string inputNoExt = Path.GetFileNameWithoutExtension(input);
-            foreach (var kv in _titleToScript)
-            {
-                string sn = kv.Value;
-                string snNoExt = Path.GetFileNameWithoutExtension(sn);
-                string snStem = snNoExt.StartsWith("weapon_", StringComparison.OrdinalIgnoreCase) ? snNoExt.Substring(7) : snNoExt;
-                if (sn.Equals(input, StringComparison.OrdinalIgnoreCase)
-                    || snNoExt.Equals(input, StringComparison.OrdinalIgnoreCase)
-                    || snNoExt.Equals(inputNoExt, StringComparison.OrdinalIgnoreCase)
-                    || snStem.Equals(inputNoExt, StringComparison.OrdinalIgnoreCase))
-                    return kv.Key;
-            }
-            return _titleToScript.Keys.FirstOrDefault(k => k.Equals(input, StringComparison.OrdinalIgnoreCase));
-        }
-
         async Task<bool> EnsureSource()
         {
             if (!string.IsNullOrWhiteSpace(txtInput.Text)) return true;
             var src = await WikiApiService.GetPageSourceAsync(txtPage.Text);
             if (src == null)
             {
-                if (_titleToScript == null) { try { _titleToScript = await BuildTitleToScriptMap(); } catch { } }
-                string? foundTitle = ReverseLookup(txtPage.Text.Trim());
+                if (_titleToScript == null) { try { _titleToScript = await WikiService.BuildScriptIndexAsync(); } catch { } }
+                string? foundTitle = WikiService.ReverseLookup(txtPage.Text.Trim(), _titleToScript);
                 if (foundTitle != null)
                 {
                     lastPageText = foundTitle;
@@ -139,7 +120,7 @@ public partial class Form1
                 }
                 if (src == null) { lblStatus.Text = "Page not found"; return false; }
             }
-            if (_titleToScript == null) { try { _titleToScript = await BuildTitleToScriptMap(); } catch { } }
+            if (_titleToScript == null) { try { _titleToScript = await WikiService.BuildScriptIndexAsync(); } catch { } }
             txtInput.Text = src.Replace("\n", "\r\n");
             lblStatus.Text = $"OK: {txtPage.Text}" + (_titleToScript?.Count > 0 ? $" (+{_titleToScript.Count} idx)" : "");
             return true;
@@ -245,7 +226,7 @@ public partial class Form1
                 lblStatus.Text = "Loading loadout...";
                 var loadout = LoadoutService.LoadAll(resourceDir);
                 Out($"Loadout loaded: {loadout.Count}");
-                if (_titleToScript == null) { try { _titleToScript = await BuildTitleToScriptMap(); } catch { } }
+                if (_titleToScript == null) { try { _titleToScript = await WikiService.BuildScriptIndexAsync(); } catch { } }
                 Out($"Index: {_titleToScript?.Count ?? 0} entries");
                 lblStatus.Text = "Fetching templates...";
                 string defaultTemplate = await WikiApiService.FetchTemplateAsync(Tools.WikiPageGenerator.DefaultTemplateUrl) ?? "Template fetch failed";
@@ -320,9 +301,9 @@ public partial class Form1
             if (selectedDir == null) return;
             if (_titleToScript == null && !string.IsNullOrWhiteSpace(txtInput.Text))
             {
-                try { _titleToScript = await BuildTitleToScriptMap(); if (_titleToScript != null) lblStatus.Text = $"索引已加载 ({_titleToScript.Count} 个武器)"; } catch { }
+                try { _titleToScript = await WikiService.BuildScriptIndexAsync(); if (_titleToScript != null) lblStatus.Text = $"索引已加载 ({_titleToScript.Count} 个武器)"; } catch { }
             }
-            try { txtOutput.Text = DoConvert(txtInput.Text, selectedDir, _titleToScript).Replace("\n", "\r\n"); }
+            try { txtOutput.Text = WikiService.ConvertWikiSource(txtInput.Text, selectedDir, _titleToScript).Replace("\n", "\r\n"); }
             catch (Exception ex) { txtOutput.Text = $"Error: {ex.Message}"; }
         };
 
@@ -344,15 +325,15 @@ public partial class Form1
         btnFetch.Click += async (_, _) =>
         {
             if (dryRunDone || batchDryDone) { lblStatus.Text = "Cannot fetch while upload is pending."; return; }
-            if (_titleToScript == null) { try { _titleToScript = await BuildTitleToScriptMap(); } catch { } }
+            if (_titleToScript == null) { try { _titleToScript = await WikiService.BuildScriptIndexAsync(); } catch { } }
             var source = await WikiApiService.GetPageSourceAsync(txtPage.Text);
             if (source == null && _titleToScript != null)
             {
-                string? foundTitle = ReverseLookup(txtPage.Text.Trim());
+                string? foundTitle = WikiService.ReverseLookup(txtPage.Text.Trim(), _titleToScript);
                 if (foundTitle != null) { txtPage.Text = foundTitle; source = await WikiApiService.GetPageSourceAsync(foundTitle); }
             }
             if (source == null) { lblStatus.Text = "Page not found"; return; }
-            _titleToScript = await BuildTitleToScriptMap();
+            _titleToScript = await WikiService.BuildScriptIndexAsync();
             txtInput.Text = source.Replace("\n", "\r\n"); txtOutput.Clear(); ResetBatchState();
             lblStatus.Text = $"OK: {txtPage.Text}" + (_titleToScript?.Count > 0 ? $" (+{_titleToScript.Count} idx)" : "");
         };
@@ -369,7 +350,7 @@ public partial class Form1
                 if (selectedDir == null || !Directory.Exists(selectedDir)) PickDir();
                 if (selectedDir == null) return;
                 if (!await EnsureSource()) return;
-                try { txtOutput.Text = DoConvert(txtInput.Text, selectedDir, _titleToScript).Replace("\n", "\r\n"); }
+                try { txtOutput.Text = WikiService.ConvertWikiSource(txtInput.Text, selectedDir, _titleToScript).Replace("\n", "\r\n"); }
                 catch (Exception ex) { txtOutput.Text = $"Error: {ex.Message}"; return; }
             }
 
@@ -408,14 +389,14 @@ public partial class Form1
             if (selectedDir == null) return;
             if (!await EnsureSource()) return;
             if (!Regex.IsMatch(txtInput.Text, @"^=\[\[.+\]\]=\s*$", RegexOptions.Multiline)) { lblStatus.Text = "Not a summary page."; return; }
-            var links = ExtractWeaponLinks(txtInput.Text, _titleToScript);
+            var links = WikiService.ExtractWeaponLinks(txtInput.Text, _titleToScript);
             if (links.Count == 0) { lblStatus.Text = "No weapon links found"; return; }
 
             batchCts = new CancellationTokenSource(); var token = batchCts.Token;
             EventHandler? h = null; EnterCancel(btnBatchDR, batchCts, ref h);
             try
             {
-                string wikiDir = Path.Combine(AppContext.BaseDirectory, "wiki"); Directory.CreateDirectory(wikiDir);
+                string wikiDir = WikiService.GetWikiDir(); Directory.CreateDirectory(wikiDir);
                 int done = 0, fail = 0, skip = 0;
                 txtOutput.Clear();
                 void Out(string s) { txtOutput.AppendText(s + "\r\n"); }
@@ -447,7 +428,7 @@ public partial class Form1
                             else
                             {
                                 string converted = Tools.WikiTableConverter.Convert(src, selectedDir);
-                                SaveToWikiDir(fn, converted);
+                                WikiService.SaveToWikiDir(fn, converted);
                                 done++;
                                 int origLines = src.Split('\n').Length;
                                 int convLines = converted.Split('\n').Length;
@@ -493,6 +474,20 @@ public partial class Form1
             finally { batchCts?.Dispose(); batchCts = null; }
         };
 
+        var tooltip = new ToolTip();
+        tooltip.SetToolTip(txtPage, "Wiki page name (e.g. AK-47) or script name (e.g. AK47, weapon_akm)\nPaste a full URL to auto extract the page name");
+        tooltip.SetToolTip(btnFetch, "Fetch page source from the wiki");
+        tooltip.SetToolTip(btnDryRun, "Dry run: convert local scripts and preview changes\nClick again to upload");
+        tooltip.SetToolTip(btnBatchDR, "Batch process all weapons linked from the current page\nClick again to upload all");
+        tooltip.SetToolTip(btnGenerate, "Generate new weapon pages from game script data\nClick again to upload generated pages");
+        tooltip.SetToolTip(chkOverwriteExisting, "Include existing wiki pages when generating");
+        tooltip.SetToolTip(chkSkipCached, "Skip pages already saved in the wiki folder");
+        tooltip.SetToolTip(btnSelectDir, "Select the scripts folder (e.g. .../vietnam/scripts)");
+        tooltip.SetToolTip(btnConvert, "Convert the current source using script data");
+        tooltip.SetToolTip(btnCopy, "Copy result to clipboard");
+        tooltip.SetToolTip(btnReset, "Reset all wiki fields to defaults");
+        tooltip.SetToolTip(btnFetch, "Fetch the wiki page source");
+
         dlg.Controls.AddRange(new Control[] {
             lblPage, txtPage, btnFetch, lblStatus,
             lblUser, txtUser, lblPw, txtPw, btnDryRun, btnBatchDR, btnGenerate, chkOverwriteExisting,
@@ -506,25 +501,6 @@ public partial class Form1
             if (batchCts != null) { batchCts.Cancel(); batchCts.Dispose(); batchCts = null; }
         };
         dlg.ShowDialog(this);
-    }
-
-    private static string DoConvert(string input, string scriptsDir, Dictionary<string, string>? titleToScript)
-    {
-        input = input.Replace("\r\n", "\n").Replace('\r', '\n');
-        if (Regex.IsMatch(input, @"^=\[\[.+\]\]=\s*$", RegexOptions.Multiline))
-        {
-            var map = titleToScript != null ? new Dictionary<string, string>(titleToScript, StringComparer.OrdinalIgnoreCase) : new();
-            foreach (var path in Directory.GetFiles(scriptsDir, "weapon_*.txt"))
-            {
-                string sn = Path.GetFileNameWithoutExtension(path);
-                string c = WeaponScriptService.ReadScriptFile(path).Replace("\r\n", "\n");
-                var pm = Regex.Match(c, @"""printname""\s+""([^""]*)""");
-                string d = pm.Success ? pm.Groups[1].Value.TrimStart('#') : sn;
-                if (!map.ContainsKey(d.Replace("_", " "))) map[d.Replace("_", " ")] = sn;
-            }
-            return Tools.WikiTableConverter.ConvertSummaryPage(input, scriptsDir, map);
-        }
-        return Tools.WikiTableConverter.Convert(input, scriptsDir);
     }
 
     private static async Task<bool> EnsureLogin(string user, string pw, Label status)
@@ -541,37 +517,5 @@ public partial class Form1
         lastWikiPw = pw;
         status.Text = "Logged in";
         return true;
-    }
-
-    private static async Task<Dictionary<string, string>?> BuildTitleToScriptMap()
-    {
-        try
-        {
-            string? idx = await WikiApiService.GetPageSourceAsync("Weapon Script Name");
-            if (idx == null) return null;
-            idx = idx.Replace("\r\n", "\n").Replace('\r', '\n');
-            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (Match m in Regex.Matches(idx, @"\|\s*(weapon_[^\s|]+)\s*\n\|\s*\[\[([^\]]+)\]\]"))
-                map[m.Groups[2].Value.Trim()] = m.Groups[1].Value;
-            return map;
-        }
-        catch { return null; }
-    }
-
-    private static List<string> ExtractWeaponLinks(string pageSource, Dictionary<string, string>? titleToScript)
-    {
-        if (titleToScript == null || titleToScript.Count == 0) return new();
-        var links = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (Match m in Regex.Matches(pageSource, @"\[\[([^\]|:#<>]+)\]\]"))
-            if (titleToScript.ContainsKey(m.Groups[1].Value.Trim()))
-                links.Add(m.Groups[1].Value.Trim());
-        return links.OrderBy(x => x).ToList();
-    }
-
-    private static void SaveToWikiDir(string fileName, string content)
-    {
-        string dir = Path.Combine(AppContext.BaseDirectory, "wiki");
-        Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, fileName), content);
     }
 }
