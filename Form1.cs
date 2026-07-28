@@ -604,6 +604,90 @@ public partial class Form1 : Form
     #endregion
     #region 复制
 
+    private void CopyLeftToRight(object sender, EventArgs e)
+    {
+        if (currentWeaponLeft != null && currentWeaponRight != null)
+        {
+            LogService.Debug($"Copy L>R: {currentWeaponLeft.ScriptName} -> {currentWeaponRight.ScriptName}");
+            PushUndo();
+            var temp = new WeaponData();
+            SaveControlsToWeapon(temp, true);
+            LoadWeaponToControls(temp, false);
+            UpdateAllDamage();
+            pnlSpread.Invalidate();
+            pnlRecoil.Invalidate();
+        }
+    }
+
+    private void CopyRightToLeft(object sender, EventArgs e)
+    {
+        if (currentWeaponRight != null && currentWeaponLeft != null)
+        {
+            LogService.Debug($"Copy R>L: {currentWeaponRight.ScriptName} -> {currentWeaponLeft.ScriptName}");
+            PushUndo();
+            var temp = new WeaponData();
+            SaveControlsToWeapon(temp, false);
+            LoadWeaponToControls(temp, true);
+            UpdateAllDamage();
+            pnlSpread.Invalidate();
+            pnlRecoil.Invalidate();
+        }
+    }
+
+    //不拷贝ScriptName和PrintName防止覆盖武器身份
+    private static void CopyWeaponDataFields(WeaponData src, WeaponData dst)
+    {
+        dst.DamageHeadMultiplier = src.DamageHeadMultiplier;
+        dst.DamageChestMultiplier = src.DamageChestMultiplier;
+        dst.DamageStomachMultiplier = src.DamageStomachMultiplier;
+        dst.DamageLegMultiplier = src.DamageLegMultiplier;
+        dst.DamageArmMultiplier = src.DamageArmMultiplier;
+        dst.BulletSpread = src.BulletSpread;
+        dst.BulletSpreadDegreesIronsighted = src.BulletSpreadDegreesIronsighted;
+        dst.BulletSpreadDegreesBipod = src.BulletSpreadDegreesBipod;
+        dst.BulletSpreadDegreesBipodIronsighted = src.BulletSpreadDegreesBipodIronsighted;
+        dst.ViewSlideRecoilUp = src.ViewSlideRecoilUp;
+        dst.ViewSlideRecoilRight = src.ViewSlideRecoilRight;
+        dst.ViewSlideRecoilIronsightUp = src.ViewSlideRecoilIronsightUp;
+        dst.ViewSlideRecoilIronsightRight = src.ViewSlideRecoilIronsightRight;
+        dst.FireModes = src.FireModes;
+        dst.FireRate = src.FireRate;
+        dst.RangeModifier = src.RangeModifier;
+        dst.ClipSize = src.ClipSize;
+        dst.DefaultClip = src.DefaultClip;
+        dst.ExtraBulletChamber = src.ExtraBulletChamber;
+        dst.BulletsPerShot = src.BulletsPerShot;
+        dst.SecondaryFireRate = src.SecondaryFireRate;
+        dst.IronSight = src.IronSight;
+        dst.IronsightSpeedScale = src.IronsightSpeedScale;
+        dst.Weight = src.Weight;
+        dst.ZMBuyPrice = src.ZMBuyPrice;
+        dst.ZMWeight = src.ZMWeight;
+        dst.MetalPenetrationDepth = src.MetalPenetrationDepth;
+        dst.GlassPenetrationDepth = src.GlassPenetrationDepth;
+        dst.ConcretePenetrationDepth = src.ConcretePenetrationDepth;
+        dst.WoodPenetrationDepth = src.WoodPenetrationDepth;
+        dst.OtherPenetrationDepth = src.OtherPenetrationDepth;
+        dst.MetalDamageModifier = src.MetalDamageModifier;
+        dst.GlassDamageModifier = src.GlassDamageModifier;
+        dst.ConcreteDamageModifier = src.ConcreteDamageModifier;
+        dst.WoodDamageModifier = src.WoodDamageModifier;
+        dst.OtherDamageModifier = src.OtherDamageModifier;
+        dst.CrouchSpreadMultiplier = src.CrouchSpreadMultiplier;
+        dst.ProneSpreadMultiplier = src.ProneSpreadMultiplier;
+        dst.StandMoveSpreadMultiplier = src.StandMoveSpreadMultiplier;
+        dst.SneakMoveSpreadMultiplier = src.SneakMoveSpreadMultiplier;
+        dst.CrouchMoveSpreadMultiplier = src.CrouchMoveSpreadMultiplier;
+        dst.JumpSpreadMultiplier = src.JumpSpreadMultiplier;
+        dst.DamageGeneric = src.DamageGeneric;
+        dst.DovBulletSpreadDegreesBipod = src.DovBulletSpreadDegreesBipod;
+        dst.DovBulletSpreadDegreesBipodIronsighted = src.DovBulletSpreadDegreesBipodIronsighted;
+        dst.DovFireModes = src.DovFireModes;
+    }
+
+    #endregion
+    #region 备选值联动同步
+
     private static WeaponData CloneTopLevelFields(WeaponData src)
     {
         var dst = new WeaponData();
@@ -703,96 +787,15 @@ public partial class Form1 : Form
             setZombie(w, newVal);
     }
 
-    private static void SyncStrIfMatch(string? oldVal, string? newVal,
-        string? dov, string? zombie,
-        Action<WeaponData, string?> setDov, Action<WeaponData, string?> setZombie,
+    private static void SyncStrIfMatch(string oldVal, string newVal,
+        string dov, string zombie,
+        Action<WeaponData, string> setDov, Action<WeaponData, string> setZombie,
         WeaponData w)
     {
         if (!string.IsNullOrEmpty(dov) && string.Equals(dov, oldVal, StringComparison.OrdinalIgnoreCase))
             setDov(w, newVal);
         if (!string.IsNullOrEmpty(zombie) && string.Equals(zombie, oldVal, StringComparison.OrdinalIgnoreCase))
             setZombie(w, newVal);
-    }
-
-    private void CopyLeftToRight(object sender, EventArgs e)
-    {
-        if (currentWeaponLeft != null && currentWeaponRight != null)
-        {
-            LogService.Debug($"Copy L>R: {currentWeaponLeft.ScriptName} -> {currentWeaponRight.ScriptName}");
-            PushUndo();
-            var temp = new WeaponData();
-            SaveControlsToWeapon(temp, true);
-            LoadWeaponToControls(temp, false);
-            UpdateAllDamage();
-            pnlSpread.Invalidate();
-            pnlRecoil.Invalidate();
-        }
-    }
-
-    private void CopyRightToLeft(object sender, EventArgs e)
-    {
-        if (currentWeaponRight != null && currentWeaponLeft != null)
-        {
-            LogService.Debug($"Copy R>L: {currentWeaponRight.ScriptName} -> {currentWeaponLeft.ScriptName}");
-            PushUndo();
-            var temp = new WeaponData();
-            SaveControlsToWeapon(temp, false);
-            LoadWeaponToControls(temp, true);
-            UpdateAllDamage();
-            pnlSpread.Invalidate();
-            pnlRecoil.Invalidate();
-        }
-    }
-
-    //不拷贝ScriptName和PrintName防止覆盖武器身份
-    private static void CopyWeaponDataFields(WeaponData src, WeaponData dst)
-    {
-        dst.DamageHeadMultiplier = src.DamageHeadMultiplier;
-        dst.DamageChestMultiplier = src.DamageChestMultiplier;
-        dst.DamageStomachMultiplier = src.DamageStomachMultiplier;
-        dst.DamageLegMultiplier = src.DamageLegMultiplier;
-        dst.DamageArmMultiplier = src.DamageArmMultiplier;
-        dst.BulletSpread = src.BulletSpread;
-        dst.BulletSpreadDegreesIronsighted = src.BulletSpreadDegreesIronsighted;
-        dst.BulletSpreadDegreesBipod = src.BulletSpreadDegreesBipod;
-        dst.BulletSpreadDegreesBipodIronsighted = src.BulletSpreadDegreesBipodIronsighted;
-        dst.ViewSlideRecoilUp = src.ViewSlideRecoilUp;
-        dst.ViewSlideRecoilRight = src.ViewSlideRecoilRight;
-        dst.ViewSlideRecoilIronsightUp = src.ViewSlideRecoilIronsightUp;
-        dst.ViewSlideRecoilIronsightRight = src.ViewSlideRecoilIronsightRight;
-        dst.FireModes = src.FireModes;
-        dst.FireRate = src.FireRate;
-        dst.RangeModifier = src.RangeModifier;
-        dst.ClipSize = src.ClipSize;
-        dst.DefaultClip = src.DefaultClip;
-        dst.ExtraBulletChamber = src.ExtraBulletChamber;
-        dst.BulletsPerShot = src.BulletsPerShot;
-        dst.SecondaryFireRate = src.SecondaryFireRate;
-        dst.IronSight = src.IronSight;
-        dst.IronsightSpeedScale = src.IronsightSpeedScale;
-        dst.Weight = src.Weight;
-        dst.ZMBuyPrice = src.ZMBuyPrice;
-        dst.ZMWeight = src.ZMWeight;
-        dst.MetalPenetrationDepth = src.MetalPenetrationDepth;
-        dst.GlassPenetrationDepth = src.GlassPenetrationDepth;
-        dst.ConcretePenetrationDepth = src.ConcretePenetrationDepth;
-        dst.WoodPenetrationDepth = src.WoodPenetrationDepth;
-        dst.OtherPenetrationDepth = src.OtherPenetrationDepth;
-        dst.MetalDamageModifier = src.MetalDamageModifier;
-        dst.GlassDamageModifier = src.GlassDamageModifier;
-        dst.ConcreteDamageModifier = src.ConcreteDamageModifier;
-        dst.WoodDamageModifier = src.WoodDamageModifier;
-        dst.OtherDamageModifier = src.OtherDamageModifier;
-        dst.CrouchSpreadMultiplier = src.CrouchSpreadMultiplier;
-        dst.ProneSpreadMultiplier = src.ProneSpreadMultiplier;
-        dst.StandMoveSpreadMultiplier = src.StandMoveSpreadMultiplier;
-        dst.SneakMoveSpreadMultiplier = src.SneakMoveSpreadMultiplier;
-        dst.CrouchMoveSpreadMultiplier = src.CrouchMoveSpreadMultiplier;
-        dst.JumpSpreadMultiplier = src.JumpSpreadMultiplier;
-        dst.DamageGeneric = src.DamageGeneric;
-        dst.DovBulletSpreadDegreesBipod = src.DovBulletSpreadDegreesBipod;
-        dst.DovBulletSpreadDegreesBipodIronsighted = src.DovBulletSpreadDegreesBipodIronsighted;
-        dst.DovFireModes = src.DovFireModes;
     }
 
     #endregion
@@ -805,10 +808,7 @@ public partial class Form1 : Form
             null, control, new object[] { true });
     }
 
-    #nullable enable
-    //放下面也会爆warn 还有虽然拆分了 下面这些还是没必要单独建个文件
-
-    private void PnlSpread_Paint(object? sender, PaintEventArgs e)
+    private void PnlSpread_Paint(object sender, PaintEventArgs e)
     {
         bool leftAds = nudIronSightL.Value != 0;
         bool rightAds = nudIronSightR.Value != 0;
@@ -821,7 +821,7 @@ public partial class Form1 : Form
             currentWeaponRight != null && rightAds ? (double)nudBipodAdsSpreadR.Value : 0);
     }
 
-    private void PnlRecoil_Paint(object? sender, PaintEventArgs e)
+    private void PnlRecoil_Paint(object sender, PaintEventArgs e)
     {
         bool leftAds = nudIronSightL.Value != 0;
         bool rightAds = nudIronSightR.Value != 0;
