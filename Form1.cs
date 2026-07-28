@@ -604,6 +604,116 @@ public partial class Form1 : Form
     #endregion
     #region 复制
 
+    private static WeaponData CloneTopLevelFields(WeaponData src)
+    {
+        var dst = new WeaponData();
+        CopyWeaponDataFields(src, dst);
+        return dst;
+    }
+
+    //保存顶层值后将备选值中与旧顶层值一致的字段同步到新顶层值
+    private static void SyncAltStatsToMatchTopLevel(WeaponData oldW, WeaponData newW)
+    {
+        //double
+        SyncDoubleIfMatch(oldW.DamageGeneric, newW.DamageGeneric, newW.DovDamageGeneric, newW.ZombieDamageGeneric,
+            (w, v) => w.DovDamageGeneric = v, (w, v) => w.ZombieDamageGeneric = v, newW);
+        SyncDoubleIfMatch(oldW.DamageHeadMultiplier, newW.DamageHeadMultiplier, newW.DovDamageHeadMultiplier, newW.ZombieDamageHeadMultiplier,
+            (w, v) => w.DovDamageHeadMultiplier = v, (w, v) => w.ZombieDamageHeadMultiplier = v, newW);
+        SyncDoubleIfMatch(oldW.DamageChestMultiplier, newW.DamageChestMultiplier, newW.DovDamageChestMultiplier, newW.ZombieDamageChestMultiplier,
+            (w, v) => w.DovDamageChestMultiplier = v, (w, v) => w.ZombieDamageChestMultiplier = v, newW);
+        SyncDoubleIfMatch(oldW.DamageStomachMultiplier, newW.DamageStomachMultiplier, newW.DovDamageStomachMultiplier, newW.ZombieDamageStomachMultiplier,
+            (w, v) => w.DovDamageStomachMultiplier = v, (w, v) => w.ZombieDamageStomachMultiplier = v, newW);
+        SyncDoubleIfMatch(oldW.DamageLegMultiplier, newW.DamageLegMultiplier, newW.DovDamageLegMultiplier, newW.ZombieDamageLegMultiplier,
+            (w, v) => w.DovDamageLegMultiplier = v, (w, v) => w.ZombieDamageLegMultiplier = v, newW);
+        SyncDoubleIfMatch(oldW.DamageArmMultiplier, newW.DamageArmMultiplier, newW.DovDamageArmMultiplier, newW.ZombieDamageArmMultiplier,
+            (w, v) => w.DovDamageArmMultiplier = v, (w, v) => w.ZombieDamageArmMultiplier = v, newW);
+        SyncDoubleIfMatch(oldW.BulletSpread, newW.BulletSpread, newW.DovBulletSpread, newW.ZombieBulletSpread,
+            (w, v) => w.DovBulletSpread = v, (w, v) => w.ZombieBulletSpread = v, newW);
+        SyncDoubleIfMatch(oldW.BulletSpreadDegreesIronsighted, newW.BulletSpreadDegreesIronsighted, newW.DovBulletSpreadDegreesIronsighted, newW.ZombieBulletSpreadDegreesIronsighted,
+            (w, v) => w.DovBulletSpreadDegreesIronsighted = v, (w, v) => w.ZombieBulletSpreadDegreesIronsighted = v, newW);
+        SyncDoubleIfMatch(oldW.BulletSpreadDegreesBipod, newW.BulletSpreadDegreesBipod, newW.DovBulletSpreadDegreesBipod, newW.ZombieBulletSpreadDegreesBipod,
+            (w, v) => w.DovBulletSpreadDegreesBipod = v, (w, v) => w.ZombieBulletSpreadDegreesBipod = v, newW);
+        SyncDoubleIfMatch(oldW.BulletSpreadDegreesBipodIronsighted, newW.BulletSpreadDegreesBipodIronsighted, newW.DovBulletSpreadDegreesBipodIronsighted, newW.ZombieBulletSpreadDegreesBipodIronsighted,
+            (w, v) => w.DovBulletSpreadDegreesBipodIronsighted = v, (w, v) => w.ZombieBulletSpreadDegreesBipodIronsighted = v, newW);
+        SyncDoubleIfMatch(oldW.RangeModifier, newW.RangeModifier, newW.DovRangeModifier, newW.ZombieRangeModifier,
+            (w, v) => w.DovRangeModifier = v, (w, v) => w.ZombieRangeModifier = v, newW);
+        SyncDoubleIfMatch(oldW.IronsightSpeedScale, newW.IronsightSpeedScale, newW.DovIronsightSpeedScale, newW.ZombieIronsightSpeedScale,
+            (w, v) => w.DovIronsightSpeedScale = v, (w, v) => w.ZombieIronsightSpeedScale = v, newW);
+        SyncDoubleIfMatch(oldW.CrouchSpreadMultiplier, newW.CrouchSpreadMultiplier, newW.DovCrouchSpreadMultiplier, newW.ZombieCrouchSpreadMultiplier,
+            (w, v) => w.DovCrouchSpreadMultiplier = v, (w, v) => w.ZombieCrouchSpreadMultiplier = v, newW);
+        SyncDoubleIfMatch(oldW.ProneSpreadMultiplier, newW.ProneSpreadMultiplier, newW.DovProneSpreadMultiplier, newW.ZombieProneSpreadMultiplier,
+            (w, v) => w.DovProneSpreadMultiplier = v, (w, v) => w.ZombieProneSpreadMultiplier = v, newW);
+        SyncDoubleIfMatch(oldW.StandMoveSpreadMultiplier, newW.StandMoveSpreadMultiplier, newW.DovStandMoveSpreadMultiplier, newW.ZombieStandMoveSpreadMultiplier,
+            (w, v) => w.DovStandMoveSpreadMultiplier = v, (w, v) => w.ZombieStandMoveSpreadMultiplier = v, newW);
+        SyncDoubleIfMatch(oldW.SneakMoveSpreadMultiplier, newW.SneakMoveSpreadMultiplier, newW.DovSneakMoveSpreadMultiplier, newW.ZombieSneakMoveSpreadMultiplier,
+            (w, v) => w.DovSneakMoveSpreadMultiplier = v, (w, v) => w.ZombieSneakMoveSpreadMultiplier = v, newW);
+        SyncDoubleIfMatch(oldW.CrouchMoveSpreadMultiplier, newW.CrouchMoveSpreadMultiplier, newW.DovCrouchMoveSpreadMultiplier, newW.ZombieCrouchMoveSpreadMultiplier,
+            (w, v) => w.DovCrouchMoveSpreadMultiplier = v, (w, v) => w.ZombieCrouchMoveSpreadMultiplier = v, newW);
+        SyncDoubleIfMatch(oldW.JumpSpreadMultiplier, newW.JumpSpreadMultiplier, newW.DovJumpSpreadMultiplier, newW.ZombieJumpSpreadMultiplier,
+            (w, v) => w.DovJumpSpreadMultiplier = v, (w, v) => w.ZombieJumpSpreadMultiplier = v, newW);
+        SyncDoubleIfMatch(oldW.ViewSlideRecoilUp, newW.ViewSlideRecoilUp, newW.DovViewSlideRecoilUp, newW.ZombieViewSlideRecoilUp,
+            (w, v) => w.DovViewSlideRecoilUp = v, (w, v) => w.ZombieViewSlideRecoilUp = v, newW);
+        SyncDoubleIfMatch(oldW.ViewSlideRecoilRight, newW.ViewSlideRecoilRight, newW.DovViewSlideRecoilRight, newW.ZombieViewSlideRecoilRight,
+            (w, v) => w.DovViewSlideRecoilRight = v, (w, v) => w.ZombieViewSlideRecoilRight = v, newW);
+        SyncDoubleIfMatch(oldW.ViewSlideRecoilIronsightUp, newW.ViewSlideRecoilIronsightUp, newW.DovViewSlideRecoilIronsightUp, newW.ZombieViewSlideRecoilIronsightUp,
+            (w, v) => w.DovViewSlideRecoilIronsightUp = v, (w, v) => w.ZombieViewSlideRecoilIronsightUp = v, newW);
+        SyncDoubleIfMatch(oldW.ViewSlideRecoilIronsightRight, newW.ViewSlideRecoilIronsightRight, newW.DovViewSlideRecoilIronsightRight, newW.ZombieViewSlideRecoilIronsightRight,
+            (w, v) => w.DovViewSlideRecoilIronsightRight = v, (w, v) => w.ZombieViewSlideRecoilIronsightRight = v, newW);
+        SyncDoubleIfMatch(oldW.Weight, newW.Weight, newW.DovWeight, newW.ZombieWeight,
+            (w, v) => w.DovWeight = v, (w, v) => w.ZombieWeight = v, newW);
+        //int
+        SyncIntIfMatch(oldW.FireRate, newW.FireRate, newW.DovFireRate, newW.ZombieFireRate,
+            (w, v) => w.DovFireRate = v, (w, v) => w.ZombieFireRate = v, newW);
+        SyncIntIfMatch(oldW.ExtraBulletChamber, newW.ExtraBulletChamber, newW.DovExtraBulletChamber, newW.ZombieExtraBulletChamber,
+            (w, v) => w.DovExtraBulletChamber = v, (w, v) => w.ZombieExtraBulletChamber = v, newW);
+        SyncIntIfMatch(oldW.SecondaryFireRate, newW.SecondaryFireRate, newW.DovSecondaryFireRate, newW.ZombieSecondaryFireRate,
+            (w, v) => w.DovSecondaryFireRate = v, (w, v) => w.ZombieSecondaryFireRate = v, newW);
+        SyncIntIfMatch(oldW.IronSight, newW.IronSight, newW.DovIronSight, newW.ZombieIronSight,
+            (w, v) => w.DovIronSight = v, (w, v) => w.ZombieIronSight = v, newW);
+        SyncIntIfMatch(oldW.DefaultClip, newW.DefaultClip, newW.DovDefaultClip, newW.ZombieDefaultClip,
+            (w, v) => w.DovDefaultClip = v, (w, v) => w.ZombieDefaultClip = v, newW);
+        SyncIntIfMatch(oldW.BulletsPerShot, newW.BulletsPerShot, newW.DovBulletsPerShot, newW.ZombieBulletsPerShot,
+            (w, v) => w.DovBulletsPerShot = v, (w, v) => w.ZombieBulletsPerShot = v, newW);
+        //string
+        SyncStrIfMatch(oldW.ClipSize, newW.ClipSize, newW.DovClipSize, newW.ZombieClipSize,
+            (w, v) => w.DovClipSize = v, (w, v) => w.ZombieClipSize = v, newW);
+        SyncStrIfMatch(oldW.FireModes, newW.FireModes, newW.DovFireModes, newW.ZombieFireModes,
+            (w, v) => w.DovFireModes = v, (w, v) => w.ZombieFireModes = v, newW);
+    }
+
+    private static void SyncDoubleIfMatch(double? oldVal, double? newVal,
+        double? dov, double? zombie,
+        Action<WeaponData, double?> setDov, Action<WeaponData, double?> setZombie,
+        WeaponData w)
+    {
+        if (dov.HasValue && oldVal.HasValue && Math.Abs(dov.Value - oldVal.Value) < 0.001)
+            setDov(w, newVal);
+        if (zombie.HasValue && oldVal.HasValue && Math.Abs(zombie.Value - oldVal.Value) < 0.001)
+            setZombie(w, newVal);
+    }
+
+    private static void SyncIntIfMatch(int? oldVal, int? newVal,
+        int? dov, int? zombie,
+        Action<WeaponData, int?> setDov, Action<WeaponData, int?> setZombie,
+        WeaponData w)
+    {
+        if (dov.HasValue && oldVal.HasValue && dov.Value == oldVal.Value)
+            setDov(w, newVal);
+        if (zombie.HasValue && oldVal.HasValue && zombie.Value == oldVal.Value)
+            setZombie(w, newVal);
+    }
+
+    private static void SyncStrIfMatch(string? oldVal, string? newVal,
+        string? dov, string? zombie,
+        Action<WeaponData, string?> setDov, Action<WeaponData, string?> setZombie,
+        WeaponData w)
+    {
+        if (!string.IsNullOrEmpty(dov) && string.Equals(dov, oldVal, StringComparison.OrdinalIgnoreCase))
+            setDov(w, newVal);
+        if (!string.IsNullOrEmpty(zombie) && string.Equals(zombie, oldVal, StringComparison.OrdinalIgnoreCase))
+            setZombie(w, newVal);
+    }
+
     private void CopyLeftToRight(object sender, EventArgs e)
     {
         if (currentWeaponLeft != null && currentWeaponRight != null)
@@ -657,6 +767,8 @@ public partial class Form1 : Form
         dst.DefaultClip = src.DefaultClip;
         dst.ExtraBulletChamber = src.ExtraBulletChamber;
         dst.BulletsPerShot = src.BulletsPerShot;
+        dst.SecondaryFireRate = src.SecondaryFireRate;
+        dst.IronSight = src.IronSight;
         dst.IronsightSpeedScale = src.IronsightSpeedScale;
         dst.Weight = src.Weight;
         dst.ZMBuyPrice = src.ZMBuyPrice;

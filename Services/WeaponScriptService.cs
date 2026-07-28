@@ -95,7 +95,6 @@ public static class WeaponScriptService
         ["WoodDamageModifier"] = "WoodDamageModifier",
         ["OtherDamageModifier"] = "OtherDamageModifier",
         ["NearwallDistance"] = "NearwallDistance",
-        ["primary_ammo"] = "primary_ammo",
         ["clip_size"] = "clip_size",
         ["SecondaryFireRate"] = "SecondaryFireRate",
         ["IronSight"] = "IronSight",
@@ -343,7 +342,13 @@ public static class WeaponScriptService
                 foreach (var map in CsvToScriptMap)
                 {
                     string? csvValue = GetFieldValue(weapon, map.Key, mode);
-                    if (csvValue == null) continue;
+                    if (csvValue == null)
+                    {
+                        string? existing = ReadAltStatBlockValue(content, map.Value, mode);
+                        if (!string.IsNullOrEmpty(existing))
+                            content = WriteAltStatBlockValue(content, map.Value, "", mode);
+                        continue;
+                    }
                     content = WriteAltStatBlockValue(content, map.Value, csvValue, mode);
                 }
                 string? ru = GetFieldValue(weapon, "ViewSlideRecoil.Up", mode);
@@ -516,9 +521,21 @@ public static class WeaponScriptService
         var blockMatch = Regex.Match(content, $@"{Regex.Escape(blockName)}\s*\{{([^}}]*(?:\{{[^}}]*\}}[^}}]*)*)\}}", RegexOptions.Singleline);
         if (!blockMatch.Success) return content;
         string block = blockMatch.Groups[1].Value;
-        string newBlock = ReplaceKeyValue(block, key, value);
-        if (newBlock == block) return content;
-        return content.Replace(block, newBlock);
+
+        // 先删除块内所有同名键（处理重复和空值删除）
+        string deletePattern = $@"^[ \t]*""{Regex.Escape(key)}""\s+""[^""]*""\s*(?://.*)?(\r?\n)?";
+        block = Regex.Replace(block, deletePattern, "", RegexOptions.Multiline);
+
+        if (!string.IsNullOrEmpty(value))
+        {
+            // 在最后一个 } 之前追加
+            int insertPos = block.LastIndexOf('}');
+            if (insertPos < 0) insertPos = block.Length;
+            block = block.Insert(insertPos, $"\n\t\"{key}\"\t\t\t\t\"{value}\"\n");
+        }
+
+        if (block == blockMatch.Groups[1].Value) return content;
+        return content.Replace(blockMatch.Groups[1].Value, block);
         }
         catch (Exception ex)
         {
@@ -679,6 +696,8 @@ public static class WeaponScriptService
                 w.DovViewSlideRecoilIronsightRight = ParseRecoilBlockInAltStat(block, "ViewSlideRecoilIronsight", "Right");
                 TrySetInt(block, "SecondaryFireRate", out int? i8); w.DovSecondaryFireRate = i8;
                 TrySetInt(block, "IronSight", out int? i9); w.DovIronSight = i9;
+                TrySetInt(block, "default_clip", out int? id0); w.DovDefaultClip = id0;
+                TrySetInt(block, "bullets_per_shot", out int? id1); w.DovBulletsPerShot = id1;
             }
             else
             {
@@ -731,6 +750,8 @@ public static class WeaponScriptService
                 w.ZombieViewSlideRecoilIronsightRight = ParseRecoilBlockInAltStat(block, "ViewSlideRecoilIronsight", "Right");
                 TrySetInt(block, "SecondaryFireRate", out int? i8); w.ZombieSecondaryFireRate = i8;
                 TrySetInt(block, "IronSight", out int? i9); w.ZombieIronSight = i9;
+                TrySetInt(block, "default_clip", out int? iz0); w.ZombieDefaultClip = iz0;
+                TrySetInt(block, "bullets_per_shot", out int? iz1); w.ZombieBulletsPerShot = iz1;
             }
         }
         catch (Exception ex)
@@ -746,9 +767,9 @@ public static class WeaponScriptService
     private static string? GetFieldValue(WeaponData w, string h, AltStatMode? mode) => h switch
     {
         "SupportedFireModes" => AltS(w.FireModes, w.DovFireModes, w.ZombieFireModes, mode),
-        "default_clip" => w.DefaultClip?.ToString(),
+        "default_clip" => AltI(w.DefaultClip, w.DovDefaultClip, w.ZombieDefaultClip, mode),
         "ExtraBulletChamber" => AltI(w.ExtraBulletChamber, w.DovExtraBulletChamber, w.ZombieExtraBulletChamber, mode),
-        "bullets_per_shot" => w.BulletsPerShot?.ToString(),
+        "bullets_per_shot" => AltI(w.BulletsPerShot, w.DovBulletsPerShot, w.ZombieBulletsPerShot, mode),
         "FireRate" => AltI(w.FireRate, w.DovFireRate, w.ZombieFireRate, mode),
         "BulletSpreadDegrees" => AltF(w.BulletSpread, w.DovBulletSpread, w.ZombieBulletSpread, mode),
         "BulletSpreadDegreesIronsighted" => AltF(w.BulletSpreadDegreesIronsighted, w.DovBulletSpreadDegreesIronsighted, w.ZombieBulletSpreadDegreesIronsighted, mode),
@@ -793,19 +814,19 @@ public static class WeaponScriptService
         "ViewSlideRecoil.Right" => AltF(w.ViewSlideRecoilRight, w.DovViewSlideRecoilRight, w.ZombieViewSlideRecoilRight, mode),
         "ViewSlideRecoilIronsight.Up" => AltF(w.ViewSlideRecoilIronsightUp, w.DovViewSlideRecoilIronsightUp, w.ZombieViewSlideRecoilIronsightUp, mode),
         "ViewSlideRecoilIronsight.Right" => AltF(w.ViewSlideRecoilIronsightRight, w.DovViewSlideRecoilIronsightRight, w.ZombieViewSlideRecoilIronsightRight, mode),
-        "primary_ammo" => w.PrimaryAmmo,
+        "primary_ammo" => mode != null ? null : w.PrimaryAmmo,
         "clip_size" => AltS(w.ClipSize, w.DovClipSize, w.ZombieClipSize, mode),
         "SecondaryFireRate" => AltI(w.SecondaryFireRate, w.DovSecondaryFireRate, w.ZombieSecondaryFireRate, mode),
         "IronSight" => AltI(w.IronSight, w.DovIronSight, w.ZombieIronSight, mode),
         _ => null
     };
 
-    //从顶层/Dov/Zombie中按mode选值 string版本
+    //string版本 从顶层/Dov/Zombie中按mode选值
     private static string? AltS(string? top, string? dov, string? zombie, AltStatMode? mode) => mode switch
     {
         null => top,
-        AltStatMode.Dov => string.IsNullOrEmpty(dov) ? null : dov,
-        AltStatMode.Zombie => string.IsNullOrEmpty(zombie) ? null : zombie,
+        AltStatMode.Dov => string.IsNullOrEmpty(dov) || string.Equals(dov, top, StringComparison.OrdinalIgnoreCase) ? null : dov,
+        AltStatMode.Zombie => string.IsNullOrEmpty(zombie) || string.Equals(zombie, top, StringComparison.OrdinalIgnoreCase) ? null : zombie,
         _ => null
     };
 
@@ -819,6 +840,8 @@ public static class WeaponScriptService
             AltStatMode.Zombie => zombie,
             _ => null
         };
+        double topVal = top ?? 0.0;
+        if (mode != null && v.HasValue && Math.Abs(v.Value - topVal) < 0.001) return null;
         return F(v);
     }
 
@@ -832,6 +855,8 @@ public static class WeaponScriptService
             AltStatMode.Zombie => zombie,
             _ => null
         };
+        int topVal = top ?? 0;
+        if (mode != null && v.HasValue && v.Value == topVal) return null;
         return v?.ToString();
     }
 

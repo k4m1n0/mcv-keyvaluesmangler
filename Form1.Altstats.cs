@@ -14,17 +14,10 @@ public partial class Form1
         {
             bool leftHas = WeaponHasAltStats(currentWeaponLeft, mode);
             bool rightHas = WeaponHasAltStats(currentWeaponRight, mode);
-            if (!leftHas && !rightHas)
-            {
-                LogService.Debug($"ToggleAltStats: {mode} - no weapon has alt stats, abort");
-                return;
-            }
 
-            //如果正在显示同一种模式则关闭 否则切换到新模式
             if (showingAltStats && currentAltStatMode == mode)
             {
                 LogService.Info($"ToggleAltStats: exiting {mode} mode");
-                //退出备选模式前检测是否有未保存修改
                 if ((currentWeaponLeft != null && HasUnsavedChanges(true))
                     || (currentWeaponRight != null && HasUnsavedChanges(false)))
                 {
@@ -42,7 +35,6 @@ public partial class Form1
             else
             {
                 LogService.Info($"ToggleAltStats: entering {mode} mode");
-                //进入备选模式前检测普通模式下是否有未保存修改
                 if ((currentWeaponLeft != null && HasUnsavedChanges(true))
                     || (currentWeaponRight != null && HasUnsavedChanges(false)))
                 {
@@ -55,7 +47,9 @@ public partial class Form1
                 HighlightAltStatButton(mode);
                 updatingControls = true;
                 if (leftHas) { LoadAltStatsToControls(true, mode); SetAltStatReadonly(true, mode); }
+                else { LoadWeaponToControls(currentWeaponLeft!, true); SetAltStatReadonly(true, mode); }
                 if (rightHas) { LoadAltStatsToControls(false, mode); SetAltStatReadonly(false, mode); }
+                else if (!ReferenceEquals(currentWeaponLeft, currentWeaponRight)) { LoadWeaponToControls(currentWeaponRight!, false); SetAltStatReadonly(false, mode); }
                 updatingControls = false;
                 StoreSnapshot();
             }
@@ -74,8 +68,20 @@ public partial class Form1
         {
             if (c is Button btn)
             {
-                if (btn.Text == "DoV") btn.BackColor = mode == WeaponScriptService.AltStatMode.Dov ? Color.LightGreen : SystemColors.Control;
-                else if (btn.Text == "Zmb") btn.BackColor = mode == WeaponScriptService.AltStatMode.Zombie ? Color.LightGreen : SystemColors.Control;
+                if (btn.Text == "DoV")
+                {
+                    bool leftHas = WeaponHasAltStats(currentWeaponLeft, WeaponScriptService.AltStatMode.Dov);
+                    bool rightHas = WeaponHasAltStats(currentWeaponRight, WeaponScriptService.AltStatMode.Dov);
+                    bool active = mode == WeaponScriptService.AltStatMode.Dov;
+                    btn.BackColor = active ? (!leftHas && !rightHas ? Color.Yellow : Color.LightGreen) : SystemColors.Control;
+                }
+                else if (btn.Text == "Zmb")
+                {
+                    bool leftHas = WeaponHasAltStats(currentWeaponLeft, WeaponScriptService.AltStatMode.Zombie);
+                    bool rightHas = WeaponHasAltStats(currentWeaponRight, WeaponScriptService.AltStatMode.Zombie);
+                    bool active = mode == WeaponScriptService.AltStatMode.Zombie;
+                    btn.BackColor = active ? (!leftHas && !rightHas ? Color.Yellow : Color.LightGreen) : SystemColors.Control;
+                }
             }
         }
     }

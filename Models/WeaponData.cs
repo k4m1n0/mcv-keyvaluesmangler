@@ -19,6 +19,10 @@ public class WeaponData
 
     [Name("default_clip")]
     public int? DefaultClip { get; set; }
+    [Name("dov_default_clip")]
+    public int? DovDefaultClip { get; set; }
+    [Name("zombie_default_clip")]
+    public int? ZombieDefaultClip { get; set; }
 
     [Name("SecondaryFireRate")]
     public int? SecondaryFireRate { get; set; }
@@ -36,6 +40,10 @@ public class WeaponData
 
     [Name("bullets_per_shot")]
     public int? BulletsPerShot { get; set; }
+    [Name("dov_bullets_per_shot")]
+    public int? DovBulletsPerShot { get; set; }
+    [Name("zombie_bullets_per_shot")]
+    public int? ZombieBulletsPerShot { get; set; }
 
     [Name("FireRate")]
     public int? FireRate { get; set; }

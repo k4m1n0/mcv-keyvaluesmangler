@@ -31,7 +31,15 @@ public partial class Form1
             if (!isRapid)
             {
                 bool wasRapid = _rapidStartLeft != null;
-                if (currentWeaponLeft != null && HasUnsavedChanges(true))
+                if (showingAltStats)
+                {
+                    bool focusLeft = lastFocusLeft;
+                    if (focusLeft && currentWeaponLeft != null && WeaponHasAltStats(currentWeaponLeft, currentAltStatMode))
+                        SyncAltStatFields(currentWeaponLeft, currentAltStatMode);
+                    else if (!focusLeft && currentWeaponRight != null && WeaponHasAltStats(currentWeaponRight, currentAltStatMode))
+                        SyncAltStatFields(currentWeaponRight, currentAltStatMode);
+                }
+                else if (currentWeaponLeft != null && HasUnsavedChanges(true))
                 {
                     var result = MessageBox.Show("Unsaved changes to left weapon. Discard?",
                         "Unsaved Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
@@ -53,7 +61,6 @@ public partial class Form1
             {
                 currentWeaponLeft = w;
                 LoadWeaponToControls(w, true);
-                StoreSnapshot();
                 UpdateAllDamage();
                 pnlSpread.Invalidate();
                 pnlRecoil.Invalidate();
@@ -67,12 +74,18 @@ public partial class Form1
                     LoadAltStatsToControls(true, currentAltStatMode);
                     SetAltStatReadonly(true, currentAltStatMode);
                     updatingControls = false;
+                    HighlightAltStatButton(currentAltStatMode);
+                    StoreSnapshot();
                 }
                 if (showingAltStats && !WeaponHasAltStats(w, currentAltStatMode))
                 {
                     RestoreAllNudEnabled(true);
                     LoadWeaponToControls(w, true);
+                    HighlightAltStatButton(currentAltStatMode);
+                    StoreSnapshot();
                 }
+                if (!showingAltStats)
+                    StoreSnapshot();
             }
         }
         catch (Exception ex)
@@ -100,7 +113,15 @@ public partial class Form1
             if (!isRapid)
             {
                 bool wasRapid = _rapidStartRight != null;
-                if (currentWeaponRight != null && HasUnsavedChanges(false))
+                if (showingAltStats)
+                {
+                    bool focusLeft = lastFocusLeft;
+                    if (focusLeft && currentWeaponLeft != null && WeaponHasAltStats(currentWeaponLeft, currentAltStatMode))
+                        SyncAltStatFields(currentWeaponLeft, currentAltStatMode);
+                    else if (!focusLeft && currentWeaponRight != null && WeaponHasAltStats(currentWeaponRight, currentAltStatMode))
+                        SyncAltStatFields(currentWeaponRight, currentAltStatMode);
+                }
+                else if (currentWeaponRight != null && HasUnsavedChanges(false))
                 {
                     var result = MessageBox.Show("Unsaved changes to right weapon. Discard?",
                         "Unsaved Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
@@ -121,7 +142,6 @@ public partial class Form1
             {
                 currentWeaponRight = w;
                 LoadWeaponToControls(w, false);
-                StoreSnapshot();
                 UpdateAllDamage();
                 pnlSpread.Invalidate();
                 pnlRecoil.Invalidate();
@@ -135,12 +155,18 @@ public partial class Form1
                     LoadAltStatsToControls(false, currentAltStatMode);
                     SetAltStatReadonly(false, currentAltStatMode);
                     updatingControls = false;
+                    HighlightAltStatButton(currentAltStatMode);
+                    StoreSnapshot();
                 }
                 if (showingAltStats && !WeaponHasAltStats(w, currentAltStatMode))
                 {
                     RestoreAllNudEnabled(true);
                     LoadWeaponToControls(w, true);
+                    HighlightAltStatButton(currentAltStatMode);
+                    StoreSnapshot();
                 }
+                if (!showingAltStats)
+                    StoreSnapshot();
             }
         }
         catch (Exception ex)
@@ -355,8 +381,18 @@ public partial class Form1
             }
             else if (!showingAltStats)
             {
-                if (currentWeaponLeft != null) SaveControlsToWeapon(currentWeaponLeft, true);
-                if (currentWeaponRight != null) SaveControlsToWeapon(currentWeaponRight, false);
+                if (currentWeaponLeft != null)
+                {
+                    var oldL = CloneTopLevelFields(currentWeaponLeft);
+                    SaveControlsToWeapon(currentWeaponLeft, true);
+                    SyncAltStatsToMatchTopLevel(oldL, currentWeaponLeft);
+                }
+                if (currentWeaponRight != null)
+                {
+                    var oldR = CloneTopLevelFields(currentWeaponRight);
+                    SaveControlsToWeapon(currentWeaponRight, false);
+                    SyncAltStatsToMatchTopLevel(oldR, currentWeaponRight);
+                }
             }
             if (showingAltStats && !sameWeapon)
             {
@@ -427,17 +463,19 @@ public partial class Form1
         if (System.Threading.Interlocked.Exchange(ref saveLock, 1) != 0) return;
         try
         {
-            if (sender is not Button btn) return;
-            if (btn.Tag is not true)
+            if (string.IsNullOrEmpty(lastScriptsDir))
             {
-                if (string.IsNullOrEmpty(lastScriptsDir))
-                {
-                    using var dlg = new FolderBrowserDialog { Description = "Select the folder containing weapon scripts (will be overwritten)", UseDescriptionForTitle = true, InitialDirectory = AppContext.BaseDirectory };
-                    if (dlg.ShowDialog() != DialogResult.OK) return;
-                    lastScriptsDir = dlg.SelectedPath;
-                }
+                using var dlg = new FolderBrowserDialog { Description = "Select the folder containing weapon scripts (will be overwritten)", UseDescriptionForTitle = true, InitialDirectory = AppContext.BaseDirectory };
+                if (dlg.ShowDialog() != DialogResult.OK) return;
+                lastScriptsDir = dlg.SelectedPath;
+            }
+
+            var btn = sender as Button;
+            if (btn != null && btn.Tag is not true)
+            {
                 btn.Text = "confirm"; btn.Tag = true; return;
             }
+
             LogService.Info($"BtnQuickExport: exporting to {lastScriptsDir}, altStats={showingAltStats}");
             //强制提交活跃控件输入
             var active = this.ActiveControl;
@@ -454,7 +492,7 @@ public partial class Form1
                         SyncAltStatFields(currentWeaponLeft!, currentAltStatMode);
                         LoadAltStatsToControls(false, currentAltStatMode);
                     }
-                    else
+                    else if (!showingAltStats)
                     {
                         SaveControlsToWeapon(currentWeaponLeft!, true);
                         LoadWeaponToControls(currentWeaponLeft!, false);
@@ -467,7 +505,7 @@ public partial class Form1
                         SyncAltStatFields(currentWeaponRight!, currentAltStatMode);
                         LoadAltStatsToControls(true, currentAltStatMode);
                     }
-                    else
+                    else if (!showingAltStats)
                     {
                         SaveControlsToWeapon(currentWeaponRight!, false);
                         LoadWeaponToControls(currentWeaponRight!, true);
@@ -477,10 +515,20 @@ public partial class Form1
             }
             else if (!showingAltStats)
             {
-                if (currentWeaponLeft != null) SaveControlsToWeapon(currentWeaponLeft, true);
-                if (currentWeaponRight != null) SaveControlsToWeapon(currentWeaponRight, false);
+                if (currentWeaponLeft != null)
+                {
+                    var oldL = CloneTopLevelFields(currentWeaponLeft);
+                    SaveControlsToWeapon(currentWeaponLeft, true);
+                    SyncAltStatsToMatchTopLevel(oldL, currentWeaponLeft);
+                }
+                if (currentWeaponRight != null)
+                {
+                    var oldR = CloneTopLevelFields(currentWeaponRight);
+                    SaveControlsToWeapon(currentWeaponRight, false);
+                    SyncAltStatsToMatchTopLevel(oldR, currentWeaponRight);
+                }
             }
-            if (showingAltStats && !sameWeapon)
+            else
             {
                 if (currentWeaponLeft != null) SyncAltStatFields(currentWeaponLeft, currentAltStatMode);
                 if (currentWeaponRight != null && !ReferenceEquals(currentWeaponLeft, currentWeaponRight))
@@ -500,13 +548,13 @@ public partial class Form1
                         WeaponScriptService.ExportAltStatsToScripts(csv, lastScriptsDir, exportMode.Value);
                     else WeaponScriptService.ExportCsvToScripts(csv, lastScriptsDir);
                 });
-                btn.Text = "wpn_reload_script all"; btn.Tag = false;
+                if (btn != null) { btn.Text = "wpn_reload_script all"; btn.Tag = false; }
                 this.Text = "Exported!"; await Task.Delay(1145);
             }
             catch (Exception ex)
             {
                 LogService.Error(ex, "BtnQuickExport");
-                btn.Text = "wpn_reload_script all"; btn.Tag = false;
+                if (btn != null) { btn.Text = "wpn_reload_script all"; btn.Tag = false; }
                 MessageBox.Show($"Quick export failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally { this.Text = originalTitle; }
@@ -667,7 +715,7 @@ public partial class Form1
 
     private void Form1_KeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Control && e.Shift && e.KeyCode == Keys.S) { LogService.Debug("Hotkey: Ctrl+Shift+S"); e.SuppressKeyPress = true; BtnSave_Click(sender, e); BtnQuickExport_Click(sender, e); }
+        if (e.Control && e.Shift && e.KeyCode == Keys.S) { LogService.Debug("Hotkey: Ctrl+Shift+S"); e.SuppressKeyPress = true; BtnQuickExport_Click(sender, e); }
         else if (e.Control && e.KeyCode == Keys.S) { LogService.Debug("Hotkey: Ctrl+S"); e.SuppressKeyPress = true; BtnSave_Click(sender, e); }
         else if (e.Control && e.KeyCode == Keys.Y) { LogService.Debug("Hotkey: Ctrl+Y (redo)"); e.SuppressKeyPress = true; PopRedo(); }
         else if (e.Control && e.KeyCode == Keys.Z) { LogService.Debug("Hotkey: Ctrl+Z (undo)"); e.SuppressKeyPress = true; PopUndo(); }
