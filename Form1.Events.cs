@@ -13,6 +13,8 @@ public partial class Form1
     #region 选择保存检测
     private void WeaponSelectedL(object? sender, EventArgs e)
     {
+        try
+        {
         if (initializing)
         {
             if (cmbWeaponsL.SelectedItem is WeaponData initW)
@@ -73,10 +75,17 @@ public partial class Form1
                     ExitAltStatMode();
             }
         }
+        }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, "WeaponSelectedL");
+        }
     }
 
     private void WeaponSelectedR(object? sender, EventArgs e)
     {
+        try
+        {
         if (initializing)
         {
             if (cmbWeaponsR.SelectedItem is WeaponData initW)
@@ -134,6 +143,11 @@ public partial class Form1
                 if (!WeaponHasAltStats(currentWeaponLeft, currentAltStatMode))
                     ExitAltStatMode();
             }
+        }
+        }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, "WeaponSelectedR");
         }
     }
 
@@ -355,6 +369,10 @@ public partial class Form1
             }
             finally { this.Text = savedTitle; }
         }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, "BtnSave outer");
+        }
         finally { System.Threading.Interlocked.Exchange(ref saveLock, 0); }
     }
 
@@ -460,6 +478,10 @@ public partial class Form1
             }
             finally { this.Text = originalTitle; }
         }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, "BtnQuickExport outer");
+        }
         finally { System.Threading.Interlocked.Exchange(ref saveLock, 0); }
     }
 
@@ -513,7 +535,11 @@ public partial class Form1
         });
     }
 
-    private void BtnRefresh_Click(object? sender, EventArgs e) => RefreshWeaponList();
+    private void BtnRefresh_Click(object? sender, EventArgs e)
+    {
+        LogService.Debug("BtnRefresh clicked");
+        RefreshWeaponList();
+    }
 
     private async void RefreshWeaponList()
     {
@@ -530,6 +556,8 @@ public partial class Form1
                 weapons = CsvService.LoadWeapons(csv);
                 this.Invoke(() =>
                 {
+                    try
+                    {
                     //先解绑事件防止刷新时弹出未保存确认
                     cmbWeaponsL.SelectedIndexChanged -= WeaponSelectedL;
                     cmbWeaponsR.SelectedIndexChanged -= WeaponSelectedR;
@@ -548,6 +576,11 @@ public partial class Form1
                     }
                     else { cmbWeaponsL.SelectedIndexChanged += WeaponSelectedL; cmbWeaponsR.SelectedIndexChanged += WeaponSelectedR; }
                     UpdateC64Labels(weapons.Count > 0);
+                    }
+                    catch (Exception ex)
+                    {
+                        LogService.Error(ex, "RefreshWeaponList.Invoke");
+                    }
                 });
             });
         }

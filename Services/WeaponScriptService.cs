@@ -510,6 +510,8 @@ public static class WeaponScriptService
 
     public static string WriteAltStatBlockValue(string content, string key, string value, AltStatMode mode)
     {
+        try
+        {
         string blockName = AltStatBlockNames[mode];
         var blockMatch = Regex.Match(content, $@"{Regex.Escape(blockName)}\s*\{{([^}}]*(?:\{{[^}}]*\}}[^}}]*)*)\}}", RegexOptions.Singleline);
         if (!blockMatch.Success) return content;
@@ -517,10 +519,18 @@ public static class WeaponScriptService
         string newBlock = ReplaceKeyValue(block, key, value);
         if (newBlock == block) return content;
         return content.Replace(block, newBlock);
+        }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, $"WriteAltStatBlockValue: key={key}, mode={mode}");
+            return content;
+        }
     }
 
     public static string WriteAltStatRecoilBlock(string content, string recoilBlock, string? up, string? right, AltStatMode mode)
     {
+        try
+        {
         string blockName = AltStatBlockNames[mode];
         var altMatch = Regex.Match(content, $@"{Regex.Escape(blockName)}\s*\{{([^}}]*(?:\{{[^}}]*\}}[^}}]*)*)\}}", RegexOptions.Singleline);
         if (!altMatch.Success) return content;
@@ -528,6 +538,12 @@ public static class WeaponScriptService
         string newAltBlock = ReplaceRecoilBlock(altBlock, recoilBlock, up, right);
         if (newAltBlock == altBlock) return content;
         return content.Replace(altBlock, newAltBlock);
+        }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, $"WriteAltStatRecoilBlock: recoilBlock={recoilBlock}, mode={mode}");
+            return content;
+        }
     }
 
     #endregion
@@ -838,6 +854,8 @@ public static class WeaponScriptService
     //替换脚本中的键值对 仅替换第一个未被注释的匹配 防止误伤嵌套块内的同名键
     private static string ReplaceKeyValue(string c, string k, string v)
     {
+        try
+        {
         //匹配"key" "value"格式的行 要求行首不是//(即非注释行) 捕获key及其前导空白 旧值和行尾注释
         string p = $@"(^[ \t]*""{Regex.Escape(k)}""\s+)""[^""]*""(\s*(?://.*)?)";
         var m = Regex.Match(c, p, RegexOptions.Multiline);
@@ -848,10 +866,18 @@ public static class WeaponScriptService
                     .Insert(m.Index, $@"{m.Groups[1].Value}""{v}""{m.Groups[2].Value}");
         }
         return c;
+        }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, $"ReplaceKeyValue: key={k}");
+            return c;
+        }
     }
 
     private static string ReplaceRecoilBlock(string c, string block, string? up, string? right)
     {
+        try
+        {
         //匹配block 限制在WeaponData顶层 使用RegexOptions来匹配大括号
         //通过 ^(?!\s*//) 确保块名不在注释行内 加.*平衡大括号嵌套
         string p = $@"(^{Regex.Escape(block)}\s*\{{(?:[^{{}}]|(?<open>\{{)|(?<-open>\}}))*(?(open)(?!))\}})";
@@ -877,6 +903,12 @@ public static class WeaponScriptService
         }
 
         return c.Remove(m.Index, m.Length).Insert(m.Index, b);
+        }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, $"ReplaceRecoilBlock: block={block}");
+            return c;
+        }
     }
     #endregion
 }

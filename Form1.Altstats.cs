@@ -126,6 +126,8 @@ public partial class Form1
 
     private void LoadAltStatsToControls(bool isLeft, WeaponScriptService.AltStatMode mode)
     {
+        try
+        {
         var weapon = isLeft ? currentWeaponLeft : currentWeaponRight;
         if (weapon == null) return;
         var temp = new WeaponData();
@@ -186,6 +188,11 @@ public partial class Form1
         string? altFireModes = isDov ? weapon.DovFireModes : weapon.ZombieFireModes;
         if (!string.IsNullOrEmpty(altFireModes))
         { if (isLeft) txtFireModesL.Text = altFireModes; else txtFireModesR.Text = altFireModes; }
+        }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, $"LoadAltStatsToControls: isLeft={isLeft}, mode={mode}");
+        }
     }
 
     private void RestoreAllNudEnabled(bool isLeft)
@@ -207,6 +214,8 @@ public partial class Form1
     //将顶层值同步回备选数值字段
     private static void SyncAltStatFields(WeaponData w, WeaponScriptService.AltStatMode mode)
     {
+        try
+        {
         bool isDov = mode == WeaponScriptService.AltStatMode.Dov;
         if (isDov)
         {
@@ -261,6 +270,11 @@ public partial class Form1
             w.ZombieOtherDamageModifier = w.OtherDamageModifier; w.ZombieNearwallDistance = w.NearwallDistance;
             w.ZombieClipSize = w.ClipSize; w.ZombieFireModes = w.FireModes;
             w.ZombieSecondaryFireRate = w.SecondaryFireRate; w.ZombieIronSight = w.IronSight;
+        }
+        }
+        catch (Exception ex)
+        {
+            LogService.Warn($"SyncAltStatFields failed: mode={mode}, {ex.Message}");
         }
     }
 }
