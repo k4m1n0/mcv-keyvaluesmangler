@@ -55,6 +55,10 @@ public partial class Form1
             UpdateAllDamage();
             pnlSpread.Invalidate();
             pnlRecoil.Invalidate();
+            if (!isRapid)
+                LogService.Debug($"Weapon selected L: {w.ScriptName}");
+            else
+                LogService.DebugDebounce("rapid_weapon_L", $"Rapid weapon L: {w.ScriptName}", 300);
             if (showingAltStats && WeaponHasAltStats(w, currentAltStatMode))
             {
                 updatingControls = true;
@@ -113,6 +117,10 @@ public partial class Form1
             UpdateAllDamage();
             pnlSpread.Invalidate();
             pnlRecoil.Invalidate();
+            if (!isRapid)
+                LogService.Debug($"Weapon selected R: {w.ScriptName}");
+            else
+                LogService.DebugDebounce("rapid_weapon_R", $"Rapid weapon R: {w.ScriptName}", 300);
             if (showingAltStats && WeaponHasAltStats(w, currentAltStatMode))
             {
                 updatingControls = true;
@@ -261,8 +269,18 @@ public partial class Form1
         UpdateAllDamage();
     }
 
-    private void SpreadRecoilChangedL(object? sender, EventArgs e) { pnlSpread.Invalidate(); pnlRecoil.Invalidate(); }
-    private void SpreadRecoilChangedR(object? sender, EventArgs e) { pnlSpread.Invalidate(); pnlRecoil.Invalidate(); }
+    private void SpreadRecoilChangedL(object? sender, EventArgs e)
+    {
+        LogService.DebugDebounce("spread_recoil_L", "Spread/Recoil L: panel invalidate", 500);
+        pnlSpread.Invalidate(); pnlRecoil.Invalidate();
+    }
+
+    private void SpreadRecoilChangedR(object? sender, EventArgs e)
+    {
+        LogService.DebugDebounce("spread_recoil_R", "Spread/Recoil R: panel invalidate", 500);
+        pnlSpread.Invalidate(); pnlRecoil.Invalidate();
+    }
+
     private void RangeModifierChangedL(object? sender, EventArgs e) { UpdateAllDamage(); }
     private void RangeModifierChangedR(object? sender, EventArgs e) { UpdateAllDamage(); }
 
@@ -551,13 +569,13 @@ public partial class Form1
 
     private void Form1_KeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Control && e.Shift && e.KeyCode == Keys.S) { e.SuppressKeyPress = true; BtnSave_Click(sender, e); BtnQuickExport_Click(sender, e); }
-        else if (e.Control && e.KeyCode == Keys.S) { e.SuppressKeyPress = true; BtnSave_Click(sender, e); }
-        else if (e.Control && e.KeyCode == Keys.Y) { e.SuppressKeyPress = true; PopRedo(); }
-        else if (e.Control && e.KeyCode == Keys.Z) { e.SuppressKeyPress = true; PopUndo(); }
-        else if (e.Control && e.KeyCode == Keys.D1) { e.SuppressKeyPress = true; cmbWeaponsL.Focus(); cmbWeaponsL.DroppedDown = true; }
-        else if (e.Control && e.KeyCode == Keys.D2) { e.SuppressKeyPress = true; cmbWeaponsR.Focus(); cmbWeaponsR.DroppedDown = true; }
-        else if (e.Control && e.KeyCode == Keys.R) { e.SuppressKeyPress = true; RefreshWeaponList(); }
+        if (e.Control && e.Shift && e.KeyCode == Keys.S) { LogService.Debug("Hotkey: Ctrl+Shift+S"); e.SuppressKeyPress = true; BtnSave_Click(sender, e); BtnQuickExport_Click(sender, e); }
+        else if (e.Control && e.KeyCode == Keys.S) { LogService.Debug("Hotkey: Ctrl+S"); e.SuppressKeyPress = true; BtnSave_Click(sender, e); }
+        else if (e.Control && e.KeyCode == Keys.Y) { LogService.Debug("Hotkey: Ctrl+Y (redo)"); e.SuppressKeyPress = true; PopRedo(); }
+        else if (e.Control && e.KeyCode == Keys.Z) { LogService.Debug("Hotkey: Ctrl+Z (undo)"); e.SuppressKeyPress = true; PopUndo(); }
+        else if (e.Control && e.KeyCode == Keys.D1) { LogService.Debug("Hotkey: Ctrl+1 (focus L)"); e.SuppressKeyPress = true; cmbWeaponsL.Focus(); cmbWeaponsL.DroppedDown = true; }
+        else if (e.Control && e.KeyCode == Keys.D2) { LogService.Debug("Hotkey: Ctrl+2 (focus R)"); e.SuppressKeyPress = true; cmbWeaponsR.Focus(); cmbWeaponsR.DroppedDown = true; }
+        else if (e.Control && e.KeyCode == Keys.R) { LogService.Debug("Hotkey: Ctrl+R (refresh)"); e.SuppressKeyPress = true; RefreshWeaponList(); }
     }
     #endregion
 }

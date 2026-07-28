@@ -73,29 +73,29 @@ public partial class Form1
         if (isLeft)
         {
             trkDistanceL = new TrackBar { Location = new Point(30, 16), Size = new Size(380, 35), Minimum = 0, Maximum = 100 };
-            trkDistanceL.ValueChanged += (s, e) => { ScheduleUndo(); nudDistanceL.Value = trkDistanceL.Value; UpdateAllDamage(); };
+            trkDistanceL.ValueChanged += (s, e) => { ScheduleUndo(); nudDistanceL.Value = trkDistanceL.Value; UpdateAllDamage(); LogService.DebugDebounce("trk_Distance_L", $"Distance L: {trkDistanceL.Value}", 500); };
             trkDistanceL.MouseUp += (_, _) => PushUndoNow();
             gb.Controls.Add(trkDistanceL);
             nudDistanceL = new NumericUpDown { Location = new Point(415, 16), Size = new Size(45, 22), DecimalPlaces = 0, Increment = 1, Minimum = 0, Maximum = 100 };
-            nudDistanceL.ValueChanged += (s, e) => { ScheduleUndo(); trkDistanceL.Value = Math.Max(0, Math.Min(100, (int)nudDistanceL.Value)); UpdateAllDamage(); };
+            nudDistanceL.ValueChanged += (s, e) => { ScheduleUndo(); trkDistanceL.Value = Math.Max(0, Math.Min(100, (int)nudDistanceL.Value)); UpdateAllDamage(); LogService.DebugDebounce("nud_Distance_L", $"Distance L: {nudDistanceL.Value}", 500); };
             nudDistanceL.MouseUp += (_, _) => PushUndoNow();
             gb.Controls.Add(nudDistanceL);
             chkVestL = new CheckBox { Text = "Vest", Location = new Point(465, 18), Size = new Size(55, 22) };
-            chkVestL.CheckedChanged += (s, e) => { ScheduleUndo(); UpdateAllDamage(); };
+            chkVestL.CheckedChanged += (s, e) => { ScheduleUndo(); UpdateAllDamage(); LogService.DebugDebounce("chkVest_L", $"Vest L: {chkVestL.Checked}", 500); };
             gb.Controls.Add(chkVestL);
         }
         else
         {
             trkDistanceR = new TrackBar { Location = new Point(30, 16), Size = new Size(380, 35), Minimum = 0, Maximum = 100 };
-            trkDistanceR.ValueChanged += (s, e) => { ScheduleUndo(); nudDistanceR.Value = trkDistanceR.Value; UpdateAllDamage(); };
+            trkDistanceR.ValueChanged += (s, e) => { ScheduleUndo(); nudDistanceR.Value = trkDistanceR.Value; UpdateAllDamage(); LogService.DebugDebounce("trk_Distance_R", $"Distance R: {trkDistanceR.Value}", 500); };
             trkDistanceR.MouseUp += (_, _) => PushUndoNow();
             gb.Controls.Add(trkDistanceR);
             nudDistanceR = new NumericUpDown { Location = new Point(415, 16), Size = new Size(45, 22), DecimalPlaces = 0, Increment = 1, Minimum = 0, Maximum = 100 };
-            nudDistanceR.ValueChanged += (s, e) => { ScheduleUndo(); trkDistanceR.Value = Math.Max(0, Math.Min(100, (int)nudDistanceR.Value)); UpdateAllDamage(); };
+            nudDistanceR.ValueChanged += (s, e) => { ScheduleUndo(); trkDistanceR.Value = Math.Max(0, Math.Min(100, (int)nudDistanceR.Value)); UpdateAllDamage(); LogService.DebugDebounce("nud_Distance_R", $"Distance R: {nudDistanceR.Value}", 500); };
             nudDistanceR.MouseUp += (_, _) => PushUndoNow();
             gb.Controls.Add(nudDistanceR);
             chkVestR = new CheckBox { Text = "Vest", Location = new Point(465, 18), Size = new Size(55, 22) };
-            chkVestR.CheckedChanged += (s, e) => { ScheduleUndo(); UpdateAllDamage(); };
+            chkVestR.CheckedChanged += (s, e) => { ScheduleUndo(); UpdateAllDamage(); LogService.DebugDebounce("chkVest_R", $"Vest R: {chkVestR.Checked}", 500); };
             gb.Controls.Add(chkVestR);
         }
         this.Controls.Add(gb);
@@ -147,7 +147,7 @@ public partial class Form1
         if (isLeft)
         {
             txtFireModesL = CreateTextBoxRow(gbProp, "Fire Mode", 8, y);
-            txtFireModesL.TextChanged += (s, e) => { if (!updatingControls) { ScheduleUndo(); UpdateAllDamage(); } };
+            txtFireModesL.TextChanged += (s, e) => { if (!updatingControls) { ScheduleUndo(); UpdateAllDamage(); LogService.DebugDebounce("txt_FireModes_L", $"FireModes L: {txtFireModesL.Text}", 500); } };
             y += 24;
             nudFireRateL = CreateNullableIntNumericRow(gbProp, "ROF", 8, y, 10000m);
             BindNudUndo(nudFireRateL, (s, e) => UpdateAllDamage(), isLeft);
@@ -157,12 +157,12 @@ public partial class Form1
             BindNudUndo(nudRangeModifierL, (s, e) => { RangeModifierChangedL(s, e); }, isLeft);
             y += 24;
             txtCapacityL = CreateTextBoxRow(gbProp, "Capacity", 8, y);
-            txtCapacityL.TextChanged += (s, e) => { if (!updatingControls) ScheduleUndo(); };
+            txtCapacityL.TextChanged += (s, e) => { if (!updatingControls) { ScheduleUndo(); LogService.DebugDebounce("txt_Capacity_L", $"Capacity L: {txtCapacityL.Text}", 500); } };
         }
         else
         {
             txtFireModesR = CreateTextBoxRow(gbProp, "Fire Mode", 8, y);
-            txtFireModesR.TextChanged += (s, e) => { if (!updatingControls) { ScheduleUndo(); UpdateAllDamage(); } };
+            txtFireModesR.TextChanged += (s, e) => { if (!updatingControls) { ScheduleUndo(); UpdateAllDamage(); LogService.DebugDebounce("txt_FireModes_R", $"FireModes R: {txtFireModesR.Text}", 500); } };
             y += 24;
             nudFireRateR = CreateNullableIntNumericRow(gbProp, "ROF", 8, y, 10000m);
             BindNudUndo(nudFireRateR, (s, e) => UpdateAllDamage(), isLeft);
@@ -172,7 +172,7 @@ public partial class Form1
             BindNudUndo(nudRangeModifierR, (s, e) => { RangeModifierChangedR(s, e); }, isLeft);
             y += 24;
             txtCapacityR = CreateTextBoxRow(gbProp, "Capacity", 8, y);
-            txtCapacityR.TextChanged += (s, e) => { if (!updatingControls) ScheduleUndo(); };
+            txtCapacityR.TextChanged += (s, e) => { if (!updatingControls) { ScheduleUndo(); LogService.DebugDebounce("txt_Capacity_R", $"Capacity R: {txtCapacityR.Text}", 500); } };
         }
         this.Controls.Add(gbProp);
     }
@@ -218,7 +218,7 @@ public partial class Form1
         {
             nudExtraBulletChamberL = CreateNullableIntNumericRow(gb, "Chamber", 8, y, 1000m); BindNudUndo(nudExtraBulletChamberL, null, isLeft);
             nudBulletsPerShotL = CreateNullableIntNumericRow(gb, "Pellets", 188, y, 100m);
-            nudBulletsPerShotL.ValueChanged += (s, e) => { ScheduleUndo(); UpdateAllDamage(); };
+            nudBulletsPerShotL.ValueChanged += (s, e) => { ScheduleUndo(); UpdateAllDamage(); LogService.DebugDebounce("nud_Pellets_L", $"Pellets L: {nudBulletsPerShotL.Value}", 500); };
             nudBulletsPerShotL.MouseUp += (_, _) => PushUndoNow();
             nudIronsightSpeedScaleL = CreateNullableNumericRow(gb, "ADS Spd", 368, y, 10m); BindNudUndo(nudIronsightSpeedScaleL, null, isLeft);
             y += 26;
@@ -241,7 +241,7 @@ public partial class Form1
             nudOtherDmgModL = CreateNullableNumericRow(gb, "OtherMod", 8, y, 100m); BindNudUndo(nudOtherDmgModL, null, isLeft);
             nudSecondaryFireRateL = CreateNullableIntNumericRow(gb, "2ndROF", 188, y, 10000m);
             nudSecondaryFireRateL.Minimum = -1m;
-            nudSecondaryFireRateL.ValueChanged += (s, e) => { ScheduleUndo(); UpdateAllDamage(); };
+            nudSecondaryFireRateL.ValueChanged += (s, e) => { ScheduleUndo(); UpdateAllDamage(); LogService.DebugDebounce("nud_2ndROF_L", $"2ndROF L: {nudSecondaryFireRateL.Value}", 500); };
             nudSecondaryFireRateL.MouseUp += (_, _) => PushUndoNow();
             nudSecondaryFireRateL.Enter += (s, e) => { UpdateAllDamage(); };
             nudSecondaryFireRateL.Leave += (s, e) => { UpdateAllDamage(); };
@@ -256,6 +256,7 @@ public partial class Form1
                 nudIronsightSpeedScaleL.Enabled = !noIronsight;
                 pnlSpread.Invalidate();
                 pnlRecoil.Invalidate();
+                LogService.DebugDebounce("nud_IronSight_L", $"IronSight L: {nudIronSightL.Value}", 500);
             };
             nudIronSightL.MouseUp += (_, _) => PushUndoNow();
         }
@@ -263,7 +264,7 @@ public partial class Form1
         {
             nudExtraBulletChamberR = CreateNullableIntNumericRow(gb, "Chamber", 8, y, 1000m); BindNudUndo(nudExtraBulletChamberR, null, isLeft);
             nudBulletsPerShotR = CreateNullableIntNumericRow(gb, "Pellets", 188, y, 100m);
-            nudBulletsPerShotR.ValueChanged += (s, e) => { ScheduleUndo(); UpdateAllDamage(); };
+            nudBulletsPerShotR.ValueChanged += (s, e) => { ScheduleUndo(); UpdateAllDamage(); LogService.DebugDebounce("nud_Pellets_R", $"Pellets R: {nudBulletsPerShotR.Value}", 500); };
             nudBulletsPerShotR.MouseUp += (_, _) => PushUndoNow();
             nudIronsightSpeedScaleR = CreateNullableNumericRow(gb, "ADS Spd", 368, y, 10m); BindNudUndo(nudIronsightSpeedScaleR, null, isLeft);
             y += 26;
@@ -286,7 +287,7 @@ public partial class Form1
             nudOtherDmgModR = CreateNullableNumericRow(gb, "OtherMod", 8, y, 100m); BindNudUndo(nudOtherDmgModR, null, isLeft);
             nudSecondaryFireRateR = CreateNullableIntNumericRow(gb, "2ndROF", 188, y, 10000m);
             nudSecondaryFireRateR.Minimum = -1m;
-            nudSecondaryFireRateR.ValueChanged += (s, e) => { ScheduleUndo(); UpdateAllDamage(); };
+            nudSecondaryFireRateR.ValueChanged += (s, e) => { ScheduleUndo(); UpdateAllDamage(); LogService.DebugDebounce("nud_2ndROF_R", $"2ndROF R: {nudSecondaryFireRateR.Value}", 500); };
             nudSecondaryFireRateR.MouseUp += (_, _) => PushUndoNow();
             nudSecondaryFireRateR.Enter += (s, e) => { UpdateAllDamage(); };
             nudSecondaryFireRateR.Leave += (s, e) => { UpdateAllDamage(); };
@@ -301,6 +302,7 @@ public partial class Form1
                 nudIronsightSpeedScaleR.Enabled = !noIronsight;
                 pnlSpread.Invalidate();
                 pnlRecoil.Invalidate();
+                LogService.DebugDebounce("nud_IronSight_R", $"IronSight R: {nudIronSightR.Value}", 500);
             };
             nudIronSightR.MouseUp += (_, _) => PushUndoNow();
         }
@@ -322,18 +324,20 @@ public partial class Form1
 
         tb.Tag = nud;
         nud.Tag = tb;
+        string sideTag = isLeft ? "L" : "R";
+        string keyPrefix = $"slider_{text}_{sideTag}";
         if (isLeft)
         {
-            tb.ValueChanged += (s, e) => { SliderChangedL(s, e); ScheduleUndo(); };
+            tb.ValueChanged += (s, e) => { SliderChangedL(s, e); ScheduleUndo(); LogService.DebugDebounce($"{keyPrefix}_tb", $"Slider {text} L: {tb.Value}", 300); };
             tb.MouseUp += (_, _) => PushUndoNow();
-            nud.ValueChanged += (s, e) => { NumericChangedL(s, e); ScheduleUndo(); };
+            nud.ValueChanged += (s, e) => { NumericChangedL(s, e); ScheduleUndo(); LogService.DebugDebounce($"{keyPrefix}_nud", $"NUD {text} L: {nud.Value}", 300); };
             nud.MouseUp += (_, _) => PushUndoNow();
         }
         else
         {
-            tb.ValueChanged += (s, e) => { SliderChangedR(s, e); ScheduleUndo(); };
+            tb.ValueChanged += (s, e) => { SliderChangedR(s, e); ScheduleUndo(); LogService.DebugDebounce($"{keyPrefix}_tb", $"Slider {text} R: {tb.Value}", 300); };
             tb.MouseUp += (_, _) => PushUndoNow();
-            nud.ValueChanged += (s, e) => { NumericChangedR(s, e); ScheduleUndo(); };
+            nud.ValueChanged += (s, e) => { NumericChangedR(s, e); ScheduleUndo(); LogService.DebugDebounce($"{keyPrefix}_nud", $"NUD {text} R: {nud.Value}", 300); };
             nud.MouseUp += (_, _) => PushUndoNow();
         }
 
@@ -347,6 +351,7 @@ public partial class Form1
         nud.ValueChanged += (s, e) =>
         {
             ScheduleUndo();
+            LogService.DebugDebounce($"nud_{nud.Name ?? "?"}", $"NUD changed: {nud.Name} = {nud.Value} ({(isLeft ? "L" : "R")})", 500);
             extraHandler?.Invoke(s, e);
         };
         nud.MouseUp += (_, _) => PushUndoNow();

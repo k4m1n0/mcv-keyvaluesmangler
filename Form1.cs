@@ -154,7 +154,7 @@ public partial class Form1 : Form
         }
         catch (Exception ex)
         {
-            LogService.Error(ex, "Form1 constructor failed");
+            LogService.Fatal(ex, "Form1 constructor failed");
             MessageBox.Show($"Launch failed: {ex}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             Application.Exit();
         }
@@ -249,6 +249,7 @@ public partial class Form1 : Form
     {
         if (btn.Tag is true)
         {
+            LogService.Debug("BtnQuickExport: right-click cancelled");
             btn.Text = "wpn_reload_script all";
             btn.Tag = false;
         }
@@ -262,15 +263,22 @@ public partial class Form1 : Form
         bool rightDirty = currentWeaponRight != null && HasUnsavedChanges(false);
         if (leftDirty || rightDirty)
         {
+            LogService.Debug($"FormClosing: unsaved changes (L={leftDirty}, R={rightDirty}), prompting user");
             var result = MessageBox.Show("Unsaved changes will be lost. Save now?",
                 "Unsaved Changes", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
             if (result == DialogResult.Yes)
             {
+                LogService.Debug("FormClosing: user chose Save");
                 BtnSave_Click(this, EventArgs.Empty);
             }
             else if (result == DialogResult.Cancel)
             {
+                LogService.Debug("FormClosing: user cancelled");
                 e.Cancel = true;
+            }
+            else
+            {
+                LogService.Debug("FormClosing: user chose Discard");
             }
         }
     }
@@ -307,6 +315,7 @@ public partial class Form1 : Form
         {
             var formX = this.PointToClient(c.PointToScreen(Point.Empty)).X;
             lastFocusLeft = formX < 525;
+            LogService.DebugDebounce("focus_side", $"Focus side: {(lastFocusLeft ? "L" : "R")} ({c.GetType().Name})", 300);
         }
     }
     
@@ -332,6 +341,7 @@ public partial class Form1 : Form
                 if (this.WindowState == FormWindowState.Minimized || !this.Visible)
                 {
                     if (!mcvOrSelf) return;
+                    LogService.Debug("Hotkey Ctrl+T: restore from minimized to topmost");
                     this.Visible = true;
                     this.WindowState = FormWindowState.Normal;
                     ShowWindow(this.Handle, SW_RESTORE);
@@ -342,6 +352,7 @@ public partial class Form1 : Form
                 }
                 else if (isTopmost)
                 {
+                    LogService.Debug("Hotkey Ctrl+T: exit topmost");
                     SetWindowPos(this.Handle, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
                     if (mcvOrSelf)
                         this.WindowState = FormWindowState.Minimized;
@@ -352,12 +363,14 @@ public partial class Form1 : Form
                 {
                     if (mcvOrSelf)
                     {
+                        LogService.Debug("Hotkey Ctrl+T: minimize");
                         this.WindowState = FormWindowState.Minimized;
                         isTopmost = false;
                         this.Text = "Keyvalues Mangler™ 5000";
                     }
                     else
                     {
+                        LogService.Debug("Hotkey Ctrl+T: set topmost");
                         SetWindowPos(this.Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
                         isTopmost = true;
                         this.Text = "Keyvalues Mangler™ 5000 [Topmost]";
@@ -433,6 +446,7 @@ public partial class Form1 : Form
 
         _undoStack.AddLast(entry);
         if (_undoStack.Count > MaxUndo) _undoStack.RemoveFirst();
+        LogService.Debug($"PushUndo: stack={_undoStack.Count}, redo={_redoStack.Count}, altStats={showingAltStats}");
     }
 
     private void PopUndo()
@@ -458,6 +472,7 @@ public partial class Form1 : Form
             var entry = _undoStack.Last!.Value;
             _undoStack.RemoveLast();
             RestoreUndoEntry(entry);
+            LogService.Debug($"PopUndo: stack={_undoStack.Count}, redo={_redoStack.Count}");
         }
         catch (Exception ex)
         {
@@ -491,6 +506,7 @@ public partial class Form1 : Form
             if (_undoStack.Count > MaxUndo) _undoStack.RemoveFirst();
 
             RestoreUndoEntry(entry);
+            LogService.Debug($"PopRedo: stack={_undoStack.Count}, redo={_redoStack.Count}");
         }
         catch (Exception ex)
         {
@@ -506,6 +522,7 @@ public partial class Form1 : Form
 
     public void ClearUndoHistory()
     {
+        LogService.Debug("ClearUndoHistory");
         _undoStack.Clear();
         _redoStack.Clear();
         _rapidStartLeft = null;
@@ -515,15 +532,21 @@ public partial class Form1 : Form
     public void StoreSnapshot()
     {
         //备选模式下不更新快照 防止备选值覆盖普通快照
-        if (showingAltStats) return;
+        if (showingAltStats)
+        {
+            LogService.Debug("StoreSnapshot: skipped (showingAltStats)");
+            return;
+        }
         _snapshotLeft = new WeaponData();
         _snapshotRight = new WeaponData();
         SaveControlsToWeapon(_snapshotLeft, true);
         SaveControlsToWeapon(_snapshotRight, false);
+        LogService.Debug("StoreSnapshot: updated");
     }
 
     private void RestoreUndoEntry(UndoEntry entry)
     {
+        LogService.Debug($"RestoreUndoEntry: L={entry.LeftScriptName}, R={entry.RightScriptName}, altStats={entry.ShowingAltStats}");
         if (!string.IsNullOrEmpty(entry.LeftScriptName))
         {
             var w = weapons.FirstOrDefault(x => x.ScriptName == entry.LeftScriptName);
@@ -571,6 +594,7 @@ public partial class Form1 : Form
     {
         if (currentWeaponLeft != null && currentWeaponRight != null)
         {
+            LogService.Debug($"Copy L>R: {currentWeaponLeft.ScriptName} -> {currentWeaponRight.ScriptName}");
             PushUndo();
             var temp = new WeaponData();
             SaveControlsToWeapon(temp, true);
@@ -585,6 +609,7 @@ public partial class Form1 : Form
     {
         if (currentWeaponRight != null && currentWeaponLeft != null)
         {
+            LogService.Debug($"Copy R>L: {currentWeaponRight.ScriptName} -> {currentWeaponLeft.ScriptName}");
             PushUndo();
             var temp = new WeaponData();
             SaveControlsToWeapon(temp, false);

@@ -14,7 +14,11 @@ public partial class Form1
         {
             bool leftHas = WeaponHasAltStats(currentWeaponLeft, mode);
             bool rightHas = WeaponHasAltStats(currentWeaponRight, mode);
-            if (!leftHas && !rightHas) return;
+            if (!leftHas && !rightHas)
+            {
+                LogService.Debug($"ToggleAltStats: {mode} - no weapon has alt stats, abort");
+                return;
+            }
 
             //如果正在显示同一种模式则关闭 否则切换到新模式
             if (showingAltStats && currentAltStatMode == mode)

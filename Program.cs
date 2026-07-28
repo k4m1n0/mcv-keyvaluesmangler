@@ -29,15 +29,32 @@ internal static class Program
     {
         if (args.Length > 0)
         {
-            LogService.Enabled = true;//cli模式强制开启日志
+            LogService.Enabled = true;
+            // CLI 默认 Warn 级别：Debug/Info 不写文件不输出，Warn/Error 才写文件
+            LogService.MinLevel = LogService.Level.Warn;
+
+            // 解析 --log-level 参数
+            var logLevelArg = Opt(args, "--log-level");
+            if (logLevelArg != null)
+            {
+                LogService.MinLevel = logLevelArg.ToLowerInvariant() switch
+                {
+                    "debug" => LogService.Level.Debug,
+                    "info"  => LogService.Level.Info,
+                    "warn"  => LogService.Level.Warn,
+                    "error" => LogService.Level.Error,
+                    _       => LogService.Level.Warn
+                };
+            }
+
             AllocConsole();
             LogService.Info($"CLI started: {string.Join(" ", args)}");
             int code = Task.Run(() => RunCli(args)).GetAwaiter().GetResult();
             Console.Out.Flush();
             if (!Console.IsOutputRedirected && args.Length > 0 && (args[0].Equals("--help", StringComparison.OrdinalIgnoreCase)
-                                 || args[0].Equals("-h", StringComparison.OrdinalIgnoreCase)
-                                 || args[0].Equals("/?", StringComparison.OrdinalIgnoreCase)
-                                 || args[0].Equals("--fuckyou", StringComparison.OrdinalIgnoreCase)))
+                                    || args[0].Equals("-h", StringComparison.OrdinalIgnoreCase)
+                                    || args[0].Equals("/?", StringComparison.OrdinalIgnoreCase)
+                                    || args[0].Equals("--fuckyou", StringComparison.OrdinalIgnoreCase)))
             {
                 Console.WriteLine("\nPress any key to exit...");
                 Console.ReadKey();
@@ -46,7 +63,6 @@ internal static class Program
             return code;
         }
 
-        LogService.Info("GUI started");
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
         Application.Run(new Form1());
@@ -265,7 +281,7 @@ Without arguments, launches the GUI
         }
         catch (Exception ex)
         {
-            LogService.Error(ex, $"RunCli: {cmd}");
+            LogService.Fatal(ex, $"RunCli: {cmd}");
             Console.Error.WriteLine($"Error: {ex.Message}");
             return ERR_EXCEPTION;
         }
