@@ -61,7 +61,7 @@ public partial class Form1 : Form
 
     private LinkedList<UndoEntry> _undoStack = new();
     private LinkedList<UndoEntry> _redoStack = new();
-    private const int MaxUndo = 50;
+    private const int MaxUndo = 100;
 
     private PanelRenderer spreadRenderer = null!;
     private PanelRenderer recoilRenderer = null!;
