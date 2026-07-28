@@ -281,8 +281,8 @@ public partial class Form1 : Form
     {
         //结束未完成的rapid 保存当前状态
         if (_rapidStartLeft != null || _rapidStartRight != null) PushUndo();
-        bool leftDirty = currentWeaponLeft != null && HasUnsavedChanges(true);
-        bool rightDirty = currentWeaponRight != null && HasUnsavedChanges(false);
+        bool leftDirty = currentWeaponLeft != null && HasUnsavedChanges(true, checkBothSides: true);
+        bool rightDirty = currentWeaponRight != null && HasUnsavedChanges(false, checkBothSides: true);
         if (leftDirty || rightDirty)
         {
             LogService.Debug($"FormClosing: unsaved changes (L={leftDirty}, R={rightDirty}), prompting user");
@@ -544,18 +544,26 @@ public partial class Form1 : Form
         _rapidStartRight = null;
     }
 
-    public void StoreSnapshot()
+    public void StoreSnapshot(bool? leftOnly = null)
     {
         if (initializing)
         {
             LogService.Debug("StoreSnapshot: skipped (initializing)");
             return;
         }
-        _snapshotLeft = new WeaponData();
-        _snapshotRight = new WeaponData();
-        SaveControlsToWeapon(_snapshotLeft, true);
-        SaveControlsToWeapon(_snapshotRight, false);
-        LogService.Debug($"StoreSnapshot: updated (altStats={showingAltStats})");
+        bool updateLeft = leftOnly != false;
+        bool updateRight = leftOnly != true;
+        if (updateLeft)
+        {
+            _snapshotLeft = new WeaponData();
+            SaveControlsToWeapon(_snapshotLeft, true);
+        }
+        if (updateRight)
+        {
+            _snapshotRight = new WeaponData();
+            SaveControlsToWeapon(_snapshotRight, false);
+        }
+        LogService.Debug($"StoreSnapshot: updated (altStats={showingAltStats}, L={updateLeft}, R={updateRight})");
     }
 
     private void RestoreUndoEntry(UndoEntry entry)
@@ -698,6 +706,7 @@ public partial class Form1 : Form
     //保存顶层值后将备选值中与旧顶层值一致的字段同步到新顶层值
     private static void SyncAltStatsToMatchTopLevel(WeaponData oldW, WeaponData newW)
     {
+        LogService.Debug($"SyncAltStatsToMatchTopLevel called for {newW.ScriptName}");
         //double
         SyncDoubleIfMatch(oldW.DamageGeneric, newW.DamageGeneric, newW.DovDamageGeneric, newW.ZombieDamageGeneric,
             (w, v) => w.DovDamageGeneric = v, (w, v) => w.ZombieDamageGeneric = v, newW);
@@ -771,9 +780,15 @@ public partial class Form1 : Form
         WeaponData w)
     {
         if (dov.HasValue && oldVal.HasValue && Math.Abs(dov.Value - oldVal.Value) < 0.001)
-            setDov(w, newVal);
+        {
+            LogService.Debug($"SyncDoubleIfMatch: clearing Dov (old={oldVal}, dov={dov})");
+            setDov(w, null);
+        }
         if (zombie.HasValue && oldVal.HasValue && Math.Abs(zombie.Value - oldVal.Value) < 0.001)
-            setZombie(w, newVal);
+        {
+            LogService.Debug($"SyncDoubleIfMatch: clearing Zombie (old={oldVal}, zombie={zombie})");
+            setZombie(w, null);
+        }
     }
 
     private static void SyncIntIfMatch(int? oldVal, int? newVal,
@@ -782,9 +797,15 @@ public partial class Form1 : Form
         WeaponData w)
     {
         if (dov.HasValue && oldVal.HasValue && dov.Value == oldVal.Value)
-            setDov(w, newVal);
+        {
+            LogService.Debug($"SyncIntIfMatch: clearing Dov (old={oldVal}, dov={dov})");
+            setDov(w, null);
+        }
         if (zombie.HasValue && oldVal.HasValue && zombie.Value == oldVal.Value)
-            setZombie(w, newVal);
+        {
+            LogService.Debug($"SyncIntIfMatch: clearing Zombie (old={oldVal}, zombie={zombie})");
+            setZombie(w, null);
+        }
     }
 
     private static void SyncStrIfMatch(string oldVal, string newVal,
@@ -793,9 +814,15 @@ public partial class Form1 : Form
         WeaponData w)
     {
         if (!string.IsNullOrEmpty(dov) && string.Equals(dov, oldVal, StringComparison.OrdinalIgnoreCase))
-            setDov(w, newVal);
+        {
+            LogService.Debug($"SyncStrIfMatch: clearing Dov (old={oldVal}, dov={dov})");
+            setDov(w, null);
+        }
         if (!string.IsNullOrEmpty(zombie) && string.Equals(zombie, oldVal, StringComparison.OrdinalIgnoreCase))
-            setZombie(w, newVal);
+        {
+            LogService.Debug($"SyncStrIfMatch: clearing Zombie (old={oldVal}, zombie={zombie})");
+            setZombie(w, null);
+        }
     }
 
     #endregion

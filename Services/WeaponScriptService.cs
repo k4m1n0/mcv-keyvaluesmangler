@@ -33,7 +33,6 @@ public static class WeaponScriptService
         }
     }
 
-    //备选数值模式 dov_stats和zombie_stats在游戏内互斥 但结构完全相同
     public enum AltStatMode { Dov, Zombie }
 
     private static readonly Dictionary<AltStatMode, string> AltStatBlockNames = new()
@@ -322,7 +321,6 @@ public static class WeaponScriptService
         return result;
     }
 
-    //导出备选数值到脚本的dov_stats或zombie_stats块
     public static void ExportAltStatsToScripts(string csvFilePath, string scriptsDir, AltStatMode mode)
     {
         string blockName = AltStatBlockNames[mode];
@@ -338,27 +336,39 @@ public static class WeaponScriptService
             try
             {
                 string content = ReadScriptFile(scriptPath);
-                if (!content.Contains(blockName)) continue;
-                foreach (var map in CsvToScriptMap)
+
+                bool hasAnyDiff = CsvToScriptMap.Keys.Any(k => GetFieldValue(weapon, k, mode) != null)
+                    || GetFieldValue(weapon, "ViewSlideRecoil.Up", mode) != null
+                    || GetFieldValue(weapon, "ViewSlideRecoilIronsight.Up", mode) != null;
+
+                if (!content.Contains(blockName) && !content.Contains($"//{blockName}"))
                 {
-                    string? csvValue = GetFieldValue(weapon, map.Key, mode);
-                    if (csvValue == null)
-                    {
-                        string? existing = ReadAltStatBlockValue(content, map.Value, mode);
-                        if (!string.IsNullOrEmpty(existing))
-                            content = WriteAltStatBlockValue(content, map.Value, "", mode);
-                        continue;
-                    }
-                    content = WriteAltStatBlockValue(content, map.Value, csvValue, mode);
+                    if (!hasAnyDiff) continue;
+                    content = InsertAltStatBlock(content, blockName, mode);
                 }
-                string? ru = GetFieldValue(weapon, "ViewSlideRecoil.Up", mode);
-                string? rr = GetFieldValue(weapon, "ViewSlideRecoil.Right", mode);
-                if (ru != null || rr != null)
-                    content = WriteAltStatRecoilBlock(content, "ViewSlideRecoil", ru, rr, mode);
-                string? au = GetFieldValue(weapon, "ViewSlideRecoilIronsight.Up", mode);
-                string? ar = GetFieldValue(weapon, "ViewSlideRecoilIronsight.Right", mode);
-                if (au != null || ar != null)
-                    content = WriteAltStatRecoilBlock(content, "ViewSlideRecoilIronsight", au, ar, mode);
+
+                content = ToggleAltStatBlockComment(content, mode, hasAnyDiff);
+                if (!content.Contains(blockName)) continue;
+
+                var blockMatch = Regex.Match(content, $@"{Regex.Escape(blockName)}\s*\{{([^}}]*(?:\{{[^}}]*\}}[^}}]*)*)\}}", RegexOptions.Singleline);
+                if (!blockMatch.Success) continue;
+                string fullBlock = blockMatch.Value.Replace("\r\n", "\n").Replace('\r', '\n');
+                string originalBlock = fullBlock;
+
+                foreach (var map in CsvToScriptMap)
+                    fullBlock = ApplyKeyToBlock(fullBlock, map.Value, GetFieldValue(weapon, map.Key, mode) ?? "");
+
+                if (fullBlock != originalBlock)
+                    content = content.Replace(originalBlock, fullBlock);
+
+                foreach (var recoil in new[] { "ViewSlideRecoil", "ViewSlideRecoilIronsight" })
+                {
+                    string? up = GetFieldValue(weapon, $"{recoil}.Up", mode);
+                    string? right = GetFieldValue(weapon, $"{recoil}.Right", mode);
+                    if (up != null || right != null)
+                        content = WriteAltStatRecoilBlock(content, recoil, up, right, mode);
+                }
+
                 File.WriteAllText(scriptPath, content, new UTF8Encoding(false));
                 updated++;
             }
@@ -369,6 +379,29 @@ public static class WeaponScriptService
             }
         }
         LogService.Info($"ExportAltStatsToScripts done: {updated} updated, {skipped} errors");
+    }
+
+    private static string InsertAltStatBlock(string content, string blockName, AltStatMode mode)
+    {
+        int insertIdx = content.LastIndexOf("\"ZMWeight\"", StringComparison.Ordinal);
+        if (insertIdx < 0) insertIdx = content.LastIndexOf("// Day of Victory", StringComparison.Ordinal);
+        if (insertIdx < 0) insertIdx = content.LastIndexOf("//---", StringComparison.Ordinal);
+        if (insertIdx < 0) return content;
+
+        int lineEnd = content.IndexOf('\n', insertIdx);
+        if (lineEnd < 0) return content;
+
+        int lineStart = content.LastIndexOf('\n', insertIdx);
+        string indent = "\t";
+        if (lineStart >= 0)
+        {
+            string refLine = content.Substring(lineStart + 1, insertIdx - lineStart - 1);
+            indent = refLine.Length - refLine.TrimStart().Length > 0
+                ? refLine.Substring(0, refLine.Length - refLine.TrimStart().Length)
+                : "\t";
+        }
+        string modeLabel = mode == AltStatMode.Dov ? "DoV" : "Zombie Mode";
+        return content.Insert(lineEnd + 1, $"\n{indent}// if anything is modified for {modeLabel}:\n{indent}{blockName}\n{indent}{{\n{indent}}}\n{indent}//---\n");
     }
 
     //正则地狱
@@ -520,22 +553,10 @@ public static class WeaponScriptService
         string blockName = AltStatBlockNames[mode];
         var blockMatch = Regex.Match(content, $@"{Regex.Escape(blockName)}\s*\{{([^}}]*(?:\{{[^}}]*\}}[^}}]*)*)\}}", RegexOptions.Singleline);
         if (!blockMatch.Success) return content;
-        string block = blockMatch.Groups[1].Value;
-
-        // 先删除块内所有同名键（处理重复和空值删除）
-        string deletePattern = $@"^[ \t]*""{Regex.Escape(key)}""\s+""[^""]*""\s*(?://.*)?(\r?\n)?";
-        block = Regex.Replace(block, deletePattern, "", RegexOptions.Multiline);
-
-        if (!string.IsNullOrEmpty(value))
-        {
-            // 在最后一个 } 之前追加
-            int insertPos = block.LastIndexOf('}');
-            if (insertPos < 0) insertPos = block.Length;
-            block = block.Insert(insertPos, $"\n\t\"{key}\"\t\t\t\t\"{value}\"\n");
-        }
-
-        if (block == blockMatch.Groups[1].Value) return content;
-        return content.Replace(blockMatch.Groups[1].Value, block);
+        string fullBlock = blockMatch.Value.Replace("\r\n", "\n").Replace('\r', '\n');
+        string newFullBlock = ApplyKeyToBlock(fullBlock, key, value);
+        if (newFullBlock == fullBlock) return content;
+        return content.Replace(fullBlock, newFullBlock);
         }
         catch (Exception ex)
         {
@@ -561,6 +582,123 @@ public static class WeaponScriptService
             LogService.Error(ex, $"WriteAltStatRecoilBlock: recoilBlock={recoilBlock}, mode={mode}");
             return content;
         }
+    }
+
+    //如果所有备选值与顶层一致就注释掉整个备选块 如果有不同则激活
+    public static string ToggleAltStatBlockComment(string content, AltStatMode mode, bool hasAnyDiff)
+    {
+        try
+        {
+        string blockName = AltStatBlockNames[mode];
+        var lines = content.Replace("\r\n", "\n").Split('\n');
+        var result = new List<string>();
+        int i = 0;
+        bool changed = false;
+
+        while (i < lines.Length)
+        {
+            string line = lines[i];
+            string trimmed = line.TrimStart();
+            string indent = line.Length - trimmed.Length > 0 ? line.Substring(0, line.Length - trimmed.Length) : "\t";
+
+            bool isBlockLine = trimmed == blockName || trimmed == $"//{blockName}";
+            if (isBlockLine)
+            {
+                int j = i + 1;
+                while (j < lines.Length && string.IsNullOrWhiteSpace(lines[j])) j++;
+                if (j < lines.Length)
+                {
+                    string nextTrimmed = lines[j].TrimStart();
+                    string braceIndent = lines[j].Length - nextTrimmed.Length > 0
+                        ? lines[j].Substring(0, lines[j].Length - nextTrimmed.Length) : indent;
+                    bool openCommented = nextTrimmed == "//{" || nextTrimmed.StartsWith("//{");
+                    bool openActive = nextTrimmed == "{";
+
+                    if (openCommented || openActive)
+                    {
+                        int k = j + 1;
+                        while (k < lines.Length)
+                        {
+                            string kt = lines[k].TrimStart();
+                            if (kt == "}" || kt == "//}")
+                                break;
+                            k++;
+                        }
+
+                        if (hasAnyDiff)
+                        {
+                            result.Add($"{indent}{blockName}");
+                            result.Add($"{braceIndent}{{");
+                            for (int m = j + 1; m < k; m++)
+                                result.Add(lines[m]);
+                            result.Add($"{braceIndent}}}");
+                            changed = true;
+                            i = k + 1;
+                            continue;
+                        }
+                        else
+                        {
+                            result.Add($"{indent}//{blockName}");
+                            result.Add($"{braceIndent}//{{");
+                            result.Add($"{braceIndent}//}}");
+                            changed = true;
+                            i = k + 1;
+                            continue;
+                        }
+                    }
+                }
+            }
+            result.Add(line);
+            i++;
+        }
+
+        return changed ? string.Join("\n", result) : content;
+        }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, $"ToggleAltStatBlockComment: mode={mode}");
+            return content;
+        }
+    }
+
+    private static string ApplyKeyToBlock(string fullBlock, string key, string value)//屎
+    {
+        int bracePos = fullBlock.IndexOf('{');
+        int closePos = fullBlock.LastIndexOf('}');
+        if (bracePos < 0 || closePos <= bracePos) return fullBlock;
+
+        string beforeBrace = fullBlock.Substring(0, bracePos + 1);
+        string blockContent = fullBlock.Substring(bracePos + 1, closePos - bracePos - 1);
+        int afterLineStart = fullBlock.LastIndexOf('\n', closePos);
+        string afterBrace = afterLineStart >= 0
+            ? fullBlock.Substring(afterLineStart)
+            : fullBlock.Substring(closePos);
+
+        LogService.Debug($"ApplyKeyToBlock: key={key}, value={value}, beforeBrace=[{beforeBrace.Replace("\n","\\n").Replace("\t","\\t")}], blockContent=[{blockContent.Replace("\n","\\n").Replace("\t","\\t")}], afterBrace=[{afterBrace.Replace("\n","\\n").Replace("\t","\\t")}]");
+
+        string deletePattern = $@"^[ \t]*""{Regex.Escape(key)}""\s+""[^""]*""\s*(?://.*)?(\r?\n)?";
+        blockContent = Regex.Replace(blockContent, deletePattern, "", RegexOptions.Multiline);
+        blockContent = blockContent.TrimEnd('\n', '\r', ' ', '\t');
+
+        LogService.Debug($"ApplyKeyToBlock after delete+trim: blockContent=[{blockContent.Replace("\n","\\n").Replace("\t","\\t")}]");
+
+        if (!string.IsNullOrEmpty(value))
+        {
+            int lineStart = fullBlock.LastIndexOf('\n', bracePos);
+            string braceLine = lineStart >= 0
+                ? fullBlock.Substring(lineStart + 1, bracePos - lineStart - 1)
+                : fullBlock.Substring(0, bracePos);
+            string braceIndent = braceLine.Length - braceLine.TrimStart().Length > 0
+                ? braceLine.Substring(0, braceLine.Length - braceLine.TrimStart().Length)
+                : "\t";
+            string indent = braceIndent + "\t";
+            blockContent = $"\n{indent}\"{key}\"\t\t\t\t\"{value}\"" + blockContent;
+        }
+
+        string result = beforeBrace + blockContent + afterBrace;
+        result = Regex.Replace(result, @"(\n\s*){3,}", "\n\n");
+        LogService.Debug($"ApplyKeyToBlock result: [{result.Replace("\n","\\n").Replace("\t","\\t")}]");
+        return result;
     }
 
     #endregion
@@ -763,7 +901,6 @@ public static class WeaponScriptService
     #endregion
     #region 字段读写替换
 
-    //获取顶层或备选字段值 mode为null取顶层 Dov取dov_stats字段 Zombie取zombie_stats字段
     private static string? GetFieldValue(WeaponData w, string h, AltStatMode? mode) => h switch
     {
         "SupportedFireModes" => AltS(w.FireModes, w.DovFireModes, w.ZombieFireModes, mode),

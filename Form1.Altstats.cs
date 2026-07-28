@@ -18,8 +18,8 @@ public partial class Form1
             if (showingAltStats && currentAltStatMode == mode)
             {
                 LogService.Info($"ToggleAltStats: exiting {mode} mode");
-                if ((currentWeaponLeft != null && HasUnsavedChanges(true))
-                    || (currentWeaponRight != null && HasUnsavedChanges(false)))
+                if ((currentWeaponLeft != null && HasUnsavedChanges(true, checkBothSides: true))
+                    || (currentWeaponRight != null && HasUnsavedChanges(false, checkBothSides: true)))
                 {
                     var result = MessageBox.Show("Unsaved alt stat changes will be lost. Discard?",
                         "Unsaved Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
@@ -35,8 +35,8 @@ public partial class Form1
             else
             {
                 LogService.Info($"ToggleAltStats: entering {mode} mode");
-                if ((currentWeaponLeft != null && HasUnsavedChanges(true))
-                    || (currentWeaponRight != null && HasUnsavedChanges(false)))
+                if ((currentWeaponLeft != null && HasUnsavedChanges(true, checkBothSides: true))
+                    || (currentWeaponRight != null && HasUnsavedChanges(false, checkBothSides: true)))
                 {
                     var result = MessageBox.Show("Unsaved changes will be lost. Switch stats mode?",
                         "Unsaved Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);

@@ -85,7 +85,7 @@ public partial class Form1
                     StoreSnapshot();
                 }
                 if (!showingAltStats)
-                    StoreSnapshot();
+                    StoreSnapshot(leftOnly: true);
             }
         }
         catch (Exception ex)
@@ -166,7 +166,7 @@ public partial class Form1
                     StoreSnapshot();
                 }
                 if (!showingAltStats)
-                    StoreSnapshot();
+                    StoreSnapshot(leftOnly: false);
             }
         }
         catch (Exception ex)
@@ -175,7 +175,7 @@ public partial class Form1
         }
     }
 
-    private bool HasUnsavedChanges(bool isLeft)
+    private bool HasUnsavedChanges(bool isLeft, bool checkBothSides = false)
     {
         var snap = isLeft ? _snapshotLeft : _snapshotRight;
         if (snap == null)
@@ -187,19 +187,27 @@ public partial class Form1
         if (currentWeaponLeft != null && currentWeaponRight != null
             && ReferenceEquals(currentWeaponLeft, currentWeaponRight))
         {
+            if (!checkBothSides)
+            {
+                var temp = new WeaponData();
+                SaveControlsToWeapon(temp, isLeft);
+                bool diff = !WeaponDataEquals(temp, snap);
+                LogService.Debug($"HasUnsavedChanges(sameWeapon, {(isLeft ? "L" : "R")} only): diff={diff}");
+                return diff;
+            }
             var tempL = new WeaponData(); SaveControlsToWeapon(tempL, true);
             var tempR = new WeaponData(); SaveControlsToWeapon(tempR, false);
             bool leftDiff = !WeaponDataEquals(tempL, _snapshotLeft);
             bool rightDiff = !WeaponDataEquals(tempR, _snapshotRight);
             bool result = leftDiff || rightDiff;
-            LogService.Debug($"HasUnsavedChanges(sameWeapon): L={leftDiff}, R={rightDiff} -> {result}");
+            LogService.Debug($"HasUnsavedChanges(sameWeapon, both): L={leftDiff}, R={rightDiff} -> {result}");
             return result;
         }
-        var temp = new WeaponData();
-        SaveControlsToWeapon(temp, isLeft);
-        bool diff = !WeaponDataEquals(temp, snap);
-        LogService.Debug($"HasUnsavedChanges({(isLeft ? "L" : "R")}): diff={diff}");
-        return diff;
+        var temp2 = new WeaponData();
+        SaveControlsToWeapon(temp2, isLeft);
+        bool diff2 = !WeaponDataEquals(temp2, snap);
+        LogService.Debug($"HasUnsavedChanges({(isLeft ? "L" : "R")}): diff={diff2}");
+        return diff2;
         //控件值写入临时对象与保存点快照比对
     }
 
@@ -360,7 +368,9 @@ public partial class Form1
                     }
                     else
                     {
+                        var oldW = CloneTopLevelFields(currentWeaponLeft!);
                         SaveControlsToWeapon(currentWeaponLeft!, true);
+                        SyncAltStatsToMatchTopLevel(oldW, currentWeaponLeft!);
                         LoadWeaponToControls(currentWeaponLeft!, false);
                     }
                 }
@@ -373,7 +383,9 @@ public partial class Form1
                     }
                     else
                     {
+                        var oldW = CloneTopLevelFields(currentWeaponRight!);
                         SaveControlsToWeapon(currentWeaponRight!, false);
+                        SyncAltStatsToMatchTopLevel(oldW, currentWeaponRight!);
                         LoadWeaponToControls(currentWeaponRight!, true);
                     }
                 }
@@ -494,7 +506,9 @@ public partial class Form1
                     }
                     else if (!showingAltStats)
                     {
+                        var oldW = CloneTopLevelFields(currentWeaponLeft!);
                         SaveControlsToWeapon(currentWeaponLeft!, true);
+                        SyncAltStatsToMatchTopLevel(oldW, currentWeaponLeft!);
                         LoadWeaponToControls(currentWeaponLeft!, false);
                     }
                 }
@@ -507,7 +521,9 @@ public partial class Form1
                     }
                     else if (!showingAltStats)
                     {
+                        var oldW = CloneTopLevelFields(currentWeaponRight!);
                         SaveControlsToWeapon(currentWeaponRight!, false);
+                        SyncAltStatsToMatchTopLevel(oldW, currentWeaponRight!);
                         LoadWeaponToControls(currentWeaponRight!, true);
                     }
                 }
@@ -541,12 +557,11 @@ public partial class Form1
             {
                 CsvService.SaveWeapons(Path.Combine(AppContext.BaseDirectory, "weapons.csv"), weapons);
                 string csv = Path.Combine(AppContext.BaseDirectory, "weapons.csv");
-                var exportMode = showingAltStats ? currentAltStatMode : (WeaponScriptService.AltStatMode?)null;
                 await Task.Run(() =>
                 {
-                    if (exportMode.HasValue)
-                        WeaponScriptService.ExportAltStatsToScripts(csv, lastScriptsDir, exportMode.Value);
-                    else WeaponScriptService.ExportCsvToScripts(csv, lastScriptsDir);
+                    WeaponScriptService.ExportCsvToScripts(csv, lastScriptsDir);
+                    WeaponScriptService.ExportAltStatsToScripts(csv, lastScriptsDir, WeaponScriptService.AltStatMode.Dov);
+                    WeaponScriptService.ExportAltStatsToScripts(csv, lastScriptsDir, WeaponScriptService.AltStatMode.Zombie);
                 });
                 if (btn != null) { btn.Text = "wpn_reload_script all"; btn.Tag = false; }
                 this.Text = "Exported!"; await Task.Delay(1145);
