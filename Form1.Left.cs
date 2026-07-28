@@ -39,11 +39,5 @@ public partial class Form1
         CreateSpreadRecoilAndPropertiesGroups(x, true);
         CreateSpreadMultiplierGroup(x, true);
         CreateOtherStatsGroup(x, true);
-
-        if (weapons.Count > 0)
-        {
-            cmbWeaponsL.DataSource = new List<WeaponData>(weapons);
-            cmbWeaponsL.SelectedIndex = 0;
-        }
     }
 }

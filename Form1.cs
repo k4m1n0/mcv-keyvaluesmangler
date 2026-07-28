@@ -112,9 +112,9 @@ public partial class Form1 : Form
             _undoTimer = new System.Windows.Forms.Timer { Interval = 300 };
             _undoTimer.Tick += (_, _) => { _undoTimer.Stop(); if (_undoPending) { PushUndo(); _undoPending = false; } };
 
+            InitCenterPanels();
             InitLeftPanel(weapons);
             InitRightPanel(weapons);
-            InitCenterPanels();
             InitC64Labels();
             InitTopButtons();
             MarkPanelControls();
@@ -133,6 +133,9 @@ public partial class Form1 : Form
 
                 if (weapons.Count > 0)
                 {
+                    cmbWeaponsL.SelectedIndexChanged -= WeaponSelectedL;
+                    cmbWeaponsR.SelectedIndexChanged -= WeaponSelectedR;
+
                     cmbWeaponsL.DataSource = null;
                     cmbWeaponsL.DataSource = new List<WeaponData>(weapons);
                     cmbWeaponsL.DisplayMember = "PrintName";
@@ -142,6 +145,25 @@ public partial class Form1 : Form
                     cmbWeaponsR.DataSource = new List<WeaponData>(weapons);
                     cmbWeaponsR.DisplayMember = "PrintName";
                     cmbWeaponsR.SelectedIndex = 0;
+
+                    cmbWeaponsL.SelectedIndexChanged += WeaponSelectedL;
+                    cmbWeaponsR.SelectedIndexChanged += WeaponSelectedR;
+
+                    initializing = false;
+                    if (cmbWeaponsL.SelectedItem is WeaponData wL)
+                    {
+                        currentWeaponLeft = wL;
+                        LoadWeaponToControls(wL, true);
+                    }
+                    if (cmbWeaponsR.SelectedItem is WeaponData wR)
+                    {
+                        currentWeaponRight = wR;
+                        LoadWeaponToControls(wR, false);
+                    }
+                    StoreSnapshot();
+                    UpdateAllDamage();
+                    pnlSpread.Invalidate();
+                    pnlRecoil.Invalidate();
 
                     UpdateC64Labels(true);
                 }
@@ -434,13 +456,6 @@ public partial class Form1 : Form
             ShowingAltStats = showingAltStats,
             AltMode = currentAltStatMode
         };
-        //备选模式下先将控件值同步到备选字段再入栈
-        if (showingAltStats)
-        {
-            if (currentWeaponLeft != null) SyncAltStatFields(currentWeaponLeft, currentAltStatMode);
-            if (currentWeaponRight != null && !ReferenceEquals(currentWeaponLeft, currentWeaponRight))
-                SyncAltStatFields(currentWeaponRight, currentAltStatMode);
-        }
         SaveControlsToWeapon(entry.LeftData, true);
         SaveControlsToWeapon(entry.RightData, false);
 
@@ -531,17 +546,16 @@ public partial class Form1 : Form
 
     public void StoreSnapshot()
     {
-        //备选模式下不更新快照 防止备选值覆盖普通快照
-        if (showingAltStats)
+        if (initializing)
         {
-            LogService.Debug("StoreSnapshot: skipped (showingAltStats)");
+            LogService.Debug("StoreSnapshot: skipped (initializing)");
             return;
         }
         _snapshotLeft = new WeaponData();
         _snapshotRight = new WeaponData();
         SaveControlsToWeapon(_snapshotLeft, true);
         SaveControlsToWeapon(_snapshotRight, false);
-        LogService.Debug("StoreSnapshot: updated");
+        LogService.Debug($"StoreSnapshot: updated (altStats={showingAltStats})");
     }
 
     private void RestoreUndoEntry(UndoEntry entry)
