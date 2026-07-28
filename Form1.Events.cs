@@ -154,18 +154,28 @@ public partial class Form1
     private bool HasUnsavedChanges(bool isLeft)
     {
         var snap = isLeft ? _snapshotLeft : _snapshotRight;
-        if (snap == null) return false;
+        if (snap == null)
+        {
+            LogService.Debug($"HasUnsavedChanges({(isLeft ? "L" : "R")}): snap is null -> false");
+            return false;
+        }
         //同一武器时任意一侧有修改都算 不区分焦点
         if (currentWeaponLeft != null && currentWeaponRight != null
             && ReferenceEquals(currentWeaponLeft, currentWeaponRight))
         {
             var tempL = new WeaponData(); SaveControlsToWeapon(tempL, true);
             var tempR = new WeaponData(); SaveControlsToWeapon(tempR, false);
-            return !WeaponDataEquals(tempL, _snapshotLeft) || !WeaponDataEquals(tempR, _snapshotRight);
+            bool leftDiff = !WeaponDataEquals(tempL, _snapshotLeft);
+            bool rightDiff = !WeaponDataEquals(tempR, _snapshotRight);
+            bool result = leftDiff || rightDiff;
+            LogService.Debug($"HasUnsavedChanges(sameWeapon): L={leftDiff}, R={rightDiff} -> {result}");
+            return result;
         }
         var temp = new WeaponData();
         SaveControlsToWeapon(temp, isLeft);
-        return !WeaponDataEquals(temp, snap);
+        bool diff = !WeaponDataEquals(temp, snap);
+        LogService.Debug($"HasUnsavedChanges({(isLeft ? "L" : "R")}): diff={diff}");
+        return diff;
         //控件值写入临时对象与保存点快照比对
     }
 
