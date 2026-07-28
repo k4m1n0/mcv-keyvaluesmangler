@@ -130,6 +130,7 @@ public partial class Form1
         {
         var weapon = isLeft ? currentWeaponLeft : currentWeaponRight;
         if (weapon == null) return;
+        LogService.Debug($"LoadAltStatsToControls: isLeft={isLeft}, mode={mode}, weapon={weapon.ScriptName}");
         var temp = new WeaponData();
         CopyWeaponDataFields(weapon, temp);
 
@@ -216,6 +217,7 @@ public partial class Form1
     {
         try
         {
+        LogService.Debug($"SyncAltStatFields: mode={mode}, weapon={w.ScriptName}");
         bool isDov = mode == WeaponScriptService.AltStatMode.Dov;
         if (isDov)
         {
