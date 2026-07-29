@@ -31,7 +31,7 @@ public partial class Form1
         this.Controls.Add(new Label { Text = "WeaponL", Location = new Point(275, 8), Size = new Size(65, 20) });
         this.Controls.Add(new Label { Text = "Dmg", Location = new Point(4, 8), AutoSize = true });
         nudDamageGenericL = new NumericUpDown { Location = new Point(42, 6), Size = new Size(65, 23), DecimalPlaces = 1, Increment = 1m, Minimum = 0m, Maximum = 999m, Value = 0m };//我用了好几天才发现这个输入框被裁掉了
-        nudDamageGenericL.ValueChanged += (s, e) => { ScheduleUndo(); UpdateAllDamage(); };
+        nudDamageGenericL.ValueChanged += (s, e) => { ScheduleUndo(); UpdateAllDamage(); LogService.DebugDebounce("nud_Dmg_L", $"Dmg L: {nudDamageGenericL.Value}", 500); };
         nudDamageGenericL.MouseUp += (_, _) => PushUndoNow();
         this.Controls.Add(nudDamageGenericL);
         CreateDamageMultiplierGroup(x, true);
@@ -39,11 +39,5 @@ public partial class Form1
         CreateSpreadRecoilAndPropertiesGroups(x, true);
         CreateSpreadMultiplierGroup(x, true);
         CreateOtherStatsGroup(x, true);
-
-        if (weapons.Count > 0)
-        {
-            cmbWeaponsL.DataSource = new List<WeaponData>(weapons);
-            cmbWeaponsL.SelectedIndex = 0;
-        }
     }
 }

@@ -61,7 +61,7 @@ public partial class Form1 : Form
 
     private LinkedList<UndoEntry> _undoStack = new();
     private LinkedList<UndoEntry> _redoStack = new();
-    private const int MaxUndo = 50;
+    private const int MaxUndo = 100;
 
     private PanelRenderer spreadRenderer = null!;
     private PanelRenderer recoilRenderer = null!;
@@ -96,6 +96,7 @@ public partial class Form1 : Form
 
     public Form1()
     {
+        LogService.Info("Form1 constructor started");
         try
         {
             this.Text = "Keyvalues Mangler™ 5000";
@@ -106,13 +107,14 @@ public partial class Form1 : Form
 
             string csvPath = Path.Combine(AppContext.BaseDirectory, "weapons.csv");
             weapons = File.Exists(csvPath) ? CsvService.LoadWeapons(csvPath) : new List<WeaponData>();
+            LogService.Info($"Weapons loaded: {weapons.Count}");
 
             _undoTimer = new System.Windows.Forms.Timer { Interval = 300 };
             _undoTimer.Tick += (_, _) => { _undoTimer.Stop(); if (_undoPending) { PushUndo(); _undoPending = false; } };
 
+            InitCenterPanels();
             InitLeftPanel(weapons);
             InitRightPanel(weapons);
-            InitCenterPanels();
             InitC64Labels();
             InitTopButtons();
             MarkPanelControls();
@@ -131,6 +133,9 @@ public partial class Form1 : Form
 
                 if (weapons.Count > 0)
                 {
+                    cmbWeaponsL.SelectedIndexChanged -= WeaponSelectedL;
+                    cmbWeaponsR.SelectedIndexChanged -= WeaponSelectedR;
+
                     cmbWeaponsL.DataSource = null;
                     cmbWeaponsL.DataSource = new List<WeaponData>(weapons);
                     cmbWeaponsL.DisplayMember = "PrintName";
@@ -141,16 +146,37 @@ public partial class Form1 : Form
                     cmbWeaponsR.DisplayMember = "PrintName";
                     cmbWeaponsR.SelectedIndex = 0;
 
+                    cmbWeaponsL.SelectedIndexChanged += WeaponSelectedL;
+                    cmbWeaponsR.SelectedIndexChanged += WeaponSelectedR;
+
+                    initializing = false;
+                    if (cmbWeaponsL.SelectedItem is WeaponData wL)
+                    {
+                        currentWeaponLeft = wL;
+                        LoadWeaponToControls(wL, true);
+                    }
+                    if (cmbWeaponsR.SelectedItem is WeaponData wR)
+                    {
+                        currentWeaponRight = wR;
+                        LoadWeaponToControls(wR, false);
+                    }
+                    StoreSnapshot();
+                    UpdateAllDamage();
+                    pnlSpread.Invalidate();
+                    pnlRecoil.Invalidate();
+
                     UpdateC64Labels(true);
                 }
                 initializing = false;
                 RegisterHotKey(this.Handle, hotkeyId, MOD_CONTROL, VK_T);
+                LogService.Info("Form1 ready");
             };
 
             this.FormClosed += (s, e) => UnregisterHotKey(this.Handle, hotkeyId);
         }
         catch (Exception ex)
         {
+            LogService.Fatal(ex, "Form1 constructor failed");
             MessageBox.Show($"Launch failed: {ex}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             Application.Exit();
         }
@@ -245,6 +271,7 @@ public partial class Form1 : Form
     {
         if (btn.Tag is true)
         {
+            LogService.Debug("BtnQuickExport: right-click cancelled");
             btn.Text = "wpn_reload_script all";
             btn.Tag = false;
         }
@@ -254,20 +281,31 @@ public partial class Form1 : Form
     {
         //结束未完成的rapid 保存当前状态
         if (_rapidStartLeft != null || _rapidStartRight != null) PushUndo();
-        bool leftDirty = currentWeaponLeft != null && HasUnsavedChanges(true);
-        bool rightDirty = currentWeaponRight != null && HasUnsavedChanges(false);
+        bool leftDirty = currentWeaponLeft != null && HasUnsavedChanges(true, checkBothSides: true);
+        bool rightDirty = currentWeaponRight != null && HasUnsavedChanges(false, checkBothSides: true);
         if (leftDirty || rightDirty)
         {
+            LogService.Debug($"FormClosing: unsaved changes (L={leftDirty}, R={rightDirty}), prompting user");
             var result = MessageBox.Show("Unsaved changes will be lost. Save now?",
                 "Unsaved Changes", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
             if (result == DialogResult.Yes)
             {
+                LogService.Info("Form1 closing: saved changes");
                 BtnSave_Click(this, EventArgs.Empty);
             }
             else if (result == DialogResult.Cancel)
             {
+                LogService.Info("Form1 closing: cancelled");
                 e.Cancel = true;
             }
+            else
+            {
+                LogService.Info("Form1 closing: discarded changes");
+            }
+        }
+        else
+        {
+            LogService.Info("Form1 closing: no unsaved changes");
         }
     }
 
@@ -303,6 +341,7 @@ public partial class Form1 : Form
         {
             var formX = this.PointToClient(c.PointToScreen(Point.Empty)).X;
             lastFocusLeft = formX < 525;
+            LogService.DebugDebounce("focus_side", $"Focus side: {(lastFocusLeft ? "L" : "R")} ({c.GetType().Name})", 300);
         }
     }
     
@@ -322,41 +361,52 @@ public partial class Form1 : Form
         const int WM_HOTKEY = 0x0312;
         if (m.Msg == WM_HOTKEY && m.WParam.ToInt32() == hotkeyId)
         {
-            bool mcvOrSelf = IsMcvForeground() || GetForegroundWindow() == this.Handle;
-            if (this.WindowState == FormWindowState.Minimized || !this.Visible)
+            try
             {
-                if (!mcvOrSelf) return;
-                this.Visible = true;
-                this.WindowState = FormWindowState.Normal;
-                ShowWindow(this.Handle, SW_RESTORE);
-                SetWindowPos(this.Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-                isTopmost = true;
-                this.Text = "Keyvalues Mangler™ 5000 [Topmost]";
-                this.Activate();
-            }
-            else if (isTopmost)
-            {
-                SetWindowPos(this.Handle, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-                if (mcvOrSelf)
-                    this.WindowState = FormWindowState.Minimized;
-                isTopmost = false;
-                this.Text = "Keyvalues Mangler™ 5000";
-            }
-            else
-            {
-                if (mcvOrSelf)
+                bool mcvOrSelf = IsMcvForeground() || GetForegroundWindow() == this.Handle;
+                if (this.WindowState == FormWindowState.Minimized || !this.Visible)
                 {
-                    this.WindowState = FormWindowState.Minimized;
-                    isTopmost = false;
-                    this.Text = "Keyvalues Mangler™ 5000";
-                }
-                else
-                {
+                    if (!mcvOrSelf) return;
+                    LogService.Debug("Hotkey Ctrl+T: restore from minimized to topmost");
+                    this.Visible = true;
+                    this.WindowState = FormWindowState.Normal;
+                    ShowWindow(this.Handle, SW_RESTORE);
                     SetWindowPos(this.Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
                     isTopmost = true;
                     this.Text = "Keyvalues Mangler™ 5000 [Topmost]";
                     this.Activate();
                 }
+                else if (isTopmost)
+                {
+                    LogService.Debug("Hotkey Ctrl+T: exit topmost");
+                    SetWindowPos(this.Handle, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+                    if (mcvOrSelf)
+                        this.WindowState = FormWindowState.Minimized;
+                    isTopmost = false;
+                    this.Text = "Keyvalues Mangler™ 5000";
+                }
+                else
+                {
+                    if (mcvOrSelf)
+                    {
+                        LogService.Debug("Hotkey Ctrl+T: minimize");
+                        this.WindowState = FormWindowState.Minimized;
+                        isTopmost = false;
+                        this.Text = "Keyvalues Mangler™ 5000";
+                    }
+                    else
+                    {
+                        LogService.Debug("Hotkey Ctrl+T: set topmost");
+                        SetWindowPos(this.Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+                        isTopmost = true;
+                        this.Text = "Keyvalues Mangler™ 5000 [Topmost]";
+                        this.Activate();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogService.Error(ex, "Form1.WndProc hotkey handler");
             }
         }
         base.WndProc(ref m);
@@ -372,7 +422,11 @@ public partial class Form1 : Form
             using var p = Process.GetProcessById((int)pid);
             return p.ProcessName.Equals("mcv_x64", StringComparison.OrdinalIgnoreCase);
         }
-        catch { return false; }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, "Form1.IsMcvForeground");
+            return false;
+        }
     }
 
     public void ScheduleUndo()
@@ -406,18 +460,12 @@ public partial class Form1 : Form
             ShowingAltStats = showingAltStats,
             AltMode = currentAltStatMode
         };
-        //备选模式下先将控件值同步到备选字段再入栈
-        if (showingAltStats)
-        {
-            if (currentWeaponLeft != null) SyncAltStatFields(currentWeaponLeft, currentAltStatMode);
-            if (currentWeaponRight != null && !ReferenceEquals(currentWeaponLeft, currentWeaponRight))
-                SyncAltStatFields(currentWeaponRight, currentAltStatMode);
-        }
         SaveControlsToWeapon(entry.LeftData, true);
         SaveControlsToWeapon(entry.RightData, false);
 
         _undoStack.AddLast(entry);
         if (_undoStack.Count > MaxUndo) _undoStack.RemoveFirst();
+        LogService.Debug($"PushUndo: stack={_undoStack.Count}, redo={_redoStack.Count}, altStats={showingAltStats}");
     }
 
     private void PopUndo()
@@ -443,6 +491,11 @@ public partial class Form1 : Form
             var entry = _undoStack.Last!.Value;
             _undoStack.RemoveLast();
             RestoreUndoEntry(entry);
+            LogService.Debug($"PopUndo: stack={_undoStack.Count}, redo={_redoStack.Count}");
+        }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, "Form1.PopUndo");
         }
         finally { _undoInProgress = false; }
     }
@@ -472,6 +525,11 @@ public partial class Form1 : Form
             if (_undoStack.Count > MaxUndo) _undoStack.RemoveFirst();
 
             RestoreUndoEntry(entry);
+            LogService.Debug($"PopRedo: stack={_undoStack.Count}, redo={_redoStack.Count}");
+        }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, "Form1.PopRedo");
         }
         finally { _undoInProgress = false; }
     }
@@ -483,24 +541,38 @@ public partial class Form1 : Form
 
     public void ClearUndoHistory()
     {
+        LogService.Debug("ClearUndoHistory");
         _undoStack.Clear();
         _redoStack.Clear();
         _rapidStartLeft = null;
         _rapidStartRight = null;
     }
 
-    public void StoreSnapshot()
+    public void StoreSnapshot(bool? leftOnly = null)
     {
-        //备选模式下不更新快照 防止备选值覆盖普通快照
-        if (showingAltStats) return;
-        _snapshotLeft = new WeaponData();
-        _snapshotRight = new WeaponData();
-        SaveControlsToWeapon(_snapshotLeft, true);
-        SaveControlsToWeapon(_snapshotRight, false);
+        if (initializing)
+        {
+            LogService.Debug("StoreSnapshot: skipped (initializing)");
+            return;
+        }
+        bool updateLeft = leftOnly != false;
+        bool updateRight = leftOnly != true;
+        if (updateLeft)
+        {
+            _snapshotLeft = new WeaponData();
+            SaveControlsToWeapon(_snapshotLeft, true);
+        }
+        if (updateRight)
+        {
+            _snapshotRight = new WeaponData();
+            SaveControlsToWeapon(_snapshotRight, false);
+        }
+        LogService.Debug($"StoreSnapshot: updated (altStats={showingAltStats}, L={updateLeft}, R={updateRight})");
     }
 
     private void RestoreUndoEntry(UndoEntry entry)
     {
+        LogService.Debug($"RestoreUndoEntry: L={entry.LeftScriptName}, R={entry.RightScriptName}, altStats={entry.ShowingAltStats}");
         if (!string.IsNullOrEmpty(entry.LeftScriptName))
         {
             var w = weapons.FirstOrDefault(x => x.ScriptName == entry.LeftScriptName);
@@ -548,6 +620,7 @@ public partial class Form1 : Form
     {
         if (currentWeaponLeft != null && currentWeaponRight != null)
         {
+            LogService.Debug($"Copy L>R: {currentWeaponLeft.ScriptName} -> {currentWeaponRight.ScriptName}");
             PushUndo();
             var temp = new WeaponData();
             SaveControlsToWeapon(temp, true);
@@ -562,6 +635,7 @@ public partial class Form1 : Form
     {
         if (currentWeaponRight != null && currentWeaponLeft != null)
         {
+            LogService.Debug($"Copy R>L: {currentWeaponRight.ScriptName} -> {currentWeaponLeft.ScriptName}");
             PushUndo();
             var temp = new WeaponData();
             SaveControlsToWeapon(temp, false);
@@ -595,6 +669,8 @@ public partial class Form1 : Form
         dst.DefaultClip = src.DefaultClip;
         dst.ExtraBulletChamber = src.ExtraBulletChamber;
         dst.BulletsPerShot = src.BulletsPerShot;
+        dst.SecondaryFireRate = src.SecondaryFireRate;
+        dst.IronSight = src.IronSight;
         dst.IronsightSpeedScale = src.IronsightSpeedScale;
         dst.Weight = src.Weight;
         dst.ZMBuyPrice = src.ZMBuyPrice;
@@ -622,6 +698,138 @@ public partial class Form1 : Form
     }
 
     #endregion
+    #region 备选值联动同步
+
+    private static WeaponData CloneTopLevelFields(WeaponData src)
+    {
+        var dst = new WeaponData();
+        CopyWeaponDataFields(src, dst);
+        return dst;
+    }
+
+    //保存顶层值后将备选值中与旧顶层值一致的字段同步到新顶层值
+    private static void SyncAltStatsToMatchTopLevel(WeaponData oldW, WeaponData newW)
+    {
+        LogService.Debug($"SyncAltStatsToMatchTopLevel called for {newW.ScriptName}");
+        //double
+        SyncDoubleIfMatch(oldW.DamageGeneric, newW.DamageGeneric, newW.DovDamageGeneric, newW.ZombieDamageGeneric,
+            (w, v) => w.DovDamageGeneric = v, (w, v) => w.ZombieDamageGeneric = v, newW);
+        SyncDoubleIfMatch(oldW.DamageHeadMultiplier, newW.DamageHeadMultiplier, newW.DovDamageHeadMultiplier, newW.ZombieDamageHeadMultiplier,
+            (w, v) => w.DovDamageHeadMultiplier = v, (w, v) => w.ZombieDamageHeadMultiplier = v, newW);
+        SyncDoubleIfMatch(oldW.DamageChestMultiplier, newW.DamageChestMultiplier, newW.DovDamageChestMultiplier, newW.ZombieDamageChestMultiplier,
+            (w, v) => w.DovDamageChestMultiplier = v, (w, v) => w.ZombieDamageChestMultiplier = v, newW);
+        SyncDoubleIfMatch(oldW.DamageStomachMultiplier, newW.DamageStomachMultiplier, newW.DovDamageStomachMultiplier, newW.ZombieDamageStomachMultiplier,
+            (w, v) => w.DovDamageStomachMultiplier = v, (w, v) => w.ZombieDamageStomachMultiplier = v, newW);
+        SyncDoubleIfMatch(oldW.DamageLegMultiplier, newW.DamageLegMultiplier, newW.DovDamageLegMultiplier, newW.ZombieDamageLegMultiplier,
+            (w, v) => w.DovDamageLegMultiplier = v, (w, v) => w.ZombieDamageLegMultiplier = v, newW);
+        SyncDoubleIfMatch(oldW.DamageArmMultiplier, newW.DamageArmMultiplier, newW.DovDamageArmMultiplier, newW.ZombieDamageArmMultiplier,
+            (w, v) => w.DovDamageArmMultiplier = v, (w, v) => w.ZombieDamageArmMultiplier = v, newW);
+        SyncDoubleIfMatch(oldW.BulletSpread, newW.BulletSpread, newW.DovBulletSpread, newW.ZombieBulletSpread,
+            (w, v) => w.DovBulletSpread = v, (w, v) => w.ZombieBulletSpread = v, newW);
+        SyncDoubleIfMatch(oldW.BulletSpreadDegreesIronsighted, newW.BulletSpreadDegreesIronsighted, newW.DovBulletSpreadDegreesIronsighted, newW.ZombieBulletSpreadDegreesIronsighted,
+            (w, v) => w.DovBulletSpreadDegreesIronsighted = v, (w, v) => w.ZombieBulletSpreadDegreesIronsighted = v, newW);
+        SyncDoubleIfMatch(oldW.BulletSpreadDegreesBipod, newW.BulletSpreadDegreesBipod, newW.DovBulletSpreadDegreesBipod, newW.ZombieBulletSpreadDegreesBipod,
+            (w, v) => w.DovBulletSpreadDegreesBipod = v, (w, v) => w.ZombieBulletSpreadDegreesBipod = v, newW);
+        SyncDoubleIfMatch(oldW.BulletSpreadDegreesBipodIronsighted, newW.BulletSpreadDegreesBipodIronsighted, newW.DovBulletSpreadDegreesBipodIronsighted, newW.ZombieBulletSpreadDegreesBipodIronsighted,
+            (w, v) => w.DovBulletSpreadDegreesBipodIronsighted = v, (w, v) => w.ZombieBulletSpreadDegreesBipodIronsighted = v, newW);
+        SyncDoubleIfMatch(oldW.RangeModifier, newW.RangeModifier, newW.DovRangeModifier, newW.ZombieRangeModifier,
+            (w, v) => w.DovRangeModifier = v, (w, v) => w.ZombieRangeModifier = v, newW);
+        SyncDoubleIfMatch(oldW.IronsightSpeedScale, newW.IronsightSpeedScale, newW.DovIronsightSpeedScale, newW.ZombieIronsightSpeedScale,
+            (w, v) => w.DovIronsightSpeedScale = v, (w, v) => w.ZombieIronsightSpeedScale = v, newW);
+        SyncDoubleIfMatch(oldW.CrouchSpreadMultiplier, newW.CrouchSpreadMultiplier, newW.DovCrouchSpreadMultiplier, newW.ZombieCrouchSpreadMultiplier,
+            (w, v) => w.DovCrouchSpreadMultiplier = v, (w, v) => w.ZombieCrouchSpreadMultiplier = v, newW);
+        SyncDoubleIfMatch(oldW.ProneSpreadMultiplier, newW.ProneSpreadMultiplier, newW.DovProneSpreadMultiplier, newW.ZombieProneSpreadMultiplier,
+            (w, v) => w.DovProneSpreadMultiplier = v, (w, v) => w.ZombieProneSpreadMultiplier = v, newW);
+        SyncDoubleIfMatch(oldW.StandMoveSpreadMultiplier, newW.StandMoveSpreadMultiplier, newW.DovStandMoveSpreadMultiplier, newW.ZombieStandMoveSpreadMultiplier,
+            (w, v) => w.DovStandMoveSpreadMultiplier = v, (w, v) => w.ZombieStandMoveSpreadMultiplier = v, newW);
+        SyncDoubleIfMatch(oldW.SneakMoveSpreadMultiplier, newW.SneakMoveSpreadMultiplier, newW.DovSneakMoveSpreadMultiplier, newW.ZombieSneakMoveSpreadMultiplier,
+            (w, v) => w.DovSneakMoveSpreadMultiplier = v, (w, v) => w.ZombieSneakMoveSpreadMultiplier = v, newW);
+        SyncDoubleIfMatch(oldW.CrouchMoveSpreadMultiplier, newW.CrouchMoveSpreadMultiplier, newW.DovCrouchMoveSpreadMultiplier, newW.ZombieCrouchMoveSpreadMultiplier,
+            (w, v) => w.DovCrouchMoveSpreadMultiplier = v, (w, v) => w.ZombieCrouchMoveSpreadMultiplier = v, newW);
+        SyncDoubleIfMatch(oldW.JumpSpreadMultiplier, newW.JumpSpreadMultiplier, newW.DovJumpSpreadMultiplier, newW.ZombieJumpSpreadMultiplier,
+            (w, v) => w.DovJumpSpreadMultiplier = v, (w, v) => w.ZombieJumpSpreadMultiplier = v, newW);
+        SyncDoubleIfMatch(oldW.ViewSlideRecoilUp, newW.ViewSlideRecoilUp, newW.DovViewSlideRecoilUp, newW.ZombieViewSlideRecoilUp,
+            (w, v) => w.DovViewSlideRecoilUp = v, (w, v) => w.ZombieViewSlideRecoilUp = v, newW);
+        SyncDoubleIfMatch(oldW.ViewSlideRecoilRight, newW.ViewSlideRecoilRight, newW.DovViewSlideRecoilRight, newW.ZombieViewSlideRecoilRight,
+            (w, v) => w.DovViewSlideRecoilRight = v, (w, v) => w.ZombieViewSlideRecoilRight = v, newW);
+        SyncDoubleIfMatch(oldW.ViewSlideRecoilIronsightUp, newW.ViewSlideRecoilIronsightUp, newW.DovViewSlideRecoilIronsightUp, newW.ZombieViewSlideRecoilIronsightUp,
+            (w, v) => w.DovViewSlideRecoilIronsightUp = v, (w, v) => w.ZombieViewSlideRecoilIronsightUp = v, newW);
+        SyncDoubleIfMatch(oldW.ViewSlideRecoilIronsightRight, newW.ViewSlideRecoilIronsightRight, newW.DovViewSlideRecoilIronsightRight, newW.ZombieViewSlideRecoilIronsightRight,
+            (w, v) => w.DovViewSlideRecoilIronsightRight = v, (w, v) => w.ZombieViewSlideRecoilIronsightRight = v, newW);
+        SyncDoubleIfMatch(oldW.Weight, newW.Weight, newW.DovWeight, newW.ZombieWeight,
+            (w, v) => w.DovWeight = v, (w, v) => w.ZombieWeight = v, newW);
+        //int
+        SyncIntIfMatch(oldW.FireRate, newW.FireRate, newW.DovFireRate, newW.ZombieFireRate,
+            (w, v) => w.DovFireRate = v, (w, v) => w.ZombieFireRate = v, newW);
+        SyncIntIfMatch(oldW.ExtraBulletChamber, newW.ExtraBulletChamber, newW.DovExtraBulletChamber, newW.ZombieExtraBulletChamber,
+            (w, v) => w.DovExtraBulletChamber = v, (w, v) => w.ZombieExtraBulletChamber = v, newW);
+        SyncIntIfMatch(oldW.SecondaryFireRate, newW.SecondaryFireRate, newW.DovSecondaryFireRate, newW.ZombieSecondaryFireRate,
+            (w, v) => w.DovSecondaryFireRate = v, (w, v) => w.ZombieSecondaryFireRate = v, newW);
+        SyncIntIfMatch(oldW.IronSight, newW.IronSight, newW.DovIronSight, newW.ZombieIronSight,
+            (w, v) => w.DovIronSight = v, (w, v) => w.ZombieIronSight = v, newW);
+        SyncIntIfMatch(oldW.DefaultClip, newW.DefaultClip, newW.DovDefaultClip, newW.ZombieDefaultClip,
+            (w, v) => w.DovDefaultClip = v, (w, v) => w.ZombieDefaultClip = v, newW);
+        SyncIntIfMatch(oldW.BulletsPerShot, newW.BulletsPerShot, newW.DovBulletsPerShot, newW.ZombieBulletsPerShot,
+            (w, v) => w.DovBulletsPerShot = v, (w, v) => w.ZombieBulletsPerShot = v, newW);
+        //string
+        SyncStrIfMatch(oldW.ClipSize, newW.ClipSize, newW.DovClipSize, newW.ZombieClipSize,
+            (w, v) => w.DovClipSize = v, (w, v) => w.ZombieClipSize = v, newW);
+        SyncStrIfMatch(oldW.FireModes, newW.FireModes, newW.DovFireModes, newW.ZombieFireModes,
+            (w, v) => w.DovFireModes = v, (w, v) => w.ZombieFireModes = v, newW);
+    }
+
+    private static void SyncDoubleIfMatch(double? oldVal, double? newVal,
+        double? dov, double? zombie,
+        Action<WeaponData, double?> setDov, Action<WeaponData, double?> setZombie,
+        WeaponData w)
+    {
+        if (dov.HasValue && oldVal.HasValue && Math.Abs(dov.Value - oldVal.Value) < 0.001)
+        {
+            LogService.Debug($"SyncDoubleIfMatch: clearing Dov (old={oldVal}, dov={dov})");
+            setDov(w, null);
+        }
+        if (zombie.HasValue && oldVal.HasValue && Math.Abs(zombie.Value - oldVal.Value) < 0.001)
+        {
+            LogService.Debug($"SyncDoubleIfMatch: clearing Zombie (old={oldVal}, zombie={zombie})");
+            setZombie(w, null);
+        }
+    }
+
+    private static void SyncIntIfMatch(int? oldVal, int? newVal,
+        int? dov, int? zombie,
+        Action<WeaponData, int?> setDov, Action<WeaponData, int?> setZombie,
+        WeaponData w)
+    {
+        if (dov.HasValue && oldVal.HasValue && dov.Value == oldVal.Value)
+        {
+            LogService.Debug($"SyncIntIfMatch: clearing Dov (old={oldVal}, dov={dov})");
+            setDov(w, null);
+        }
+        if (zombie.HasValue && oldVal.HasValue && zombie.Value == oldVal.Value)
+        {
+            LogService.Debug($"SyncIntIfMatch: clearing Zombie (old={oldVal}, zombie={zombie})");
+            setZombie(w, null);
+        }
+    }
+
+    private static void SyncStrIfMatch(string oldVal, string newVal,
+        string dov, string zombie,
+        Action<WeaponData, string> setDov, Action<WeaponData, string> setZombie,
+        WeaponData w)
+    {
+        if (!string.IsNullOrEmpty(dov) && string.Equals(dov, oldVal, StringComparison.OrdinalIgnoreCase))
+        {
+            LogService.Debug($"SyncStrIfMatch: clearing Dov (old={oldVal}, dov={dov})");
+            setDov(w, null);
+        }
+        if (!string.IsNullOrEmpty(zombie) && string.Equals(zombie, oldVal, StringComparison.OrdinalIgnoreCase))
+        {
+            LogService.Debug($"SyncStrIfMatch: clearing Zombie (old={oldVal}, zombie={zombie})");
+            setZombie(w, null);
+        }
+    }
+
+    #endregion
     #region 杂项
 
     private static void EnableDoubleBuffering(Control control)
@@ -631,10 +839,7 @@ public partial class Form1 : Form
             null, control, new object[] { true });
     }
 
-    #nullable enable
-    //放下面也会爆warn 还有虽然拆分了 下面这些还是没必要单独建个文件
-
-    private void PnlSpread_Paint(object? sender, PaintEventArgs e)
+    private void PnlSpread_Paint(object sender, PaintEventArgs e)
     {
         bool leftAds = nudIronSightL.Value != 0;
         bool rightAds = nudIronSightR.Value != 0;
@@ -647,7 +852,7 @@ public partial class Form1 : Form
             currentWeaponRight != null && rightAds ? (double)nudBipodAdsSpreadR.Value : 0);
     }
 
-    private void PnlRecoil_Paint(object? sender, PaintEventArgs e)
+    private void PnlRecoil_Paint(object sender, PaintEventArgs e)
     {
         bool leftAds = nudIronSightL.Value != 0;
         bool rightAds = nudIronSightR.Value != 0;

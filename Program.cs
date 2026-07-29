@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using WeaponDamageCalc.Services;
@@ -27,27 +30,81 @@ internal static class Program
     [STAThread]
     static int Main(string[] args)
     {
+        string currentDir = AppContext.BaseDirectory;
+        string mutexName = @"WeaponDamageCalc_" + Convert.ToHexString(MD5.HashData(
+            Encoding.UTF8.GetBytes(currentDir.ToLowerInvariant())));
+        using var mutex = new Mutex(true, mutexName, out bool createdNew);
+        if (!createdNew)
+        {
+            LogService.Info("Mutex locked - another instance is already running in this folder");
+            MessageBox.Show("Only one instance of the same folder can be running at once time.",
+                "Mangler - Warning", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return 0;
+        }
+
+        var logLevelArg = Opt(args, "--log-level");
+
+        if (args.Length > 0 && args[0].Equals("--log-level", StringComparison.OrdinalIgnoreCase) && args.Length > 1)
+        {
+            var guiLogLevel = args[1].ToLowerInvariant() switch
+            {
+                "debug" => LogService.Level.Debug,
+                "info"  => LogService.Level.Info,
+                "warn"  => LogService.Level.Warn,
+                "error" => LogService.Level.Error,
+                _       => LogService.Level.Debug
+            };
+            var remaining = args.Skip(2).ToArray();
+            if (remaining.Length > 0)
+            {
+                return RunCliMode(remaining, guiLogLevel);
+            }
+            LogService.Enabled = true;
+            LogService.MinLevel = guiLogLevel;
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+            Application.Run(new Form1());
+            return 0;
+        }
+
         if (args.Length > 0)
         {
-            AllocConsole();
-            int code = Task.Run(() => RunCli(args)).GetAwaiter().GetResult();
-            Console.Out.Flush();
-            if (!Console.IsOutputRedirected && args.Length > 0 && (args[0].Equals("--help", StringComparison.OrdinalIgnoreCase)
-                                 || args[0].Equals("-h", StringComparison.OrdinalIgnoreCase)
-                                 || args[0].Equals("/?", StringComparison.OrdinalIgnoreCase)
-                                 || args[0].Equals("--fuckyou", StringComparison.OrdinalIgnoreCase)))
-            {
-                Console.WriteLine("\nPress any key to exit...");
-                Console.ReadKey();
-            }
-            FreeConsole();
-            return code;
+            return RunCliMode(args, logLevelArg != null ? ParseLogLevel(logLevelArg) : LogService.Level.Warn);
         }
 
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
         Application.Run(new Form1());
         return 0;
+    }
+
+    static LogService.Level ParseLogLevel(string level) => level.ToLowerInvariant() switch
+    {
+        "debug" => LogService.Level.Debug,
+        "info"  => LogService.Level.Info,
+        "warn"  => LogService.Level.Warn,
+        "error" => LogService.Level.Error,
+        _       => LogService.Level.Warn
+    };
+
+    static int RunCliMode(string[] args, LogService.Level logLevel)
+    {
+        LogService.Enabled = true;
+        LogService.MinLevel = logLevel;
+        AllocConsole();
+        LogService.Info($"CLI started: {string.Join(" ", args)} (log level: {logLevel})");
+        int code = Task.Run(() => RunCli(args)).GetAwaiter().GetResult();
+        Console.Out.Flush();
+        if (!Console.IsOutputRedirected && (args[0].Equals("--help", StringComparison.OrdinalIgnoreCase)
+                                        || args[0].Equals("-h", StringComparison.OrdinalIgnoreCase)
+                                        || args[0].Equals("/?", StringComparison.OrdinalIgnoreCase)
+                                        || args[0].Equals("--fuckyou", StringComparison.OrdinalIgnoreCase)))
+        {
+            Console.WriteLine("\nPress any key to exit...");
+            Console.ReadKey();
+        }
+        FreeConsole();
+        return code;
     }
 
     static void ShowHelp()
@@ -58,6 +115,21 @@ Keyvalues Mangler™ 5000 — MCV Weapon Stats Tool
 
 Usage:
   {exeName}.exe [command] [options]
+
+  Without arguments, launches the GUI.
+  With --log-level only, launches GUI with logging enabled (no console window)
+
+Global Options:
+  --log-level <debug|info|warn|error>
+      Set minimum log level written to mangler.log (default: warn in CLI, debug in GUI)
+      DEBUG  Log everything including control value changes and hotkeys
+      INFO   Log operations (save, export, import, wiki actions)
+      WARN   Log warnings and errors only (missing files, failed operations)
+      ERROR  Log errors and fatal events only
+      FATAL  No need to specify, this program gets fucked
+      In CLI mode, --verbose also prints progress to console; log file follows --log-level
+      In GUI mode, use --log-level to enable log file output in Release builds:
+        {exeName}.exe --log-level debug
 
 Commands:
 
@@ -92,8 +164,14 @@ Commands:
       --include-existing  Also generate pages that already exist on wiki
       --check-wiki        Query wiki API to skip existing pages
 
-  --help
+  --help, -h, /?
       Show this help
+
+Logging:
+  All log output goes to both Visual Studio debug output (when attached) and
+  mangler.log in the executable directory. The log file auto rotates at 5 MiB
+  Log format: [HH:mm:ss.fff] [LEVEL] message
+  Warn/Error/Fatal entries include source file location (Debug builds)
 
 Return codes:
   0  Success
@@ -104,14 +182,13 @@ Return codes:
   5  Internal error
 
 Examples:
+  {exeName}.exe --log-level debug                                  (GUI with full logging)
   {exeName}.exe --csv-to-scripts weapons.csv ""X:\...\vietnam\scripts""
   {exeName}.exe --wiki-dryrun ""Weapons of Vietnam"" ""X:\...\vietnam\scripts""
   {exeName}.exe --wiki-upload ""AK-47"" ""X:\...\vietnam\scripts"" --user AAAAAA --pw 114514 --single
   {exeName}.exe --batch-dryrun ""Weapons of Vietnam"" ""X:\...\vietnam\scripts"" --verbose
   {exeName}.exe --generate ""X:\...\vietnam\scripts"" ""X:\output"" --check-wiki
   {exeName}.exe --convert-templates ""X:\...\vietnam\scripts"" --simple
-
-Without arguments, launches the GUI
 ");
     }
 
@@ -134,6 +211,7 @@ Without arguments, launches the GUI
     {
         var cmd = args[0].ToLowerInvariant();
         bool verbose = HasFlag(args, "--verbose");
+        LogService.Info($"CLI command: {cmd}, verbose={verbose}");
 
         try
         {
@@ -261,6 +339,7 @@ Without arguments, launches the GUI
         }
         catch (Exception ex)
         {
+            LogService.Fatal(ex, $"RunCli: {cmd}");
             Console.Error.WriteLine($"Error: {ex.Message}");
             return ERR_EXCEPTION;
         }
@@ -271,7 +350,6 @@ Without arguments, launches the GUI
         Verbose($"Fetching summary: {summaryPage}", verbose);
         var source = await WikiApiService.GetPageSourceAsync(summaryPage);
         if (source == null) { Console.WriteLine($"Page not found: {summaryPage}"); return ERR_PAGE_NOT_FOUND; }
-        //构建索引 与GUI行为一致
         Verbose("Building script index...", verbose);
         var index = await WikiService.BuildScriptIndexAsync();
         var links = WikiService.ExtractWeaponLinks(source, index);
@@ -306,12 +384,18 @@ Without arguments, launches the GUI
                     Console.WriteLine($"OK  {link}");
                 }
             }
-            catch (Exception ex) { fail++; Console.WriteLine($"ERR {link}: {ex.Message}"); }
+            catch (Exception ex)
+            {
+                fail++;
+                Console.WriteLine($"ERR {link}: {ex.Message}");
+                LogService.Error(ex, $"RunBatchDryrun: {link}");
+            }
         }
 
         Console.WriteLine(new string('-', 40));
         string cachedInfo = skipped > 0 ? $", {skipped} cached" : "";
         Console.WriteLine($"Done: {done} ok, {fail} fail{cachedInfo}");
+        LogService.Info($"RunBatchDryrun done: {done} ok, {fail} fail, {skipped} cached");
         return fail > 0 ? ERR_EXCEPTION : OK;
     }
 
@@ -320,7 +404,6 @@ Without arguments, launches the GUI
         Verbose($"Fetching summary: {summaryPage}", verbose);
         var source = await WikiApiService.GetPageSourceAsync(summaryPage);
         if (source == null) { Console.WriteLine($"Page not found: {summaryPage}"); return ERR_PAGE_NOT_FOUND; }
-        //构建索引 与GUI行为一致
         Verbose("Building script index...", verbose);
         var index = await WikiService.BuildScriptIndexAsync();
         var links = WikiService.ExtractWeaponLinks(source, index);
@@ -349,11 +432,17 @@ Without arguments, launches the GUI
                 if (ok) { done++; Console.WriteLine($"OK  {link}"); }
                 else { fail++; Console.WriteLine($"FAIL upload: {link}"); }
             }
-            catch (Exception ex) { fail++; Console.WriteLine($"ERR {link}: {ex.Message}"); }
+            catch (Exception ex)
+            {
+                fail++;
+                Console.WriteLine($"ERR {link}: {ex.Message}");
+                LogService.Error(ex, $"RunBatchUpload: {link}");
+            }
         }
 
         Console.WriteLine(new string('-', 40));
         Console.WriteLine($"Done: {done} ok, {fail} fail, {skip} skip");
+        LogService.Info($"RunBatchUpload done: {done} ok, {fail} fail, {skip} skip");
         return fail > 0 ? ERR_EXCEPTION : OK;
     }
 
@@ -392,7 +481,7 @@ Without arguments, launches the GUI
         if (checkWiki)
         {
             Verbose("Checking wiki for existing pages...", verbose);
-            //用索引映射获取Wiki真实标题 否则用生成器标题
+            //用索引映射获取wiki真实标题 否则用生成器标题
             var titles = generated.Select(p =>
             {
                 if (index != null)
@@ -429,6 +518,7 @@ Without arguments, launches the GUI
 
         string status = checkWiki ? $", {existing.Count} existing" : "";
         Console.WriteLine($"Done: {written} written{status} -> {outputDir}");
+        LogService.Info($"RunGenerate done: {written} written{status} -> {outputDir}");
         return OK;
     }
 }

@@ -9,8 +9,13 @@ public static class LocalizationService
     public static Dictionary<string, string> LoadTokens(string filePath)
     {
         var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (!File.Exists(filePath)) return tokens;
+        if (!File.Exists(filePath))
+        {
+            LogService.Warn($"Localization file not found: {filePath}");
+            return tokens;
+        }
 
+        LogService.Info($"Loading localization tokens: {filePath}");
         string content = WeaponScriptService.ReadScriptFile(filePath)
             .Replace("\r\n", "\n").Replace('\r', '\n');
         var stack = new List<string>();
@@ -33,6 +38,7 @@ public static class LocalizationService
             var keyOnly = System.Text.RegularExpressions.Regex.Match(line, @"""([^""]+)""$");
             if (keyOnly.Success) pendingKey = keyOnly.Groups[1].Value;
         }
+        LogService.Info($"Tokens loaded: {tokens.Count}");
         return tokens;
     }
 

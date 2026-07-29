@@ -10,51 +10,55 @@ public partial class Form1
 {
     private void ToggleAltStats(WeaponScriptService.AltStatMode mode)
     {
-        bool leftHas = WeaponHasAltStats(currentWeaponLeft, mode);
-        bool rightHas = WeaponHasAltStats(currentWeaponRight, mode);
-        if (!leftHas && !rightHas) return;
+        try
+        {
+            bool leftHas = WeaponHasAltStats(currentWeaponLeft, mode);
+            bool rightHas = WeaponHasAltStats(currentWeaponRight, mode);
 
-        //如果正在显示同一种模式则关闭 否则切换到新模式
-        if (showingAltStats && currentAltStatMode == mode)
-        {
-            //退出备选模式前检测是否有未保存修改
-            if ((currentWeaponLeft != null && HasUnsavedChanges(true))
-                || (currentWeaponRight != null && HasUnsavedChanges(false)))
+            if (showingAltStats && currentAltStatMode == mode)
             {
-                var result = MessageBox.Show("Unsaved alt stat changes will be lost. Discard?",
-                    "Unsaved Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-                if (result != DialogResult.Yes) return;
+                LogService.Info($"ToggleAltStats: exiting {mode} mode");
+                if ((currentWeaponLeft != null && HasUnsavedChanges(true, checkBothSides: true))
+                    || (currentWeaponRight != null && HasUnsavedChanges(false, checkBothSides: true)))
+                {
+                    var result = MessageBox.Show("Unsaved alt stat changes will be lost. Discard?",
+                        "Unsaved Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                    if (result != DialogResult.Yes) return;
+                }
+                showingAltStats = false;
+                if (currentWeaponLeft != null) { LoadWeaponToControls(currentWeaponLeft, true); }
+                if (currentWeaponRight != null) { LoadWeaponToControls(currentWeaponRight, false); }
+                RestoreAllNudEnabled(true); RestoreAllNudEnabled(false);
+                ResetAltStatButtons();
+                StoreSnapshot();
             }
-            showingAltStats = false;
-            if (currentWeaponLeft != null) { LoadWeaponToControls(currentWeaponLeft, true); }
-            if (currentWeaponRight != null) { LoadWeaponToControls(currentWeaponRight, false); }
-            RestoreAllNudEnabled(true); RestoreAllNudEnabled(false);
-            ResetAltStatButtons();
-            StoreSnapshot();
-        }
-        else
-        {
-            //进入备选模式前检测普通模式下是否有未保存修改
-            if ((currentWeaponLeft != null && HasUnsavedChanges(true))
-                || (currentWeaponRight != null && HasUnsavedChanges(false)))
+            else
             {
-                var result = MessageBox.Show("Unsaved changes will be lost. Switch stats mode?",
-                    "Unsaved Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-                if (result != DialogResult.Yes) return;
+                LogService.Info($"ToggleAltStats: entering {mode} mode");
+                if ((currentWeaponLeft != null && HasUnsavedChanges(true, checkBothSides: true))
+                    || (currentWeaponRight != null && HasUnsavedChanges(false, checkBothSides: true)))
+                {
+                    var result = MessageBox.Show("Unsaved changes will be lost. Switch stats mode?",
+                        "Unsaved Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                    if (result != DialogResult.Yes) return;
+                }
+                PushUndo();
+                showingAltStats = true; currentAltStatMode = mode;
+                HighlightAltStatButton(mode);
+                updatingControls = true;
+                if (leftHas) { LoadAltStatsToControls(true, mode); SetAltStatReadonly(true, mode); }
+                else { LoadWeaponToControls(currentWeaponLeft!, true); SetAltStatReadonly(true, mode); }
+                if (rightHas) { LoadAltStatsToControls(false, mode); SetAltStatReadonly(false, mode); }
+                else if (!ReferenceEquals(currentWeaponLeft, currentWeaponRight)) { LoadWeaponToControls(currentWeaponRight!, false); SetAltStatReadonly(false, mode); }
+                updatingControls = false;
+                StoreSnapshot();
             }
-            PushUndo();
-            showingAltStats = true; currentAltStatMode = mode;
-            HighlightAltStatButton(mode);
-            updatingControls = true;
-            if (leftHas) { LoadAltStatsToControls(true, mode); SetAltStatReadonly(true, mode); }
-            if (rightHas) { LoadAltStatsToControls(false, mode); SetAltStatReadonly(false, mode); }
-            updatingControls = false;
-            _snapshotLeft = new WeaponData();
-            _snapshotRight = new WeaponData();
-            SaveControlsToWeapon(_snapshotLeft, true);
-            SaveControlsToWeapon(_snapshotRight, false);
+            UpdateAllDamage(); pnlSpread.Invalidate(); pnlRecoil.Invalidate();
         }
-        UpdateAllDamage(); pnlSpread.Invalidate(); pnlRecoil.Invalidate();
+        catch (Exception ex)
+        {
+            LogService.Error(ex, $"ToggleAltStats: mode={mode}");
+        }
     }
 
     //高亮当前模式的按钮 另一个恢复默认
@@ -64,10 +68,31 @@ public partial class Form1
         {
             if (c is Button btn)
             {
-                if (btn.Text == "DoV") btn.BackColor = mode == WeaponScriptService.AltStatMode.Dov ? Color.LightGreen : SystemColors.Control;
-                else if (btn.Text == "Zmb") btn.BackColor = mode == WeaponScriptService.AltStatMode.Zombie ? Color.LightGreen : SystemColors.Control;
+                if (btn.Text == "DoV")
+                {
+                    bool active = mode == WeaponScriptService.AltStatMode.Dov;
+                    if (!active) { btn.BackColor = SystemColors.Control; continue; }
+                    bool hasAny = WeaponHasAnyAltStat(currentWeaponLeft, WeaponScriptService.AltStatMode.Dov)
+                        || WeaponHasAnyAltStat(currentWeaponRight, WeaponScriptService.AltStatMode.Dov);
+                    btn.BackColor = hasAny ? Color.LightGreen : Color.Yellow;
+                }
+                else if (btn.Text == "Zmb")
+                {
+                    bool active = mode == WeaponScriptService.AltStatMode.Zombie;
+                    if (!active) { btn.BackColor = SystemColors.Control; continue; }
+                    bool hasAny = WeaponHasAnyAltStat(currentWeaponLeft, WeaponScriptService.AltStatMode.Zombie)
+                        || WeaponHasAnyAltStat(currentWeaponRight, WeaponScriptService.AltStatMode.Zombie);
+                    btn.BackColor = hasAny ? Color.LightGreen : Color.Yellow;
+                }
             }
         }
+    }
+
+    private bool WeaponHasAnyAltStat(WeaponData? weapon, WeaponScriptService.AltStatMode mode)
+    {
+        if (weapon == null) return false;
+        return WeaponScriptService.CsvToScriptMap.Keys.Any(k =>
+            WeaponScriptService.GetFieldValue(weapon, k, mode) != null);
     }
 
     private void ResetAltStatButtons()
@@ -105,16 +130,13 @@ public partial class Form1
         _ => false
     };
 
-    private void ExitAltStatMode()
-    {
-        if (!WeaponHasAltStats(currentWeaponLeft, currentAltStatMode) && !WeaponHasAltStats(currentWeaponRight, currentAltStatMode))
-        { showingAltStats = false; RestoreAllNudEnabled(true); RestoreAllNudEnabled(false); ResetAltStatButtons(); }
-    }
-
     private void LoadAltStatsToControls(bool isLeft, WeaponScriptService.AltStatMode mode)
     {
+        try
+        {
         var weapon = isLeft ? currentWeaponLeft : currentWeaponRight;
         if (weapon == null) return;
+        LogService.Debug($"LoadAltStatsToControls: isLeft={isLeft}, mode={mode}, weapon={weapon.ScriptName}");
         var temp = new WeaponData();
         CopyWeaponDataFields(weapon, temp);
 
@@ -173,6 +195,11 @@ public partial class Form1
         string? altFireModes = isDov ? weapon.DovFireModes : weapon.ZombieFireModes;
         if (!string.IsNullOrEmpty(altFireModes))
         { if (isLeft) txtFireModesL.Text = altFireModes; else txtFireModesR.Text = altFireModes; }
+        }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, $"LoadAltStatsToControls: isLeft={isLeft}, mode={mode}");
+        }
     }
 
     private void RestoreAllNudEnabled(bool isLeft)
@@ -191,27 +218,51 @@ public partial class Form1
         foreach (var nud in nuds) nud.Enabled = true;
     }
 
-    //将顶层值同步回备选数值字段
-    private static void SyncAltStatFields(WeaponData w, WeaponScriptService.AltStatMode mode)
+    //将控件当前值同步回备选数值字段
+    private void SyncAltStatFields(WeaponData w, WeaponScriptService.AltStatMode mode)
     {
+        try
+        {
+        LogService.Debug($"SyncAltStatFields: mode={mode}, weapon={w.ScriptName}");
+        //同武器时用焦点侧 不同武器时用ReferenceEquals
+        bool isLeft = ReferenceEquals(currentWeaponLeft, currentWeaponRight)
+            ? lastFocusLeft
+            : ReferenceEquals(w, currentWeaponLeft);
         bool isDov = mode == WeaponScriptService.AltStatMode.Dov;
+        
+        //从控件读取当前值写入备选字段
         if (isDov)
         {
-            w.DovDamageHeadMultiplier = w.DamageHeadMultiplier; w.DovDamageChestMultiplier = w.DamageChestMultiplier;
-            w.DovDamageStomachMultiplier = w.DamageStomachMultiplier; w.DovDamageLegMultiplier = w.DamageLegMultiplier;
-            w.DovDamageArmMultiplier = w.DamageArmMultiplier; w.DovDamageGeneric = w.DamageGeneric;
-            w.DovBulletSpread = w.BulletSpread; w.DovBulletSpreadDegreesIronsighted = w.BulletSpreadDegreesIronsighted;
-            w.DovBulletSpreadDegreesBipod = w.BulletSpreadDegreesBipod; w.DovBulletSpreadDegreesBipodIronsighted = w.BulletSpreadDegreesBipodIronsighted;
-            w.DovRangeModifier = w.RangeModifier; w.DovIronsightSpeedScale = w.IronsightSpeedScale;
-            w.DovCrouchSpreadMultiplier = w.CrouchSpreadMultiplier; w.DovProneSpreadMultiplier = w.ProneSpreadMultiplier;
-            w.DovStandMoveSpreadMultiplier = w.StandMoveSpreadMultiplier; w.DovSneakMoveSpreadMultiplier = w.SneakMoveSpreadMultiplier;
-            w.DovCrouchMoveSpreadMultiplier = w.CrouchMoveSpreadMultiplier; w.DovJumpSpreadMultiplier = w.JumpSpreadMultiplier;
-            w.DovViewSlideRecoilUp = w.ViewSlideRecoilUp; w.DovViewSlideRecoilRight = w.ViewSlideRecoilRight;
-            w.DovViewSlideRecoilIronsightUp = w.ViewSlideRecoilIronsightUp; w.DovViewSlideRecoilIronsightRight = w.ViewSlideRecoilIronsightRight;
-            w.DovFireRate = w.FireRate; w.DovExtraBulletChamber = w.ExtraBulletChamber;
+            w.DovDamageHeadMultiplier = GetSliderValue(isLeft, "Head");
+            w.DovDamageChestMultiplier = GetSliderValue(isLeft, "Chest");
+            w.DovDamageStomachMultiplier = GetSliderValue(isLeft, "Stomach");
+            w.DovDamageLegMultiplier = GetSliderValue(isLeft, "Leg");
+            w.DovDamageArmMultiplier = GetSliderValue(isLeft, "Arm");
+            w.DovBulletSpread = (double)GetNud(isLeft, nudHipSpreadL, nudHipSpreadR).Value;
+            w.DovBulletSpreadDegreesIronsighted = (double)GetNud(isLeft, nudAdsSpreadL, nudAdsSpreadR).Value;
+            w.DovBulletSpreadDegreesBipod = (double)GetNud(isLeft, nudBipodHipSpreadL, nudBipodHipSpreadR).Value;
+            w.DovBulletSpreadDegreesBipodIronsighted = (double)GetNud(isLeft, nudBipodAdsSpreadL, nudBipodAdsSpreadR).Value;
+            w.DovRangeModifier = (double)GetNud(isLeft, nudRangeModifierL, nudRangeModifierR).Value;
+            w.DovIronsightSpeedScale = (double)GetNud(isLeft, nudIronsightSpeedScaleL, nudIronsightSpeedScaleR).Value;
+            w.DovCrouchSpreadMultiplier = (double)GetNud(isLeft, nudCrouchSpreadL, nudCrouchSpreadR).Value;
+            w.DovProneSpreadMultiplier = (double)GetNud(isLeft, nudProneSpreadL, nudProneSpreadR).Value;
+            w.DovStandMoveSpreadMultiplier = (double)GetNud(isLeft, nudStandMoveSpreadL, nudStandMoveSpreadR).Value;
+            w.DovSneakMoveSpreadMultiplier = (double)GetNud(isLeft, nudSneakMoveSpreadL, nudSneakMoveSpreadR).Value;
+            w.DovCrouchMoveSpreadMultiplier = (double)GetNud(isLeft, nudCrouchMoveSpreadL, nudCrouchMoveSpreadR).Value;
+            w.DovJumpSpreadMultiplier = (double)GetNud(isLeft, nudJumpSpreadL, nudJumpSpreadR).Value;
+            w.DovViewSlideRecoilUp = (double)GetNud(isLeft, nudHipRecoilUpL, nudHipRecoilUpR).Value;
+            w.DovViewSlideRecoilRight = (double)GetNud(isLeft, nudHipRecoilRightL, nudHipRecoilRightR).Value;
+            w.DovViewSlideRecoilIronsightUp = (double)GetNud(isLeft, nudAdsRecoilUpL, nudAdsRecoilUpR).Value;
+            w.DovViewSlideRecoilIronsightRight = (double)GetNud(isLeft, nudAdsRecoilRightL, nudAdsRecoilRightR).Value;
+            w.DovFireRate = (int)GetNud(isLeft, nudFireRateL, nudFireRateR).Value;
+            w.DovExtraBulletChamber = (int)GetNud(isLeft, nudExtraBulletChamberL, nudExtraBulletChamberR).Value;
+            w.DovDamageGeneric = (double)GetNud(isLeft, nudDamageGenericL, nudDamageGenericR).Value;
+            w.DovWeight = (double)GetNud(isLeft, nudWeightL, nudWeightR).Value;
+            w.DovClipSize = GetTextBox(isLeft, txtCapacityL, txtCapacityR).Text;
+            w.DovFireModes = GetTextBox(isLeft, txtFireModesL, txtFireModesR).Text;
             w.DovShakeScale = w.ShakeScale; w.DovShakeFreq = w.ShakeFreq; w.DovShakeDuration = w.ShakeDuration;
             w.DovCrosshairMinDistance = w.CrosshairMinDistance; w.DovCrosshairDeltaDistance = w.CrosshairDeltaDistance;
-            w.DovWeight = w.Weight; w.DovZMBuyPrice = w.ZMBuyPrice; w.DovZMWeight = w.ZMWeight;
+            w.DovZMBuyPrice = w.ZMBuyPrice; w.DovZMWeight = w.ZMWeight;
             w.DovRecoilPushbackValue = w.RecoilPushbackValue; w.DovIronsightWalkBobbingStrength = w.IronsightWalkBobbingStrength;
             w.DovMetalPenetrationDepth = w.MetalPenetrationDepth; w.DovGlassPenetrationDepth = w.GlassPenetrationDepth;
             w.DovConcretePenetrationDepth = w.ConcretePenetrationDepth; w.DovWoodPenetrationDepth = w.WoodPenetrationDepth;
@@ -219,26 +270,40 @@ public partial class Form1
             w.DovMetalDamageModifier = w.MetalDamageModifier; w.DovGlassDamageModifier = w.GlassDamageModifier;
             w.DovConcreteDamageModifier = w.ConcreteDamageModifier; w.DovWoodDamageModifier = w.WoodDamageModifier;
             w.DovOtherDamageModifier = w.OtherDamageModifier; w.DovNearwallDistance = w.NearwallDistance;
-            w.DovClipSize = w.ClipSize; w.DovFireModes = w.FireModes;
             w.DovSecondaryFireRate = w.SecondaryFireRate; w.DovIronSight = w.IronSight;
         }
         else
         {
-            w.ZombieDamageHeadMultiplier = w.DamageHeadMultiplier; w.ZombieDamageChestMultiplier = w.DamageChestMultiplier;
-            w.ZombieDamageStomachMultiplier = w.DamageStomachMultiplier; w.ZombieDamageLegMultiplier = w.DamageLegMultiplier;
-            w.ZombieDamageArmMultiplier = w.DamageArmMultiplier; w.ZombieDamageGeneric = w.DamageGeneric;
-            w.ZombieBulletSpread = w.BulletSpread; w.ZombieBulletSpreadDegreesIronsighted = w.BulletSpreadDegreesIronsighted;
-            w.ZombieBulletSpreadDegreesBipod = w.BulletSpreadDegreesBipod; w.ZombieBulletSpreadDegreesBipodIronsighted = w.BulletSpreadDegreesBipodIronsighted;
-            w.ZombieRangeModifier = w.RangeModifier; w.ZombieIronsightSpeedScale = w.IronsightSpeedScale;
-            w.ZombieCrouchSpreadMultiplier = w.CrouchSpreadMultiplier; w.ZombieProneSpreadMultiplier = w.ProneSpreadMultiplier;
-            w.ZombieStandMoveSpreadMultiplier = w.StandMoveSpreadMultiplier; w.ZombieSneakMoveSpreadMultiplier = w.SneakMoveSpreadMultiplier;
-            w.ZombieCrouchMoveSpreadMultiplier = w.CrouchMoveSpreadMultiplier; w.ZombieJumpSpreadMultiplier = w.JumpSpreadMultiplier;
-            w.ZombieViewSlideRecoilUp = w.ViewSlideRecoilUp; w.ZombieViewSlideRecoilRight = w.ViewSlideRecoilRight;
-            w.ZombieViewSlideRecoilIronsightUp = w.ViewSlideRecoilIronsightUp; w.ZombieViewSlideRecoilIronsightRight = w.ViewSlideRecoilIronsightRight;
-            w.ZombieFireRate = w.FireRate; w.ZombieExtraBulletChamber = w.ExtraBulletChamber;
+            w.ZombieDamageHeadMultiplier = GetSliderValue(isLeft, "Head");
+            w.ZombieDamageChestMultiplier = GetSliderValue(isLeft, "Chest");
+            w.ZombieDamageStomachMultiplier = GetSliderValue(isLeft, "Stomach");
+            w.ZombieDamageLegMultiplier = GetSliderValue(isLeft, "Leg");
+            w.ZombieDamageArmMultiplier = GetSliderValue(isLeft, "Arm");
+            w.ZombieBulletSpread = (double)GetNud(isLeft, nudHipSpreadL, nudHipSpreadR).Value;
+            w.ZombieBulletSpreadDegreesIronsighted = (double)GetNud(isLeft, nudAdsSpreadL, nudAdsSpreadR).Value;
+            w.ZombieBulletSpreadDegreesBipod = (double)GetNud(isLeft, nudBipodHipSpreadL, nudBipodHipSpreadR).Value;
+            w.ZombieBulletSpreadDegreesBipodIronsighted = (double)GetNud(isLeft, nudBipodAdsSpreadL, nudBipodAdsSpreadR).Value;
+            w.ZombieRangeModifier = (double)GetNud(isLeft, nudRangeModifierL, nudRangeModifierR).Value;
+            w.ZombieIronsightSpeedScale = (double)GetNud(isLeft, nudIronsightSpeedScaleL, nudIronsightSpeedScaleR).Value;
+            w.ZombieCrouchSpreadMultiplier = (double)GetNud(isLeft, nudCrouchSpreadL, nudCrouchSpreadR).Value;
+            w.ZombieProneSpreadMultiplier = (double)GetNud(isLeft, nudProneSpreadL, nudProneSpreadR).Value;
+            w.ZombieStandMoveSpreadMultiplier = (double)GetNud(isLeft, nudStandMoveSpreadL, nudStandMoveSpreadR).Value;
+            w.ZombieSneakMoveSpreadMultiplier = (double)GetNud(isLeft, nudSneakMoveSpreadL, nudSneakMoveSpreadR).Value;
+            w.ZombieCrouchMoveSpreadMultiplier = (double)GetNud(isLeft, nudCrouchMoveSpreadL, nudCrouchMoveSpreadR).Value;
+            w.ZombieJumpSpreadMultiplier = (double)GetNud(isLeft, nudJumpSpreadL, nudJumpSpreadR).Value;
+            w.ZombieViewSlideRecoilUp = (double)GetNud(isLeft, nudHipRecoilUpL, nudHipRecoilUpR).Value;
+            w.ZombieViewSlideRecoilRight = (double)GetNud(isLeft, nudHipRecoilRightL, nudHipRecoilRightR).Value;
+            w.ZombieViewSlideRecoilIronsightUp = (double)GetNud(isLeft, nudAdsRecoilUpL, nudAdsRecoilUpR).Value;
+            w.ZombieViewSlideRecoilIronsightRight = (double)GetNud(isLeft, nudAdsRecoilRightL, nudAdsRecoilRightR).Value;
+            w.ZombieFireRate = (int)GetNud(isLeft, nudFireRateL, nudFireRateR).Value;
+            w.ZombieExtraBulletChamber = (int)GetNud(isLeft, nudExtraBulletChamberL, nudExtraBulletChamberR).Value;
+            w.ZombieDamageGeneric = (double)GetNud(isLeft, nudDamageGenericL, nudDamageGenericR).Value;
+            w.ZombieWeight = (double)GetNud(isLeft, nudWeightL, nudWeightR).Value;
+            w.ZombieClipSize = GetTextBox(isLeft, txtCapacityL, txtCapacityR).Text;
+            w.ZombieFireModes = GetTextBox(isLeft, txtFireModesL, txtFireModesR).Text;
             w.ZombieShakeScale = w.ShakeScale; w.ZombieShakeFreq = w.ShakeFreq; w.ZombieShakeDuration = w.ShakeDuration;
             w.ZombieCrosshairMinDistance = w.CrosshairMinDistance; w.ZombieCrosshairDeltaDistance = w.CrosshairDeltaDistance;
-            w.ZombieWeight = w.Weight; w.ZombieZMBuyPrice = w.ZMBuyPrice; w.ZombieZMWeight = w.ZMWeight;
+            w.ZombieZMBuyPrice = w.ZMBuyPrice; w.ZombieZMWeight = w.ZMWeight;
             w.ZombieRecoilPushbackValue = w.RecoilPushbackValue; w.ZombieIronsightWalkBobbingStrength = w.IronsightWalkBobbingStrength;
             w.ZombieMetalPenetrationDepth = w.MetalPenetrationDepth; w.ZombieGlassPenetrationDepth = w.GlassPenetrationDepth;
             w.ZombieConcretePenetrationDepth = w.ConcretePenetrationDepth; w.ZombieWoodPenetrationDepth = w.WoodPenetrationDepth;
@@ -246,8 +311,30 @@ public partial class Form1
             w.ZombieMetalDamageModifier = w.MetalDamageModifier; w.ZombieGlassDamageModifier = w.GlassDamageModifier;
             w.ZombieConcreteDamageModifier = w.ConcreteDamageModifier; w.ZombieWoodDamageModifier = w.WoodDamageModifier;
             w.ZombieOtherDamageModifier = w.OtherDamageModifier; w.ZombieNearwallDistance = w.NearwallDistance;
-            w.ZombieClipSize = w.ClipSize; w.ZombieFireModes = w.FireModes;
             w.ZombieSecondaryFireRate = w.SecondaryFireRate; w.ZombieIronSight = w.IronSight;
         }
+        }
+        catch (Exception ex)
+        {
+            LogService.Warn($"SyncAltStatFields failed: mode={mode}, {ex.Message}");
+        }
     }
+
+    private double GetSliderValue(bool isLeft, string part)
+    {
+        var tb = isLeft ? part switch
+        {
+            "Head" => trkHeadL, "Chest" => trkChestL, "Stomach" => trkStomachL,
+            "Leg" => trkLegL, "Arm" => trkArmL, _ => trkHeadL
+        } : part switch
+        {
+            "Head" => trkHeadR, "Chest" => trkChestR, "Stomach" => trkStomachR,
+            "Leg" => trkLegR, "Arm" => trkArmR, _ => trkHeadR
+        };
+        return tb.Value * SliderStep;
+    }
+
+    private NumericUpDown GetNud(bool isLeft, NumericUpDown l, NumericUpDown r) => isLeft ? l : r;
+
+    private TextBox GetTextBox(bool isLeft, TextBox l, TextBox r) => isLeft ? l : r;
 }

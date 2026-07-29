@@ -31,6 +31,7 @@ public static class LoadoutService
 
     public static Dictionary<string, LoadoutInfo> LoadAll(string resourceDir)
     {
+        LogService.Info($"Loading loadout from: {resourceDir}");
         var result = new Dictionary<string, LoadoutInfo>(StringComparer.OrdinalIgnoreCase);
         var files = new[] { "vietnam_loadout.txt", "vietnam_loadout_zombie.txt", "vietnam_loadout_special.txt" };
         var sourceNames = new[] { "main", "zombie", "special" };
@@ -38,13 +39,20 @@ public static class LoadoutService
         for (int i = 0; i < files.Length; i++)
         {
             string path = Path.Combine(resourceDir, files[i]);
-            if (!File.Exists(path)) continue;
-            foreach (var kv in ParseFile(path, sourceNames[i]))
+            if (!File.Exists(path))
+            {
+                LogService.Warn($"Loadout file not found: {path}");
+                continue;
+            }
+            var parsed = ParseFile(path, sourceNames[i]);
+            LogService.Info($"  {files[i]}: {parsed.Count} weapons");
+            foreach (var kv in parsed)
             {
                 if (!result.ContainsKey(kv.Key)) result[kv.Key] = new LoadoutInfo();
                 result[kv.Key].Absorb(kv.Value);
             }
         }
+        LogService.Info($"Loadout total: {result.Count} weapons");
         return result;
     }
 

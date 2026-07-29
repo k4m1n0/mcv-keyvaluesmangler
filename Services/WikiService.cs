@@ -22,15 +22,25 @@ public static class WikiService
     {
         try
         {
+            LogService.Info("Building script name index...");
             string? idx = await WikiApiService.GetPageSourceAsync("Weapon Script Name");
-            if (idx == null) return null;
+            if (idx == null)
+            {
+                LogService.Warn("BuildScriptIndexAsync: 'Weapon Script Name' page not found");
+                return null;
+            }
             idx = idx.Replace("\r\n", "\n").Replace('\r', '\n');
             var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (Match m in Regex.Matches(idx, @"\|\s*(weapon_[^\s|]+)\s*\n\|\s*\[\[([^\]]+)\]\]"))
                 map[m.Groups[2].Value.Trim()] = m.Groups[1].Value;
+            LogService.Info($"Script index built: {map.Count} entries");
             return map;
         }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, "WikiService.BuildScriptIndexAsync");
+            return null;
+        }
     }
 
     //包含=[[xxx]]=特征的是汇总表走ConvertSummaryPage 否则走Convert
@@ -39,6 +49,7 @@ public static class WikiService
         input = input.Replace("\r\n", "\n").Replace('\r', '\n');
         if (Regex.IsMatch(input, @"^=\[\[.+\]\]=\s*$", RegexOptions.Multiline))
         {
+            LogService.Info("ConvertWikiSource: detected summary page, building printname map...");
             var map = titleToScript != null ? new Dictionary<string, string>(titleToScript, StringComparer.OrdinalIgnoreCase) : new();
             foreach (var path in Directory.GetFiles(scriptsDir, "weapon_*.txt"))
             {
@@ -48,8 +59,10 @@ public static class WikiService
                 string d = pm.Success ? pm.Groups[1].Value.TrimStart('#') : sn;
                 if (!map.ContainsKey(d.Replace("_", " "))) map[d.Replace("_", " ")] = sn;
             }
+            LogService.Info($"Printname map built: {map.Count} entries");
             return WikiTableConverter.ConvertSummaryPage(input, scriptsDir, map);
         }
+        LogService.Info("ConvertWikiSource: single page conversion");
         return WikiTableConverter.Convert(input, scriptsDir);
     }
 
@@ -60,7 +73,9 @@ public static class WikiService
         foreach (Match m in Regex.Matches(pageSource, @"\[\[([^\]|:#<>]+)\]\]"))
             if (titleToScript.ContainsKey(m.Groups[1].Value.Trim()))
                 links.Add(m.Groups[1].Value.Trim());
-        return links.OrderBy(x => x).ToList();
+        var result = links.OrderBy(x => x).ToList();
+        LogService.Info($"ExtractWeaponLinks: {result.Count} links found");
+        return result;
     }
 
     public static string GetWikiDir() => Path.Combine(AppContext.BaseDirectory, "wiki");

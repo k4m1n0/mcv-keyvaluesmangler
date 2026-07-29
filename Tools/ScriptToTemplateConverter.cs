@@ -13,9 +13,13 @@ public static class ScriptToTemplateConverter
     #region 入口
     public static string ConvertAll(string scriptsDir, bool simpleMode)
     {
+        LogService.Info($"ConvertAll: {scriptsDir}, simpleMode={simpleMode}");
         string[] templateLines = ReadEmbeddedTemplate();
         if (templateLines == null || templateLines.Length == 0)
+        {
+            LogService.Error("ConvertAll: embedded template not found");
             return "嵌入的模板文件未找到";
+        }
 
         var files = Directory.GetFiles(scriptsDir, "weapon_*.txt");
         var log = new List<string>();
@@ -51,12 +55,15 @@ public static class ScriptToTemplateConverter
             {
                 failed++;
                 log.Add($"[{i + 1}/{files.Length}] 失败: {name} - {ex.Message}");
+                LogService.Error(ex, $"ConvertAll: {name}");
             }
         }
 
         log.Add(new string('-', 50));
         log.Add($"完成: 成功 {success}, 失败 {failed}, 总计 {files.Length}");
-        return string.Join("\n", log);
+        string resultLog = string.Join("\n", log);
+        LogService.Info($"ConvertAll done: {success} ok, {failed} fail, {files.Length} total");
+        return resultLog;
     }
 
     private static string[] ReadEmbeddedTemplate()
@@ -66,24 +73,38 @@ public static class ScriptToTemplateConverter
             string externalPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "preset_file.txt");
             if (File.Exists(externalPath))
             {
+                LogService.Info($"ReadEmbeddedTemplate: loading external template: {externalPath}");
                 var lines = WeaponScriptService.ReadScriptFile(externalPath)
                                .Replace("\r\n", "\n")
                                .Replace('\r', '\n')
                                .Split('\n');
                 if (lines.Any(l => l.Contains("WeaponData")) && lines.Any(l => l.Contains("{")) && lines.Any(l => l.Contains("}")))
+                {
+                    LogService.Info("ReadEmbeddedTemplate: external template validated");
                     return lines;
+                }
+                LogService.Warn("ReadEmbeddedTemplate: external template validation failed, falling back to embedded");
             }
 
+            LogService.Info("ReadEmbeddedTemplate: loading embedded template");
             using var stream = System.Reflection.Assembly.GetExecutingAssembly()
                 .GetManifestResourceStream("WeaponDamageCalc.Tools.preset_file.txt");
-            if (stream == null) return Array.Empty<string>();
+            if (stream == null)
+            {
+                LogService.Error("ReadEmbeddedTemplate: embedded resource not found");
+                return Array.Empty<string>();
+            }
             using var reader = new StreamReader(stream, Encoding.UTF8);
             return reader.ReadToEnd()
                          .Replace("\r\n", "\n")
                          .Replace('\r', '\n')
                          .Split('\n');
         }
-        catch { return Array.Empty<string>(); }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, "ReadEmbeddedTemplate");
+            return Array.Empty<string>();
+        }
     }
 
     #endregion
@@ -115,25 +136,33 @@ public static class ScriptToTemplateConverter
 
     private static string ConvertSingle(string script, string[] templateLines, RenderOptions opts)
     {
-        var scriptMap = ParseTopLevelMap(script);
-        var scriptBlocks = ExtractAllBlocks(script);
+        try
+        {
+            var scriptMap = ParseTopLevelMap(script);
+            var scriptBlocks = ExtractAllBlocks(script);
 
-        var templateTree = ParseTemplateToTree(templateLines);
-        if (templateTree == null || templateTree.Children.Count == 0)
+            var templateTree = ParseTemplateToTree(templateLines);
+            if (templateTree == null || templateTree.Children.Count == 0)
+                return string.Join("\n", templateLines);
+
+            var missingKeys = new HashSet<string>(scriptMap.Keys, StringComparer.OrdinalIgnoreCase);
+            FillTreeWithScript(templateTree, scriptMap, scriptBlocks, script, missingKeys);
+
+            var result = new StringBuilder();
+            var state = new RenderState();
+            RenderTree(templateTree, result, opts, state);
+            string output = result.ToString();
+            output = Regex.Replace(output, @"^\s*//\s*[\{\}]\s*$", "", RegexOptions.Multiline);
+            output = output.TrimStart('\r', '\n');
+            if (!output.EndsWith('\n'))
+                output += "\n";
+            return output;
+        }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, "ConvertSingle");
             return string.Join("\n", templateLines);
-
-        var missingKeys = new HashSet<string>(scriptMap.Keys, StringComparer.OrdinalIgnoreCase);
-        FillTreeWithScript(templateTree, scriptMap, scriptBlocks, script, missingKeys);
-
-        var result = new StringBuilder();
-        var state = new RenderState();
-        RenderTree(templateTree, result, opts, state);
-        string output = result.ToString();
-        output = Regex.Replace(output, @"^\s*//\s*[\{\}]\s*$", "", RegexOptions.Multiline);
-        output = output.TrimStart('\r', '\n');
-        if (!output.EndsWith('\n'))
-            output += "\n";
-        return output;
+        }
     }
 
     private enum NodeType { Root, Block, KeyValue, CommentedBlock, CommentedKeyValue, Blank, Raw }
@@ -200,31 +229,39 @@ public static class ScriptToTemplateConverter
 
     private static AstNode ParseTemplateToTree(string[] lines)
     {
-        var root = new AstNode { Type = NodeType.Root };
-        int i = 0;
-
-        while (i < lines.Length)
+        try
         {
-            if (IsBlockStart(lines, i, out string bn, out int end) &&
-                bn.Equals("WeaponData", StringComparison.OrdinalIgnoreCase))
-            {
-                var wdNode = new AstNode
-                {
-                    Type = NodeType.Block,
-                    Indent = ExtractIndent(lines[i]),
-                    Name = "WeaponData"
-                };
-                wdNode.HeaderLines.Add(lines[i]);
+            var root = new AstNode { Type = NodeType.Root };
+            int i = 0;
 
-                root.Children.Add(wdNode);
-                ParseLines(lines, i + 1, end, wdNode.Children);
-                i = end + 1;
-                continue;
+            while (i < lines.Length)
+            {
+                if (IsBlockStart(lines, i, out string bn, out int end) &&
+                    bn.Equals("WeaponData", StringComparison.OrdinalIgnoreCase))
+                {
+                    var wdNode = new AstNode
+                    {
+                        Type = NodeType.Block,
+                        Indent = ExtractIndent(lines[i]),
+                        Name = "WeaponData"
+                    };
+                    wdNode.HeaderLines.Add(lines[i]);
+
+                    root.Children.Add(wdNode);
+                    ParseLines(lines, i + 1, end, wdNode.Children);
+                    i = end + 1;
+                    continue;
+                }
+                root.Children.Add(new AstNode { Type = NodeType.Raw, RawText = lines[i] });
+                i++;
             }
-            root.Children.Add(new AstNode { Type = NodeType.Raw, RawText = lines[i] });
-            i++;
+            return root;
         }
-        return root;
+        catch (Exception ex)
+        {
+            LogService.Error(ex, "ParseTemplateToTree");
+            return new AstNode { Type = NodeType.Root };
+        }
     }
 
     //统一逐行解析 所有解析都走这条路
@@ -471,142 +508,151 @@ public static class ScriptToTemplateConverter
                                            Dictionary<string, string> scriptBlocks, string currentScriptText,
                                            HashSet<string> missingKeys)
     {
-        if (node.Type == NodeType.Root || node.Type == NodeType.Block)
+        try
         {
-            Dictionary<string, string> childMap = currentMap;
-            string childScriptText = currentScriptText;
-
-            if (node.Type == NodeType.Block && node.Name != "WeaponData")
+            if (node.Type == NodeType.Root || node.Type == NodeType.Block)
             {
-                if (scriptBlocks.TryGetValue(node.Name!, out string? blockContent) && !string.IsNullOrEmpty(blockContent))
-                {
-                    childMap = ParseKeyValueMap(blockContent);
-                    childScriptText = blockContent;
-                }
-                else
-                {
-                    childMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                    childScriptText = string.Empty;
-                }
-            }
+                Dictionary<string, string> childMap = currentMap;
+                string childScriptText = currentScriptText;
 
-            foreach (var child in node.Children)
-                FillTreeWithScript(child, childMap, scriptBlocks, childScriptText, missingKeys);
-
-            if (node.Type == NodeType.Block && node.Name == "WeaponData")
-            {
-                var extraChildren = new List<AstNode>();
-                foreach (var key in missingKeys.ToList())
+                if (node.Type == NodeType.Block && node.Name != "WeaponData")
                 {
-                    if (currentMap.TryGetValue(key, out string? val) && !string.IsNullOrEmpty(val))
+                    if (scriptBlocks.TryGetValue(node.Name!, out string? blockContent) && !string.IsNullOrEmpty(blockContent))
                     {
-                        extraChildren.Add(new AstNode
-                        {
-                            Type = NodeType.KeyValue,
-                            Indent = "\t",
-                            Name = key,
-                            Value = val,
-                            Separator = "\t\t\t\t"
-                        });
-                        missingKeys.Remove(key);
+                        childMap = ParseKeyValueMap(blockContent);
+                        childScriptText = blockContent;
+                    }
+                    else
+                    {
+                        childMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                        childScriptText = string.Empty;
                     }
                 }
-                node.Children.AddRange(extraChildren);
-            }
-        }
-        else if (node.Type == NodeType.CommentedBlock &&
-                 scriptBlocks.TryGetValue(node.Name!, out string? cbBlockContent) &&
-                 !string.IsNullOrEmpty(cbBlockContent))
-        {
-            //解析脚本块内容 提取键值对和子块
-            string[] blockLines = cbBlockContent.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-            var tempChildren = new List<AstNode>();
-            if (blockLines.Length > 0)
-            {
-                ParseLines(blockLines, 0, blockLines.Length, tempChildren);
-            }
 
-            var scriptKeyValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var scriptSubBlocks = new List<AstNode>();
-            foreach (var child in tempChildren)
-            {
-                if (child.Type == NodeType.KeyValue && !string.IsNullOrEmpty(child.Value))
-                    scriptKeyValues[child.Name!] = child.Value;
-                else if (child.Type == NodeType.Block)
-                    scriptSubBlocks.Add(child);
-            }
+                foreach (var child in node.Children)
+                    FillTreeWithScript(child, childMap, scriptBlocks, childScriptText, missingKeys);
 
-            if (scriptKeyValues.Count > 0 || scriptSubBlocks.Count > 0)
-            {
-                node.Type = NodeType.Block;
-                node.HeaderLines = new List<string>
+                if (node.Type == NodeType.Block && node.Name == "WeaponData")
                 {
-                    $"{node.Indent}{node.Name}",
-                    $"{node.Indent}{{"
-                };
-
-                var templateChildren = new List<AstNode>(node.Children);//保存模板中已有的注释子节点用于保留分隔符等信息
-                node.Children.Clear();//清空原有注释子节点 用脚本中的实际键值对和子块重建
-
-                //先填充模板中已有的键值对 保留模板的分隔符和注释
-                foreach (var tChild in templateChildren)
+                    var extraChildren = new List<AstNode>();
+                    foreach (var key in missingKeys.ToList())
+                    {
+                        if (currentMap.TryGetValue(key, out string? val) && !string.IsNullOrEmpty(val))
+                        {
+                            extraChildren.Add(new AstNode
+                            {
+                                Type = NodeType.KeyValue,
+                                Indent = "\t",
+                                Name = key,
+                                Value = val,
+                                Separator = "\t\t\t\t"
+                            });
+                            missingKeys.Remove(key);
+                        }
+                    }
+                    if (extraChildren.Count > 0)
+                        LogService.Info($"FillTreeWithScript: {extraChildren.Count} extra keys appended to WeaponData");
+                    node.Children.AddRange(extraChildren);
+                }
+            }
+            else if (node.Type == NodeType.CommentedBlock &&
+                     scriptBlocks.TryGetValue(node.Name!, out string? cbBlockContent) &&
+                     !string.IsNullOrEmpty(cbBlockContent))
+            {
+                //解析脚本块内容 提取键值对和子块
+                string[] blockLines = cbBlockContent.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                var tempChildren = new List<AstNode>();
+                if (blockLines.Length > 0)
                 {
-                    if ((tChild.Type == NodeType.CommentedKeyValue || tChild.Type == NodeType.KeyValue)
-                        && tChild.Name != null
-                        && scriptKeyValues.TryGetValue(tChild.Name, out string? val)
-                        && !string.IsNullOrEmpty(val))
+                    ParseLines(blockLines, 0, blockLines.Length, tempChildren);
+                }
+
+                var scriptKeyValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                var scriptSubBlocks = new List<AstNode>();
+                foreach (var child in tempChildren)
+                {
+                    if (child.Type == NodeType.KeyValue && !string.IsNullOrEmpty(child.Value))
+                        scriptKeyValues[child.Name!] = child.Value;
+                    else if (child.Type == NodeType.Block)
+                        scriptSubBlocks.Add(child);
+                }
+
+                if (scriptKeyValues.Count > 0 || scriptSubBlocks.Count > 0)
+                {
+                    node.Type = NodeType.Block;
+                    node.HeaderLines = new List<string>
+                    {
+                        $"{node.Indent}{node.Name}",
+                        $"{node.Indent}{{"
+                    };
+
+                    var templateChildren = new List<AstNode>(node.Children);//保存模板中已有的注释子节点用于保留分隔符等信息
+                    node.Children.Clear();//清空原有注释子节点 用脚本中的实际键值对和子块重建
+
+                    //先填充模板中已有的键值对 保留模板的分隔符和注释
+                    foreach (var tChild in templateChildren)
+                    {
+                        if ((tChild.Type == NodeType.CommentedKeyValue || tChild.Type == NodeType.KeyValue)
+                            && tChild.Name != null
+                            && scriptKeyValues.TryGetValue(tChild.Name, out string? val)
+                            && !string.IsNullOrEmpty(val))
+                        {
+                            node.Children.Add(new AstNode
+                            {
+                                Type = NodeType.KeyValue,
+                                Indent = tChild.Indent,
+                                Name = tChild.Name,
+                                Value = val,
+                                Separator = tChild.Separator,
+                                Comment = tChild.Comment
+                            });
+                            scriptKeyValues.Remove(tChild.Name);
+                            missingKeys.Remove(tChild.Name);
+                        }
+                    }
+
+                    //追加模板中没有但脚本中存在的键值对
+                    foreach (var kvp in scriptKeyValues)
                     {
                         node.Children.Add(new AstNode
                         {
                             Type = NodeType.KeyValue,
-                            Indent = tChild.Indent,
-                            Name = tChild.Name,
-                            Value = val,
-                            Separator = tChild.Separator,
-                            Comment = tChild.Comment
+                            Indent = node.Indent + "\t",
+                            Name = kvp.Key,
+                            Value = kvp.Value,
+                            Separator = "\t\t\t\t"
                         });
-                        scriptKeyValues.Remove(tChild.Name);
-                        missingKeys.Remove(tChild.Name);
+                        missingKeys.Remove(kvp.Key);
+                    }
+
+                    //追加脚本中的子块 如ViewSlideRecoil
+                    foreach (var subBlock in scriptSubBlocks)
+                    {
+                        node.Children.Add(subBlock);
+                        RemoveSubBlockKeysFromMissing(subBlock, missingKeys);
                     }
                 }
-
-                //追加模板中没有但脚本中存在的键值对
-                foreach (var kvp in scriptKeyValues)
+            }
+            else if (node.Type == NodeType.CommentedKeyValue || node.Type == NodeType.KeyValue)
+            {
+                if (currentMap.TryGetValue(node.Name!, out string? scriptVal) && !string.IsNullOrEmpty(scriptVal))
                 {
-                    node.Children.Add(new AstNode
+                    node.Value = scriptVal;//注释键在脚本中有值 激活为普通键 重新计算分隔符以匹配模板对齐宽度
+                    if (node.Type == NodeType.CommentedKeyValue)
                     {
-                        Type = NodeType.KeyValue,
-                        Indent = node.Indent + "\t",
-                        Name = kvp.Key,
-                        Value = kvp.Value,
-                        Separator = "\t\t\t\t"
-                    });
-                    missingKeys.Remove(kvp.Key);
-                }
+                        node.Type = NodeType.KeyValue;
+                    }
 
-                //追加脚本中的子块 如ViewSlideRecoil
-                foreach (var subBlock in scriptSubBlocks)
-                {
-                    node.Children.Add(subBlock);
-                    RemoveSubBlockKeysFromMissing(subBlock, missingKeys);
+                    string? scriptComment = GetLineCommentFromScript(currentScriptText, node.Name!);
+                    node.Comment = scriptComment ?? node.Comment;
+
+                    missingKeys.Remove(node.Name!);
                 }
             }
         }
-        else if (node.Type == NodeType.CommentedKeyValue || node.Type == NodeType.KeyValue)
+        catch (Exception ex)
         {
-            if (currentMap.TryGetValue(node.Name!, out string? scriptVal) && !string.IsNullOrEmpty(scriptVal))
-            {
-                node.Value = scriptVal;//注释键在脚本中有值 激活为普通键 重新计算分隔符以匹配模板对齐宽度
-                if (node.Type == NodeType.CommentedKeyValue)
-                {
-                    node.Type = NodeType.KeyValue;
-                }
-
-                string? scriptComment = GetLineCommentFromScript(currentScriptText, node.Name!);
-                node.Comment = scriptComment ?? node.Comment;
-
-                missingKeys.Remove(node.Name!);
-            }
+            LogService.Error(ex, $"FillTreeWithScript: node={node.Type}, name={node.Name}");
         }
     }
 
@@ -757,10 +803,17 @@ public static class ScriptToTemplateConverter
         var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (string.IsNullOrEmpty(text)) return map;
 
-        var lines = text.Split('\n');
-        var nodes = new List<AstNode>();
-        ParseLines(lines, 0, lines.Length, nodes);
-        CollectKeyValues(nodes, map);
+        try
+        {
+            var lines = text.Split('\n');
+            var nodes = new List<AstNode>();
+            ParseLines(lines, 0, lines.Length, nodes);
+            CollectKeyValues(nodes, map);
+        }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, "ParseKeyValueMap");
+        }
         return map;
     }
 
@@ -778,52 +831,67 @@ public static class ScriptToTemplateConverter
 
     private static Dictionary<string, string> ParseTopLevelMap(string content)
     {
-        int wdIdx = content.IndexOf("WeaponData", StringComparison.Ordinal);
-        if (wdIdx < 0) return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        int outerOpen = content.IndexOf('{', wdIdx);
-        if (outerOpen < 0) return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        int outerClose = FindMatchingBrace(content, outerOpen);
-        if (outerClose < 0 || outerOpen + 1 >= outerClose) return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        string inner = content.Substring(outerOpen + 1, outerClose - outerOpen - 1);
-        return ParseKeyValueMap(inner);
+        try
+        {
+            int wdIdx = content.IndexOf("WeaponData", StringComparison.Ordinal);
+            if (wdIdx < 0) return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            int outerOpen = content.IndexOf('{', wdIdx);
+            if (outerOpen < 0) return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            int outerClose = FindMatchingBrace(content, outerOpen);
+            if (outerClose < 0 || outerOpen + 1 >= outerClose) return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            string inner = content.Substring(outerOpen + 1, outerClose - outerOpen - 1);
+            return ParseKeyValueMap(inner);
+        }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, "ParseTopLevelMap");
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        }
     }
 
     private static Dictionary<string, string> ExtractAllBlocks(string content)
     {
         var blocks = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        int pos = 0;
-        while (pos < content.Length)
+        try
         {
-            int brace = content.IndexOf('{', pos);
-            if (brace < 0) break;
-
-            //从{向前找非空白字符确定块名结束位置 再向前找空白或换行确定块名起始
-            int nameEnd = brace - 1;
-            while (nameEnd >= 0 && char.IsWhiteSpace(content[nameEnd])) nameEnd--;
-            if (nameEnd < 0) { pos = brace + 1; continue; }
-
-            int nameStart = nameEnd;
-            while (nameStart >= 0 && !char.IsWhiteSpace(content[nameStart]) && content[nameStart] != '\n')
-                nameStart--;
-            nameStart++;
-            if (nameStart > nameEnd) { pos = brace + 1; continue; }
-
-            string blockName = content[nameStart..(nameEnd + 1)];
-            blockName = CleanBlockName(blockName);
-
-            if (!string.IsNullOrEmpty(blockName) && !blockName.StartsWith("//"))
+            int pos = 0;
+            while (pos < content.Length)
             {
-                int close = FindMatchingBrace(content, brace);
-                if (close >= 0)
+                int brace = content.IndexOf('{', pos);
+                if (brace < 0) break;
+
+                //从{向前找非空白字符确定块名结束位置 再向前找空白或换行确定块名起始
+                int nameEnd = brace - 1;
+                while (nameEnd >= 0 && char.IsWhiteSpace(content[nameEnd])) nameEnd--;
+                if (nameEnd < 0) { pos = brace + 1; continue; }
+
+                int nameStart = nameEnd;
+                while (nameStart >= 0 && !char.IsWhiteSpace(content[nameStart]) && content[nameStart] != '\n')
+                    nameStart--;
+                nameStart++;
+                if (nameStart > nameEnd) { pos = brace + 1; continue; }
+
+                string blockName = content[nameStart..(nameEnd + 1)];
+                blockName = CleanBlockName(blockName);
+
+                if (!string.IsNullOrEmpty(blockName) && !blockName.StartsWith("//"))
                 {
-                    int len = close - brace - 1;
-                    if (len < 0) len = 0;
-                    string blockContent = content.Substring(brace + 1, len);
-                    if (!blocks.ContainsKey(blockName))
-                        blocks[blockName] = blockContent;
+                    int close = FindMatchingBrace(content, brace);
+                    if (close >= 0)
+                    {
+                        int len = close - brace - 1;
+                        if (len < 0) len = 0;
+                        string blockContent = content.Substring(brace + 1, len);
+                        if (!blocks.ContainsKey(blockName))
+                            blocks[blockName] = blockContent;
+                    }
                 }
+                pos = brace + 1;
             }
-            pos = brace + 1;
+        }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, "ExtractAllBlocks");
         }
         return blocks;
     }
@@ -919,12 +987,10 @@ public static class ScriptToTemplateConverter
     #endregion
     #region 调试
 
-    private static bool s_dumpAst = false; //调试开关 需要时改true
-
     //把ast dump和脚本解析信息追加到logform
     private static void DumpDebugInfo(string weaponName, string script, string[] templateLines, string result, List<string> log)
     {
-        if (!s_dumpAst) return;
+        if (!LogService.Enabled) return;
 
         log.Add($"--- 调试: {weaponName} ---");
 

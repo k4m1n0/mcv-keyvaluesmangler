@@ -17,6 +17,7 @@ public partial class Form1
 {
     private void BtnWiki_Click(object? sender, EventArgs e)
     {
+        LogService.Info("BtnWiki: opening Wiki Stats Updater");
         var dlg = new Form
         {
             Text = "Wiki Stats Updater", Size = new Size(660, 680),
@@ -110,7 +111,11 @@ public partial class Form1
             var src = await WikiApiService.GetPageSourceAsync(txtPage.Text);
             if (src == null)
             {
-                if (_titleToScript == null) { try { _titleToScript = await WikiService.BuildScriptIndexAsync(); } catch { } }
+                if (_titleToScript == null)
+                {
+                    try { _titleToScript = await WikiService.BuildScriptIndexAsync(); }
+                    catch (Exception ex) { LogService.Error(ex, "Wiki.EnsureSource: BuildScriptIndexAsync"); }
+                }
                 string? foundTitle = WikiService.ReverseLookup(txtPage.Text.Trim(), _titleToScript);
                 if (foundTitle != null)
                 {
@@ -120,7 +125,11 @@ public partial class Form1
                 }
                 if (src == null) { lblStatus.Text = "Page not found"; return false; }
             }
-            if (_titleToScript == null) { try { _titleToScript = await WikiService.BuildScriptIndexAsync(); } catch { } }
+            if (_titleToScript == null)
+            {
+                try { _titleToScript = await WikiService.BuildScriptIndexAsync(); }
+                catch (Exception ex) { LogService.Error(ex, "Wiki.EnsureSource: BuildScriptIndexAsync (late)"); }
+            }
             txtInput.Text = src.Replace("\n", "\r\n");
             lblStatus.Text = $"OK: {txtPage.Text}" + (_titleToScript?.Count > 0 ? $" (+{_titleToScript.Count} idx)" : "");
             return true;
@@ -129,7 +138,11 @@ public partial class Form1
         void EnterCancel(Button btn, CancellationTokenSource cts, ref EventHandler? h)
         {
             btn.Text = "Cancel"; btn.BackColor = Color.LightCoral;
-            h = (_, _) => { try { if (cts is { IsCancellationRequested: false }) { btn.Text = "Cancel"; btn.BackColor = Color.LightCoral; } } catch { } };
+            h = (_, _) =>
+            {
+                try { if (cts is { IsCancellationRequested: false }) { btn.Text = "Cancel"; btn.BackColor = Color.LightCoral; } }
+                catch (Exception ex) { LogService.Error(ex, "Wiki.EnterCancel"); }
+            };
             btn.MouseLeave += h;
         }
 
@@ -169,6 +182,7 @@ public partial class Form1
             {
                 btnGenerate.Enabled = false;
                 lblStatus.Text = "Uploading...";
+                LogService.Info($"Wiki Generate: uploading {Directory.GetFiles(uploadDir, "*.txt").Length} files from {uploadDir}");
                 try
                 {
                     if (!await EnsureLogin(txtUser.Text, txtPw.Text, lblStatus)) { btnGenerate.Text = "Generate"; btnGenerate.BackColor = SystemColors.Control; btnGenerate.Tag = null; btnGenerate.Enabled = true; return; }
@@ -192,8 +206,13 @@ public partial class Form1
                     Out(new string('-', 40));
                     Out($"Upload done: {upOk} ok, {upFail} fail  {DateTime.Now:HH:mm:ss}");
                     lblStatus.Text = $"Upload done: {upOk} ok, {upFail} fail";
+                    LogService.Info($"Wiki Generate upload done: {upOk} ok, {upFail} fail");
                 }
-                catch (Exception ex) { lblStatus.Text = $"Upload error: {ex.Message}"; }
+                catch (Exception ex)
+                {
+                    lblStatus.Text = $"Upload error: {ex.Message}";
+                    LogService.Error(ex, "Wiki btnGenerate upload");
+                }
                 finally
                 {
                     btnGenerate.Text = "Generate";
@@ -215,6 +234,7 @@ public partial class Form1
 
             btnGenerate.Enabled = false;
             lblStatus.Text = "Loading...";
+            LogService.Info($"Wiki Generate: scripts={selectedDir}, resource={resourceDir}");
             try
             {
                 txtOutput.Clear();
@@ -226,7 +246,11 @@ public partial class Form1
                 lblStatus.Text = "Loading loadout...";
                 var loadout = LoadoutService.LoadAll(resourceDir);
                 Out($"Loadout loaded: {loadout.Count}");
-                if (_titleToScript == null) { try { _titleToScript = await WikiService.BuildScriptIndexAsync(); } catch { } }
+                if (_titleToScript == null)
+                {
+                    try { _titleToScript = await WikiService.BuildScriptIndexAsync(); }
+                    catch (Exception ex) { LogService.Error(ex, "Wiki Generate: BuildScriptIndexAsync"); }
+                }
                 Out($"Index: {_titleToScript?.Count ?? 0} entries");
                 lblStatus.Text = "Fetching templates...";
                 string defaultTemplate = await WikiApiService.FetchTemplateAsync(Tools.WikiPageGenerator.DefaultTemplateUrl) ?? "Template fetch failed";
@@ -289,8 +313,14 @@ public partial class Form1
                     btnGenerate.Tag = genDir;
                 }
                 lblStatus.Text = $"Done: {newPages.Count} new, {existing.Count} existing";
+                LogService.Info($"Wiki Generate done: {newPages.Count} new, {existing.Count} existing");
             }
-            catch (Exception ex) { txtOutput.AppendText($"\r\nError: {ex.Message}\r\n"); lblStatus.Text = "Generate failed"; }
+            catch (Exception ex)
+            {
+                txtOutput.AppendText($"\r\nError: {ex.Message}\r\n");
+                lblStatus.Text = "Generate failed";
+                LogService.Error(ex, "Wiki btnGenerate");
+            }
             finally { btnGenerate.Enabled = true; }
         };
 
@@ -301,10 +331,15 @@ public partial class Form1
             if (selectedDir == null) return;
             if (_titleToScript == null && !string.IsNullOrWhiteSpace(txtInput.Text))
             {
-                try { _titleToScript = await WikiService.BuildScriptIndexAsync(); if (_titleToScript != null) lblStatus.Text = $"索引已加载 ({_titleToScript.Count} 个武器)"; } catch { }
+                try { _titleToScript = await WikiService.BuildScriptIndexAsync(); if (_titleToScript != null) lblStatus.Text = $"索引已加载 ({_titleToScript.Count} 个武器)"; }
+                catch (Exception ex) { LogService.Error(ex, "Wiki Convert: BuildScriptIndexAsync"); }
             }
             try { txtOutput.Text = WikiService.ConvertWikiSource(txtInput.Text, selectedDir, _titleToScript).Replace("\n", "\r\n"); }
-            catch (Exception ex) { txtOutput.Text = $"Error: {ex.Message}"; }
+            catch (Exception ex)
+            {
+                txtOutput.Text = $"Error: {ex.Message}";
+                LogService.Error(ex, "Wiki Convert");
+            }
         };
 
         btnCopy.Click += (_, _) => { if (!string.IsNullOrEmpty(txtOutput.Text)) Clipboard.SetText(txtOutput.Text); };
@@ -325,7 +360,11 @@ public partial class Form1
         btnFetch.Click += async (_, _) =>
         {
             if (dryRunDone || batchDryDone) { lblStatus.Text = "Cannot fetch while upload is pending."; return; }
-            if (_titleToScript == null) { try { _titleToScript = await WikiService.BuildScriptIndexAsync(); } catch { } }
+            if (_titleToScript == null)
+            {
+                try { _titleToScript = await WikiService.BuildScriptIndexAsync(); }
+                catch (Exception ex) { LogService.Error(ex, "Wiki Fetch: BuildScriptIndexAsync"); }
+            }
             var source = await WikiApiService.GetPageSourceAsync(txtPage.Text);
             if (source == null && _titleToScript != null)
             {
@@ -351,7 +390,12 @@ public partial class Form1
                 if (selectedDir == null) return;
                 if (!await EnsureSource()) return;
                 try { txtOutput.Text = WikiService.ConvertWikiSource(txtInput.Text, selectedDir, _titleToScript).Replace("\n", "\r\n"); }
-                catch (Exception ex) { txtOutput.Text = $"Error: {ex.Message}"; return; }
+                catch (Exception ex)
+                {
+                    txtOutput.Text = $"Error: {ex.Message}";
+                    LogService.Error(ex, "Wiki DryRun convert");
+                    return;
+                }
             }
 
             dryRunCts = new CancellationTokenSource(); var token = dryRunCts.Token;
@@ -371,6 +415,7 @@ public partial class Form1
                         bool ok = await WikiApiService.SavePageAsync(txtPage.Text, txtOutput.Text, "Update weapon data from scripts");
                         sw.Stop();
                         lblStatus.Text = ok ? $"Saved! ({sw.ElapsedMilliseconds}ms)" : "Save failed";
+                        LogService.Info($"Wiki DryRun upload: {txtPage.Text} {(ok ? "OK" : "FAIL")} ({sw.ElapsedMilliseconds}ms)");
                     }
                 }
                 ToggleDryRun(); ExitCancel(btnDryRun, btnDryRun.Text, btnDryRun.BackColor, h);
@@ -392,6 +437,7 @@ public partial class Form1
             var links = WikiService.ExtractWeaponLinks(txtInput.Text, _titleToScript);
             if (links.Count == 0) { lblStatus.Text = "No weapon links found"; return; }
 
+            LogService.Info($"Wiki Batch: {links.Count} links, batchDryDone={batchDryDone}");
             batchCts = new CancellationTokenSource(); var token = batchCts.Token;
             EventHandler? h = null; EnterCancel(btnBatchDR, batchCts, ref h);
             try
@@ -435,12 +481,18 @@ public partial class Form1
                                 Out($"OK  {link,-30}  {origLines} > {convLines} lines");
                             }
                         }
-                        catch (Exception ex) { fail++; Out($"ERR {link,-30}  {ex.Message}"); }
+                        catch (Exception ex)
+                        {
+                            fail++;
+                            Out($"ERR {link,-30}  {ex.Message}");
+                            LogService.Error(ex, $"Wiki Batch DR: {link}");
+                        }
                         lblStatus.Text = $"DR [{done + fail + skippedCached}/{links.Count}]";
                     }
                     Out(new string('-', 40));
                     string cachedInfo = skippedCached > 0 ? $", {skippedCached} cached" : "";
                     Out($"Done: {done} ok, {fail} fail{cachedInfo}  {DateTime.Now:HH:mm:ss}");
+                    LogService.Info($"Wiki Batch DR done: {done} ok, {fail} fail, {skippedCached} cached");
                 }
                 else
                 {
@@ -462,11 +514,17 @@ public partial class Form1
                             if (ok) { done++; Out($"OK  {link,-30}  {sw.ElapsedMilliseconds}ms"); }
                             else { fail++; Out($"FAIL upload: {link,-30}"); }
                         }
-                        catch (Exception ex) { fail++; Out($"ERR {link,-30}  {ex.Message}"); }
+                        catch (Exception ex)
+                        {
+                            fail++;
+                            Out($"ERR {link,-30}  {ex.Message}");
+                            LogService.Error(ex, $"Wiki Batch Up: {link}");
+                        }
                         lblStatus.Text = $"Up [{done + fail}/{links.Count - skip}]";
                     }
                     Out(new string('-', 40));
                     Out($"Done: {done} ok, {fail} fail, {skip} skip  {DateTime.Now:HH:mm:ss}");
+                    LogService.Info($"Wiki Batch Up done: {done} ok, {fail} fail, {skip} skip");
                 }
                 ToggleBatch(); ExitCancel(btnBatchDR, btnBatchDR.Text, btnBatchDR.BackColor, h);
             }
@@ -516,6 +574,7 @@ public partial class Form1
         lastWikiUser = user;
         lastWikiPw = pw;
         status.Text = "Logged in";
+        LogService.Info("Wiki EnsureLogin: logged in");
         return true;
     }
 }
