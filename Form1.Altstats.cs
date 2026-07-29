@@ -64,6 +64,10 @@ public partial class Form1
     //高亮当前模式的按钮 另一个恢复默认
     private void HighlightAltStatButton(WeaponScriptService.AltStatMode mode)
     {
+        Color inactiveColor = _darkMode ? Color.FromArgb(60, 60, 60) : SystemColors.Control;
+        Color activeGreen = _darkMode ? Color.FromArgb(40, 100, 40) : Color.LightGreen;
+        Color activeYellow = _darkMode ? Color.FromArgb(120, 100, 0) : Color.Yellow;
+
         foreach (Control c in this.Controls)
         {
             if (c is Button btn)
@@ -71,18 +75,18 @@ public partial class Form1
                 if (btn.Text == "DoV")
                 {
                     bool active = mode == WeaponScriptService.AltStatMode.Dov;
-                    if (!active) { btn.BackColor = SystemColors.Control; continue; }
+                    if (!active) { btn.BackColor = inactiveColor; continue; }
                     bool hasAny = WeaponHasAnyAltStat(currentWeaponLeft, WeaponScriptService.AltStatMode.Dov)
                         || WeaponHasAnyAltStat(currentWeaponRight, WeaponScriptService.AltStatMode.Dov);
-                    btn.BackColor = hasAny ? Color.LightGreen : Color.Yellow;
+                    btn.BackColor = hasAny ? activeGreen : activeYellow;
                 }
                 else if (btn.Text == "Zmb")
                 {
                     bool active = mode == WeaponScriptService.AltStatMode.Zombie;
-                    if (!active) { btn.BackColor = SystemColors.Control; continue; }
+                    if (!active) { btn.BackColor = inactiveColor; continue; }
                     bool hasAny = WeaponHasAnyAltStat(currentWeaponLeft, WeaponScriptService.AltStatMode.Zombie)
                         || WeaponHasAnyAltStat(currentWeaponRight, WeaponScriptService.AltStatMode.Zombie);
-                    btn.BackColor = hasAny ? Color.LightGreen : Color.Yellow;
+                    btn.BackColor = hasAny ? activeGreen : activeYellow;
                 }
             }
         }
@@ -97,8 +101,9 @@ public partial class Form1
 
     private void ResetAltStatButtons()
     {
+        Color inactiveColor = _darkMode ? Color.FromArgb(60, 60, 60) : SystemColors.Control;
         foreach (Control c in this.Controls)
-            if (c is Button btn && (btn.Text == "DoV" || btn.Text == "Zmb")) btn.BackColor = SystemColors.Control;
+            if (c is Button btn && (btn.Text == "DoV" || btn.Text == "Zmb")) btn.BackColor = inactiveColor;
     }
 
     private void SetAltStatReadonly(bool isLeft, WeaponScriptService.AltStatMode mode)
