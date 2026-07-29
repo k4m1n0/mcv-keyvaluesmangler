@@ -48,7 +48,7 @@ public static class WeaponScriptService
         "Crossbow", "Flaregun", "Flamethrower", "Incendiary", "Fists", "Mine"
     };
 
-    private static readonly Dictionary<string, string> CsvToScriptMap = new()
+    internal static readonly Dictionary<string, string> CsvToScriptMap = new()
     {
         ["SupportedFireModes"] = "SupportedFireModes",
         ["default_clip"] = "default_clip",
@@ -336,10 +336,31 @@ public static class WeaponScriptService
             try
             {
                 string content = ReadScriptFile(scriptPath);
+                content = content.Replace("\r\n", "\n").Replace('\r', '\n');
+                string originalContent = content;
 
-                bool hasAnyDiff = CsvToScriptMap.Keys.Any(k => GetFieldValue(weapon, k, mode) != null)
-                    || GetFieldValue(weapon, "ViewSlideRecoil.Up", mode) != null
-                    || GetFieldValue(weapon, "ViewSlideRecoilIronsight.Up", mode) != null;
+                bool hasAnyDiff = false;
+                foreach (var map in CsvToScriptMap)
+                {
+                    if (GetFieldValue(weapon, map.Key, mode) != null)
+                    {
+                        hasAnyDiff = true;
+                        if (weapon.ScriptName.Equals("weapon_ak47.txt", StringComparison.OrdinalIgnoreCase))
+                            LogService.Debug($"hasAnyDiff: {mode} {map.Key}={GetFieldValue(weapon, map.Key, mode)}");
+                        break;
+                    }
+                }
+                if (!hasAnyDiff)
+                {
+                    string? ru = GetFieldValue(weapon, "ViewSlideRecoil.Up", mode);
+                    string? ri = GetFieldValue(weapon, "ViewSlideRecoilIronsight.Up", mode);
+                    if (ru != null || ri != null)
+                    {
+                        hasAnyDiff = true;
+                        if (weapon.ScriptName.Equals("weapon_ak47.txt", StringComparison.OrdinalIgnoreCase))
+                            LogService.Debug($"hasAnyDiff: {mode} recoil Up={ru}, IronsightUp={ri}");
+                    }
+                }
 
                 if (!content.Contains(blockName) && !content.Contains($"//{blockName}"))
                 {
@@ -347,30 +368,37 @@ public static class WeaponScriptService
                     content = InsertAltStatBlock(content, blockName, mode);
                 }
 
-                content = ToggleAltStatBlockComment(content, mode, hasAnyDiff);
-                if (!content.Contains(blockName)) continue;
+                content = ToggleAltStatBlockComment(content, mode, hasAnyDiff, weapon.ScriptName);
 
-                var blockMatch = Regex.Match(content, $@"{Regex.Escape(blockName)}\s*\{{([^}}]*(?:\{{[^}}]*\}}[^}}]*)*)\}}", RegexOptions.Singleline);
-                if (!blockMatch.Success) continue;
-                string fullBlock = blockMatch.Value.Replace("\r\n", "\n").Replace('\r', '\n');
-                string originalBlock = fullBlock;
-
-                foreach (var map in CsvToScriptMap)
-                    fullBlock = ApplyKeyToBlock(fullBlock, map.Value, GetFieldValue(weapon, map.Key, mode) ?? "");
-
-                if (fullBlock != originalBlock)
-                    content = content.Replace(originalBlock, fullBlock);
-
-                foreach (var recoil in new[] { "ViewSlideRecoil", "ViewSlideRecoilIronsight" })
+                if (content.Contains(blockName))
                 {
-                    string? up = GetFieldValue(weapon, $"{recoil}.Up", mode);
-                    string? right = GetFieldValue(weapon, $"{recoil}.Right", mode);
-                    if (up != null || right != null)
-                        content = WriteAltStatRecoilBlock(content, recoil, up, right, mode);
+                    var blockMatch = Regex.Match(content, $@"{Regex.Escape(blockName)}\s*\{{([^}}]*(?:\{{[^}}]*\}}[^}}]*)*)\}}", RegexOptions.Singleline);
+                    if (blockMatch.Success)
+                    {
+                        string fullBlock = blockMatch.Value.Replace("\r\n", "\n").Replace('\r', '\n');
+                        string originalBlock = fullBlock;
+
+                    foreach (var map in CsvToScriptMap)
+                        fullBlock = ApplyKeyToBlock(fullBlock, map.Value, GetFieldValue(weapon, map.Key, mode) ?? "", null);
+
+                        if (fullBlock != originalBlock)
+                            content = content.Replace(originalBlock, fullBlock);
+
+                        foreach (var recoil in new[] { "ViewSlideRecoil", "ViewSlideRecoilIronsight" })
+                        {
+                            string? up = GetFieldValue(weapon, $"{recoil}.Up", mode);
+                            string? right = GetFieldValue(weapon, $"{recoil}.Right", mode);
+                            if (up != null || right != null)
+                                content = WriteAltStatRecoilBlock(content, recoil, up, right, mode);
+                        }
+                    }
                 }
 
-                File.WriteAllText(scriptPath, content, new UTF8Encoding(false));
-                updated++;
+                if (content != originalContent)
+                {
+                    File.WriteAllText(scriptPath, content, new UTF8Encoding(false));
+                    updated++;
+                }
             }
             catch (Exception ex)
             {
@@ -554,7 +582,7 @@ public static class WeaponScriptService
         var blockMatch = Regex.Match(content, $@"{Regex.Escape(blockName)}\s*\{{([^}}]*(?:\{{[^}}]*\}}[^}}]*)*)\}}", RegexOptions.Singleline);
         if (!blockMatch.Success) return content;
         string fullBlock = blockMatch.Value.Replace("\r\n", "\n").Replace('\r', '\n');
-        string newFullBlock = ApplyKeyToBlock(fullBlock, key, value);
+        string newFullBlock = ApplyKeyToBlock(fullBlock, key, value, null);
         if (newFullBlock == fullBlock) return content;
         return content.Replace(fullBlock, newFullBlock);
         }
@@ -585,7 +613,7 @@ public static class WeaponScriptService
     }
 
     //如果所有备选值与顶层一致就注释掉整个备选块 如果有不同则激活
-    public static string ToggleAltStatBlockComment(string content, AltStatMode mode, bool hasAnyDiff)
+    public static string ToggleAltStatBlockComment(string content, AltStatMode mode, bool hasAnyDiff, string? weaponName = null)
     {
         try
         {
@@ -625,22 +653,24 @@ public static class WeaponScriptService
                             k++;
                         }
 
-                        if (hasAnyDiff)
+                        if (hasAnyDiff && openCommented)
                         {
                             result.Add($"{indent}{blockName}");
                             result.Add($"{braceIndent}{{");
                             for (int m = j + 1; m < k; m++)
                                 result.Add(lines[m]);
                             result.Add($"{braceIndent}}}");
+                            LogService.Debug($"ToggleAltStatBlockComment: [{weaponName}] {mode} activate");
                             changed = true;
                             i = k + 1;
                             continue;
                         }
-                        else
+                        else if (!hasAnyDiff && openActive)
                         {
                             result.Add($"{indent}//{blockName}");
                             result.Add($"{braceIndent}//{{");
                             result.Add($"{braceIndent}//}}");
+                            LogService.Debug($"ToggleAltStatBlockComment: [{weaponName}] {mode} comment out");
                             changed = true;
                             i = k + 1;
                             continue;
@@ -661,7 +691,7 @@ public static class WeaponScriptService
         }
     }
 
-    private static string ApplyKeyToBlock(string fullBlock, string key, string value)//屎
+    private static string ApplyKeyToBlock(string fullBlock, string key, string value, string? weaponName = null)
     {
         int bracePos = fullBlock.IndexOf('{');
         int closePos = fullBlock.LastIndexOf('}');
@@ -674,13 +704,16 @@ public static class WeaponScriptService
             ? fullBlock.Substring(afterLineStart)
             : fullBlock.Substring(closePos);
 
-        LogService.Debug($"ApplyKeyToBlock: key={key}, value={value}, beforeBrace=[{beforeBrace.Replace("\n","\\n").Replace("\t","\\t")}], blockContent=[{blockContent.Replace("\n","\\n").Replace("\t","\\t")}], afterBrace=[{afterBrace.Replace("\n","\\n").Replace("\t","\\t")}]");
-
-        string deletePattern = $@"^[ \t]*""{Regex.Escape(key)}""\s+""[^""]*""\s*(?://.*)?(\r?\n)?";
-        blockContent = Regex.Replace(blockContent, deletePattern, "", RegexOptions.Multiline);
-        blockContent = blockContent.TrimEnd('\n', '\r', ' ', '\t');
-
-        LogService.Debug($"ApplyKeyToBlock after delete+trim: blockContent=[{blockContent.Replace("\n","\\n").Replace("\t","\\t")}]");
+        var lines = new List<string>();
+        string keyPattern = $"\"{Regex.Escape(key)}\"";
+        foreach (string line in blockContent.Split('\n'))
+        {
+            string trimmed = line.TrimStart();
+            if (trimmed.StartsWith(keyPattern))
+                continue;
+            if (!string.IsNullOrWhiteSpace(line))
+                lines.Add(line);
+        }
 
         if (!string.IsNullOrEmpty(value))
         {
@@ -692,12 +725,11 @@ public static class WeaponScriptService
                 ? braceLine.Substring(0, braceLine.Length - braceLine.TrimStart().Length)
                 : "\t";
             string indent = braceIndent + "\t";
-            blockContent = $"\n{indent}\"{key}\"\t\t\t\t\"{value}\"" + blockContent;
+            lines.Insert(0, $"{indent}\"{key}\"\t\t\t\t\"{value}\"");
         }
 
-        string result = beforeBrace + blockContent + afterBrace;
+        string result = beforeBrace + "\n" + string.Join("\n", lines) + afterBrace;
         result = Regex.Replace(result, @"(\n\s*){3,}", "\n\n");
-        LogService.Debug($"ApplyKeyToBlock result: [{result.Replace("\n","\\n").Replace("\t","\\t")}]");
         return result;
     }
 
@@ -901,7 +933,7 @@ public static class WeaponScriptService
     #endregion
     #region 字段读写替换
 
-    private static string? GetFieldValue(WeaponData w, string h, AltStatMode? mode) => h switch
+    internal static string? GetFieldValue(WeaponData w, string h, AltStatMode? mode) => h switch
     {
         "SupportedFireModes" => AltS(w.FireModes, w.DovFireModes, w.ZombieFireModes, mode),
         "default_clip" => AltI(w.DefaultClip, w.DovDefaultClip, w.ZombieDefaultClip, mode),

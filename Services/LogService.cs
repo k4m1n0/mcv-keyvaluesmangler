@@ -13,7 +13,7 @@ public static class LogService
 #if DEBUG
     private static bool _enabled = true;
 #else
-    private static bool _enabled = true;//开关release日志
+    private static bool _enabled = false;//开关release日志
 #endif
 
     private static Level _minLevel = Level.Debug;

@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using WeaponDamageCalc.Services;
@@ -27,6 +30,18 @@ internal static class Program
     [STAThread]
     static int Main(string[] args)
     {
+        string currentDir = AppContext.BaseDirectory;
+        string mutexName = @"WeaponDamageCalc_" + Convert.ToHexString(MD5.HashData(
+            Encoding.UTF8.GetBytes(currentDir.ToLowerInvariant())));
+        using var mutex = new Mutex(true, mutexName, out bool createdNew);
+        if (!createdNew)
+        {
+            LogService.Info("Mutex locked - another instance is already running in this folder");
+            MessageBox.Show("Only one instance of the same folder can be running at once time.",
+                "Mangler - Warning", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return 0;
+        }
+
         var logLevelArg = Opt(args, "--log-level");
 
         if (args.Length > 0 && args[0].Equals("--log-level", StringComparison.OrdinalIgnoreCase) && args.Length > 1)

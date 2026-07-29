@@ -70,20 +70,29 @@ public partial class Form1
             {
                 if (btn.Text == "DoV")
                 {
-                    bool leftHas = WeaponHasAltStats(currentWeaponLeft, WeaponScriptService.AltStatMode.Dov);
-                    bool rightHas = WeaponHasAltStats(currentWeaponRight, WeaponScriptService.AltStatMode.Dov);
                     bool active = mode == WeaponScriptService.AltStatMode.Dov;
-                    btn.BackColor = active ? (!leftHas && !rightHas ? Color.Yellow : Color.LightGreen) : SystemColors.Control;
+                    if (!active) { btn.BackColor = SystemColors.Control; continue; }
+                    bool hasAny = WeaponHasAnyAltStat(currentWeaponLeft, WeaponScriptService.AltStatMode.Dov)
+                        || WeaponHasAnyAltStat(currentWeaponRight, WeaponScriptService.AltStatMode.Dov);
+                    btn.BackColor = hasAny ? Color.LightGreen : Color.Yellow;
                 }
                 else if (btn.Text == "Zmb")
                 {
-                    bool leftHas = WeaponHasAltStats(currentWeaponLeft, WeaponScriptService.AltStatMode.Zombie);
-                    bool rightHas = WeaponHasAltStats(currentWeaponRight, WeaponScriptService.AltStatMode.Zombie);
                     bool active = mode == WeaponScriptService.AltStatMode.Zombie;
-                    btn.BackColor = active ? (!leftHas && !rightHas ? Color.Yellow : Color.LightGreen) : SystemColors.Control;
+                    if (!active) { btn.BackColor = SystemColors.Control; continue; }
+                    bool hasAny = WeaponHasAnyAltStat(currentWeaponLeft, WeaponScriptService.AltStatMode.Zombie)
+                        || WeaponHasAnyAltStat(currentWeaponRight, WeaponScriptService.AltStatMode.Zombie);
+                    btn.BackColor = hasAny ? Color.LightGreen : Color.Yellow;
                 }
             }
         }
+    }
+
+    private bool WeaponHasAnyAltStat(WeaponData? weapon, WeaponScriptService.AltStatMode mode)
+    {
+        if (weapon == null) return false;
+        return WeaponScriptService.CsvToScriptMap.Keys.Any(k =>
+            WeaponScriptService.GetFieldValue(weapon, k, mode) != null);
     }
 
     private void ResetAltStatButtons()

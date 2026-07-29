@@ -290,18 +290,22 @@ public partial class Form1 : Form
                 "Unsaved Changes", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
             if (result == DialogResult.Yes)
             {
-                LogService.Debug("FormClosing: user chose Save");
+                LogService.Info("Form1 closing: saved changes");
                 BtnSave_Click(this, EventArgs.Empty);
             }
             else if (result == DialogResult.Cancel)
             {
-                LogService.Debug("FormClosing: user cancelled");
+                LogService.Info("Form1 closing: cancelled");
                 e.Cancel = true;
             }
             else
             {
-                LogService.Debug("FormClosing: user chose Discard");
+                LogService.Info("Form1 closing: discarded changes");
             }
+        }
+        else
+        {
+            LogService.Info("Form1 closing: no unsaved changes");
         }
     }
 

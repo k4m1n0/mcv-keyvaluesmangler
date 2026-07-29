@@ -360,10 +360,11 @@ public partial class Form1
                 bool focusLeft = IsControlOnLeft(active);
                 if (focusLeft)
                 {
-                    if (showingAltStats && WeaponHasAltStats(currentWeaponLeft, currentAltStatMode))
+                    if (showingAltStats)
                     {
-                        //备选模式直接同步到备选字段 不经过顶层防止污染
                         SyncAltStatFields(currentWeaponLeft!, currentAltStatMode);
+                        var oldClone = CloneTopLevelFields(currentWeaponLeft!);
+                        SyncAltStatsToMatchTopLevel(oldClone, currentWeaponLeft!);
                         LoadAltStatsToControls(false, currentAltStatMode);
                     }
                     else
@@ -376,9 +377,11 @@ public partial class Form1
                 }
                 else
                 {
-                    if (showingAltStats && WeaponHasAltStats(currentWeaponRight, currentAltStatMode))
+                    if (showingAltStats)
                     {
                         SyncAltStatFields(currentWeaponRight!, currentAltStatMode);
+                        var oldClone = CloneTopLevelFields(currentWeaponRight!);
+                        SyncAltStatsToMatchTopLevel(oldClone, currentWeaponRight!);
                         LoadAltStatsToControls(true, currentAltStatMode);
                     }
                     else
@@ -408,9 +411,18 @@ public partial class Form1
             }
             if (showingAltStats && !sameWeapon)
             {
-                if (currentWeaponLeft != null) SyncAltStatFields(currentWeaponLeft, currentAltStatMode);
+                if (currentWeaponLeft != null)
+                {
+                    SyncAltStatFields(currentWeaponLeft, currentAltStatMode);
+                    var oldCloneL = CloneTopLevelFields(currentWeaponLeft);
+                    SyncAltStatsToMatchTopLevel(oldCloneL, currentWeaponLeft);
+                }
                 if (currentWeaponRight != null && !ReferenceEquals(currentWeaponLeft, currentWeaponRight))
+                {
                     SyncAltStatFields(currentWeaponRight, currentAltStatMode);
+                    var oldCloneR = CloneTopLevelFields(currentWeaponRight);
+                    SyncAltStatsToMatchTopLevel(oldCloneR, currentWeaponRight);
+                }
             }
             //栈顶已是当前状态则不入栈 避免连续保存产生重复条目
             bool sameAsTop = _undoStack.Count > 0;
@@ -424,6 +436,8 @@ public partial class Form1
             if (!sameAsTop) PushUndo();
             ClearRedo();
             StoreSnapshot();
+            if (showingAltStats)
+                HighlightAltStatButton(currentAltStatMode);
             var savedTitle = this.Text;
             this.Text = "Saved!";
             try
@@ -499,12 +513,14 @@ public partial class Form1
                 bool focusLeft = IsControlOnLeft(active);
                 if (focusLeft)
                 {
-                    if (showingAltStats && WeaponHasAltStats(currentWeaponLeft, currentAltStatMode))
+                    if (showingAltStats)
                     {
                         SyncAltStatFields(currentWeaponLeft!, currentAltStatMode);
+                        var oldClone = CloneTopLevelFields(currentWeaponLeft!);
+                        SyncAltStatsToMatchTopLevel(oldClone, currentWeaponLeft!);
                         LoadAltStatsToControls(false, currentAltStatMode);
                     }
-                    else if (!showingAltStats)
+                    else
                     {
                         var oldW = CloneTopLevelFields(currentWeaponLeft!);
                         SaveControlsToWeapon(currentWeaponLeft!, true);
@@ -514,12 +530,14 @@ public partial class Form1
                 }
                 else
                 {
-                    if (showingAltStats && WeaponHasAltStats(currentWeaponRight, currentAltStatMode))
+                    if (showingAltStats)
                     {
                         SyncAltStatFields(currentWeaponRight!, currentAltStatMode);
+                        var oldClone = CloneTopLevelFields(currentWeaponRight!);
+                        SyncAltStatsToMatchTopLevel(oldClone, currentWeaponRight!);
                         LoadAltStatsToControls(true, currentAltStatMode);
                     }
-                    else if (!showingAltStats)
+                    else
                     {
                         var oldW = CloneTopLevelFields(currentWeaponRight!);
                         SaveControlsToWeapon(currentWeaponRight!, false);
@@ -546,12 +564,23 @@ public partial class Form1
             }
             else
             {
-                if (currentWeaponLeft != null) SyncAltStatFields(currentWeaponLeft, currentAltStatMode);
+                if (currentWeaponLeft != null)
+                {
+                    SyncAltStatFields(currentWeaponLeft, currentAltStatMode);
+                    var oldCloneL = CloneTopLevelFields(currentWeaponLeft);
+                    SyncAltStatsToMatchTopLevel(oldCloneL, currentWeaponLeft);
+                }
                 if (currentWeaponRight != null && !ReferenceEquals(currentWeaponLeft, currentWeaponRight))
+                {
                     SyncAltStatFields(currentWeaponRight, currentAltStatMode);
+                    var oldCloneR = CloneTopLevelFields(currentWeaponRight);
+                    SyncAltStatsToMatchTopLevel(oldCloneR, currentWeaponRight);
+                }
             }
             ClearRedo();
             StoreSnapshot();
+            if (showingAltStats)
+                HighlightAltStatButton(currentAltStatMode);
             var originalTitle = this.Text;
             try
             {
@@ -677,6 +706,8 @@ public partial class Form1
                                 LoadAltStatsToControls(false, currentAltStatMode);
                         }
                         StoreSnapshot();
+                        if (showingAltStats)
+                            HighlightAltStatButton(currentAltStatMode);
                         UpdateAllDamage();
                         pnlSpread.Invalidate();
                         pnlRecoil.Invalidate();
