@@ -15,9 +15,32 @@ namespace WeaponDamageCalc;
 
 public partial class Form1
 {
+    private enum GenState { Ready, Generated }
+    private GenState _genState = GenState.Ready;
+    private string? _genDir = null;
+
+    private void SetGenerateState(Button btnGenerate, GenState state)
+    {
+        _genState = state;
+        if (state == GenState.Generated)
+        {
+            btnGenerate.Text = "UplNew";
+            btnGenerate.BackColor = Color.LightSalmon;
+        }
+        else
+        {
+            btnGenerate.Text = "Generate";
+            btnGenerate.BackColor = SystemColors.Control;
+            _genDir = null;
+        }
+    }
+
     private void BtnWiki_Click(object? sender, EventArgs e)
     {
         LogService.Info("BtnWiki: opening Wiki Stats Updater");
+        _genState = GenState.Ready;
+        _genDir = null;
+
         var dlg = new Form
         {
             Text = "Wiki Stats Updater", Size = new Size(660, 680),
@@ -45,6 +68,8 @@ public partial class Form1
         var lblOutput = new Label { Text = "Result:", Location = new Point(12, 326), AutoSize = true };
         var txtOutput = new TextBox { Location = new Point(12, 344), Size = new Size(620, 228), Multiline = true, ScrollBars = ScrollBars.Vertical, Font = new Font("Consolas", 9), ReadOnly = true, MaxLength = 0 };
 
+        void Out(string s) { txtOutput.AppendText(s + "\r\n"); }
+
         var btnSelectDir = new Button { Text = "Scripts...", Location = new Point(12, 578), Size = new Size(85, 26) };
         var lblDir = new Label { Location = new Point(98, 583), AutoSize = true, ForeColor = Color.Gray };
         var btnConvert = new Button { Text = "Convert", Location = new Point(12, 608), Size = new Size(85, 26) };
@@ -56,7 +81,7 @@ public partial class Form1
         if (selectedDir != null) lblDir.Text = selectedDir;
         Dictionary<string, string>? _titleToScript = null;
         bool dryRunDone = false, batchDryDone = false;
-        CancellationTokenSource? dryRunCts = null, batchCts = null;
+        CancellationTokenSource? dryRunCts = null, batchCts = null, genCts = null;
 
         //page改变时清空source和状态
         txtPage.TextChanged += (_, _) =>
@@ -81,6 +106,8 @@ public partial class Form1
                 _titleToScript = null;
                 if (dryRunDone) { dryRunDone = false; btnDryRun.Text = "DryRun"; btnDryRun.BackColor = SystemColors.Control; SetEditControlsEnabled(btnConvert, btnSelectDir, btnFetch, true); }
                 if (batchDryDone) { batchDryDone = false; btnBatchDR.Text = "BatchDR"; btnBatchDR.BackColor = SystemColors.Control; SetEditControlsEnabled(btnConvert, btnSelectDir, btnFetch, true); }
+                if (genCts != null) { genCts.Cancel(); genCts.Dispose(); genCts = null; }
+                SetGenerateState(btnGenerate, GenState.Ready);
             }
         };
 
@@ -178,22 +205,32 @@ public partial class Form1
 
         btnGenerate.Click += async (_, _) =>
         {
-            if (btnGenerate.Tag is string uploadDir && Directory.Exists(uploadDir))
+            if (genCts != null && !genCts.IsCancellationRequested)
+            {
+                genCts.Cancel();
+                return;
+            }
+
+            if (_genState == GenState.Generated && _genDir != null && Directory.Exists(_genDir))
             {
                 btnGenerate.Enabled = false;
+                btnGenerate.Text = "Cancel";
+                btnGenerate.BackColor = Color.LightCoral;
                 lblStatus.Text = "Uploading...";
-                LogService.Info($"Wiki Generate: uploading {Directory.GetFiles(uploadDir, "*.txt").Length} files from {uploadDir}");
+                LogService.Info($"Wiki Generate: uploading {Directory.GetFiles(_genDir, "*.txt").Length} files from {_genDir}");
+                genCts = new CancellationTokenSource();
+                var token = genCts.Token;
                 try
                 {
-                    if (!await EnsureLogin(txtUser.Text, txtPw.Text, lblStatus)) { btnGenerate.Text = "Generate"; btnGenerate.BackColor = SystemColors.Control; btnGenerate.Tag = null; btnGenerate.Enabled = true; return; }
-                    var files = Directory.GetFiles(uploadDir, "*.txt");
+                    if (!await EnsureLogin(txtUser.Text, txtPw.Text, lblStatus)) return;
+                    var files = Directory.GetFiles(_genDir, "*.txt");
                     int upOk = 0, upFail = 0;
                     txtOutput.Clear();
-                    void Out(string s) { txtOutput.AppendText(s + "\r\n"); }
                     Out($"Upload — {files.Length} files — {DateTime.Now:HH:mm:ss}");
                     Out(new string('-', 40));
                     foreach (string fp in files)
                     {
+                        token.ThrowIfCancellationRequested();
                         string title = Uri.UnescapeDataString(Path.GetFileNameWithoutExtension(fp)).Replace("_", " ");
                         string content = File.ReadAllText(fp);
                         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -208,6 +245,10 @@ public partial class Form1
                     lblStatus.Text = $"Upload done: {upOk} ok, {upFail} fail";
                     LogService.Info($"Wiki Generate upload done: {upOk} ok, {upFail} fail");
                 }
+                catch (OperationCanceledException)
+                {
+                    lblStatus.Text = "Upload cancelled";
+                }
                 catch (Exception ex)
                 {
                     lblStatus.Text = $"Upload error: {ex.Message}";
@@ -215,10 +256,10 @@ public partial class Form1
                 }
                 finally
                 {
-                    btnGenerate.Text = "Generate";
-                    btnGenerate.BackColor = SystemColors.Control;
-                    btnGenerate.Tag = null;
+                    SetGenerateState(btnGenerate, GenState.Ready);
                     btnGenerate.Enabled = true;
+                    genCts?.Dispose();
+                    genCts = null;
                 }
                 return;
             }
@@ -238,8 +279,6 @@ public partial class Form1
             try
             {
                 txtOutput.Clear();
-                void Out(string s) { txtOutput.AppendText(s + "\r\n"); }
-
                 Out($"Generate started — {DateTime.Now:HH:mm:ss}");
                 var tokens = LocalizationService.LoadTokens(Path.Combine(resourceDir, "vietnam_english.txt"));
                 Out($"Tokens loaded: {tokens.Count}");
@@ -308,9 +347,8 @@ public partial class Form1
 
                 if (newPages.Count > 0)
                 {
-                    btnGenerate.Text = "Upload New";
-                    btnGenerate.BackColor = Color.LightSalmon;
-                    btnGenerate.Tag = genDir;
+                    _genDir = genDir;
+                    SetGenerateState(btnGenerate, GenState.Generated);
                 }
                 lblStatus.Text = $"Done: {newPages.Count} new, {existing.Count} existing";
                 LogService.Info($"Wiki Generate done: {newPages.Count} new, {existing.Count} existing");
@@ -348,11 +386,12 @@ public partial class Form1
         {
             if (dryRunCts != null) { dryRunCts.Cancel(); dryRunCts.Dispose(); dryRunCts = null; }
             if (batchCts != null) { batchCts.Cancel(); batchCts.Dispose(); batchCts = null; }
+            if (genCts != null) { genCts.Cancel(); genCts.Dispose(); genCts = null; }
             txtPage.Text = "Weapons of Vietnam";
             txtInput.Clear(); txtOutput.Clear(); _titleToScript = null;
             dryRunDone = false; btnDryRun.Text = "DryRun"; btnDryRun.BackColor = SystemColors.Control;
             batchDryDone = false; btnBatchDR.Text = "BatchDR"; btnBatchDR.BackColor = SystemColors.Control;
-            btnGenerate.Text = "Generate"; btnGenerate.BackColor = SystemColors.Control; btnGenerate.Tag = null;
+            SetGenerateState(btnGenerate, GenState.Ready);
             SetEditControlsEnabled(btnConvert, btnSelectDir, btnFetch, true);
             lblStatus.Text = "";
         };
@@ -445,7 +484,6 @@ public partial class Form1
                 string wikiDir = WikiService.GetWikiDir(); Directory.CreateDirectory(wikiDir);
                 int done = 0, fail = 0, skip = 0;
                 txtOutput.Clear();
-                void Out(string s) { txtOutput.AppendText(s + "\r\n"); }
 
                 if (!batchDryDone)
                 {
@@ -544,7 +582,6 @@ public partial class Form1
         tooltip.SetToolTip(btnConvert, "Convert the current source using script data");
         tooltip.SetToolTip(btnCopy, "Copy result to clipboard");
         tooltip.SetToolTip(btnReset, "Reset all wiki fields to defaults");
-        tooltip.SetToolTip(btnFetch, "Fetch the wiki page source");
 
         dlg.Controls.AddRange(new Control[] {
             lblPage, txtPage, btnFetch, lblStatus,
@@ -557,6 +594,7 @@ public partial class Form1
         {
             if (dryRunCts != null) { dryRunCts.Cancel(); dryRunCts.Dispose(); dryRunCts = null; }
             if (batchCts != null) { batchCts.Cancel(); batchCts.Dispose(); batchCts = null; }
+            if (genCts != null) { genCts.Cancel(); genCts.Dispose(); genCts = null; }
         };
         dlg.ShowDialog(this);
     }
