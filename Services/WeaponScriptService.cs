@@ -321,7 +321,7 @@ public static class WeaponScriptService
         return result;
     }
 
-    public static void ExportAltStatsToScripts(string csvFilePath, string scriptsDir, AltStatMode mode)
+    public static void ExportAltStatsToScripts(string csvFilePath, string scriptsDir, AltStatMode mode)//屎
     {
         string blockName = AltStatBlockNames[mode];
         LogService.Info($"ExportAltStatsToScripts: {csvFilePath} -> {scriptsDir}, mode={mode}");

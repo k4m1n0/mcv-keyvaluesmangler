@@ -115,21 +115,20 @@ Keyvalues Mangler™ 5000 — MCV Weapon Stats Tool
 
 Usage:
   {exeName}.exe [command] [options]
-
-  Without arguments, launches the GUI.
-  With --log-level only, launches GUI with logging enabled (no console window)
+  {exeName}.exe --log-level <level>           (GUI with logging)
+  Without arguments, launches the GUI
 
 Global Options:
   --log-level <debug|info|warn|error>
-      Set minimum log level written to mangler.log (default: warn in CLI, debug in GUI)
+      Minimum log level written to mangler.log (default: GUI=debug, CLI=warn)
       DEBUG  Log everything including control value changes and hotkeys
       INFO   Log operations (save, export, import, wiki actions)
       WARN   Log warnings and errors only (missing files, failed operations)
       ERROR  Log errors and fatal events only
       FATAL  No need to specify, this program gets fucked
-      In CLI mode, --verbose also prints progress to console; log file follows --log-level
-      In GUI mode, use --log-level to enable log file output in Release builds:
-        {exeName}.exe --log-level debug
+      The log file auto-rotates at 5 MiB. Warn/Error entries include source
+      location in Debug builds. In CLI mode, --verbose prints progress to
+      console; the log file independently follows --log-level
 
 Commands:
 
@@ -146,7 +145,6 @@ Commands:
   --wiki-dryrun <page> <scripts_dir> [--single] [--verbose]
       Fetch <page> from wiki, convert with scripts, save to .\wiki\
       --single   Treat <page> as a single weapon page (not a summary)
-      --verbose  Show detailed progress
 
   --wiki-upload <page> <scripts_dir> --user <u> --pw <p> [--single] [--verbose]
       Fetch, convert, and upload <page> to wiki. Requires login
@@ -161,34 +159,22 @@ Commands:
   --generate <scripts_dir> [output_dir] [--include-existing] [--check-wiki] [--verbose]
       Generate wiki weapon pages from game scripts and resource files
       Default output: .\generated\
-      --include-existing  Also generate pages that already exist on wiki
+      --include-existing  Overwrite even if wiki pages already exist
       --check-wiki        Query wiki API to skip existing pages
 
-  --help, -h, /?
-      Show this help
-
-Logging:
-  All log output goes to both Visual Studio debug output (when attached) and
-  mangler.log in the executable directory. The log file auto rotates at 5 MiB
-  Log format: [HH:mm:ss.fff] [LEVEL] message
-  Warn/Error/Fatal entries include source file location (Debug builds)
-
 Return codes:
-  0  Success
-  1  Usage error
-  2  Login failed
-  3  Page not found
-  4  Unknown command
-  5  Internal error
+  0  Success   1  Usage error   2  Login failed
+  3  Page not found   4  Unknown command   5  Internal error
 
 Examples:
-  {exeName}.exe --log-level debug                                  (GUI with full logging)
+  {exeName}.exe --log-level debug
   {exeName}.exe --csv-to-scripts weapons.csv ""X:\...\vietnam\scripts""
-  {exeName}.exe --wiki-dryrun ""Weapons of Vietnam"" ""X:\...\vietnam\scripts""
-  {exeName}.exe --wiki-upload ""AK-47"" ""X:\...\vietnam\scripts"" --user AAAAAA --pw 114514 --single
-  {exeName}.exe --batch-dryrun ""Weapons of Vietnam"" ""X:\...\vietnam\scripts"" --verbose
+  {exeName}.exe --wiki-dryrun ""Weapons of Vietnam"" ""X:\...\vietnam\scripts"" --verbose
+  {exeName}.exe --wiki-upload ""AK-47"" ""X:\...\vietnam\scripts"" --user user --pw pass --single
+  {exeName}.exe --batch-dryrun ""Weapons of Vietnam"" ""X:\...\vietnam\scripts"" --skip-cached
   {exeName}.exe --generate ""X:\...\vietnam\scripts"" ""X:\output"" --check-wiki
   {exeName}.exe --convert-templates ""X:\...\vietnam\scripts"" --simple
+  {exeName}.exe --scripts-to-csv ""X:\...\vietnam\scripts""
 ");
     }
 

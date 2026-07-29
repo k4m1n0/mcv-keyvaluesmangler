@@ -25,12 +25,12 @@ public partial class Form1
         if (state == GenState.Generated)
         {
             btnGenerate.Text = "UplNew";
-            btnGenerate.BackColor = Color.LightSalmon;
+            btnGenerate.BackColor = _darkMode ? Color.FromArgb(180, 80, 60) : Color.LightSalmon;
         }
         else
         {
             btnGenerate.Text = "Generate";
-            btnGenerate.BackColor = SystemColors.Control;
+            btnGenerate.BackColor = _darkMode ? Color.FromArgb(60, 60, 60) : SystemColors.Control;
             _genDir = null;
         }
     }
@@ -76,6 +76,8 @@ public partial class Form1
         var btnCopy = new Button { Text = "Copy", Location = new Point(103, 608), Size = new Size(85, 26) };
         var btnReset = new Button { Text = "Reset", Location = new Point(194, 608), Size = new Size(85, 26) };
         var chkSkipCached = new CheckBox { Text = "Skip cached", Location = new Point(290, 610), Size = new Size(100, 24), Checked = false, AutoSize = true };
+        Color wikiInactiveColor = _darkMode ? Color.FromArgb(60, 60, 60) : SystemColors.Control;
+        Color wikiActiveColor = _darkMode ? Color.FromArgb(180, 80, 60) : Color.LightSalmon;
 
         string? selectedDir = string.IsNullOrEmpty(lastScriptsDir) ? null : lastScriptsDir;
         if (selectedDir != null) lblDir.Text = selectedDir;
@@ -104,8 +106,8 @@ public partial class Form1
                 txtInput.Clear();
                 txtOutput.Clear();
                 _titleToScript = null;
-                if (dryRunDone) { dryRunDone = false; btnDryRun.Text = "DryRun"; btnDryRun.BackColor = SystemColors.Control; SetEditControlsEnabled(btnConvert, btnSelectDir, btnFetch, true); }
-                if (batchDryDone) { batchDryDone = false; btnBatchDR.Text = "BatchDR"; btnBatchDR.BackColor = SystemColors.Control; SetEditControlsEnabled(btnConvert, btnSelectDir, btnFetch, true); }
+                if (dryRunDone) { dryRunDone = false; btnDryRun.Text = "DryRun"; btnDryRun.BackColor = wikiInactiveColor; SetEditControlsEnabled(btnConvert, btnSelectDir, true); }
+                if (batchDryDone) { batchDryDone = false; btnBatchDR.Text = "BatchDR"; btnBatchDR.BackColor = wikiInactiveColor; SetEditControlsEnabled(btnConvert, btnSelectDir, true); }
                 if (genCts != null) { genCts.Cancel(); genCts.Dispose(); genCts = null; }
                 SetGenerateState(btnGenerate, GenState.Ready);
             }
@@ -113,16 +115,15 @@ public partial class Form1
 
         void ResetBatchState()
         {
-            batchDryDone = false; btnBatchDR.Text = "BatchDR"; btnBatchDR.BackColor = SystemColors.Control;
-            dryRunDone = false; btnDryRun.Text = "DryRun"; btnDryRun.BackColor = SystemColors.Control;
-            SetEditControlsEnabled(btnConvert, btnSelectDir, btnFetch, true);
+            batchDryDone = false; btnBatchDR.Text = "BatchDR"; btnBatchDR.BackColor = wikiInactiveColor;
+            dryRunDone = false; btnDryRun.Text = "DryRun"; btnDryRun.BackColor = wikiInactiveColor;
+            SetEditControlsEnabled(btnConvert, btnSelectDir, true);
         }
 
-        void SetEditControlsEnabled(Button conv, Button dir, Button fetch, bool enabled)
+        void SetEditControlsEnabled(Button conv, Button dir, bool enabled)
         {
             conv.Enabled = enabled;
             dir.Enabled = enabled;
-            fetch.Enabled = enabled;
         }
 
         void PickDir()
@@ -183,16 +184,16 @@ public partial class Form1
         {
             dryRunDone = !dryRunDone;
             btnDryRun.Text = dryRunDone ? "Upload" : "DryRun";
-            btnDryRun.BackColor = dryRunDone ? Color.LightSalmon : SystemColors.Control;
-            SetEditControlsEnabled(btnConvert, btnSelectDir, btnFetch, !dryRunDone);
+            btnDryRun.BackColor = dryRunDone ? wikiActiveColor : wikiInactiveColor;
+            SetEditControlsEnabled(btnConvert, btnSelectDir, !dryRunDone);
         }
 
         void ToggleBatch()
         {
             batchDryDone = !batchDryDone;
             btnBatchDR.Text = batchDryDone ? "BatchUp" : "BatchDR";
-            btnBatchDR.BackColor = batchDryDone ? Color.LightSalmon : SystemColors.Control;
-            SetEditControlsEnabled(btnConvert, btnSelectDir, btnFetch, !batchDryDone);
+            btnBatchDR.BackColor = batchDryDone ? wikiActiveColor : wikiInactiveColor;
+            SetEditControlsEnabled(btnConvert, btnSelectDir, !batchDryDone);
         }
 
         btnSelectDir.Click += (_, _) =>
@@ -389,10 +390,10 @@ public partial class Form1
             if (genCts != null) { genCts.Cancel(); genCts.Dispose(); genCts = null; }
             txtPage.Text = "Weapons of Vietnam";
             txtInput.Clear(); txtOutput.Clear(); _titleToScript = null;
-            dryRunDone = false; btnDryRun.Text = "DryRun"; btnDryRun.BackColor = SystemColors.Control;
-            batchDryDone = false; btnBatchDR.Text = "BatchDR"; btnBatchDR.BackColor = SystemColors.Control;
+            dryRunDone = false; btnDryRun.Text = "DryRun"; btnDryRun.BackColor = wikiInactiveColor;
+            batchDryDone = false; btnBatchDR.Text = "BatchDR"; btnBatchDR.BackColor = wikiInactiveColor;
             SetGenerateState(btnGenerate, GenState.Ready);
-            SetEditControlsEnabled(btnConvert, btnSelectDir, btnFetch, true);
+            SetEditControlsEnabled(btnConvert, btnSelectDir, true);
             lblStatus.Text = "";
         };
 
@@ -418,9 +419,9 @@ public partial class Form1
 
         btnDryRun.Click += async (_, _) =>
         {
-            if (dryRunCts != null) { dryRunCts.Cancel(); dryRunCts.Dispose(); dryRunCts = null; btnDryRun.Text = dryRunDone ? "Upload" : "DryRun"; btnDryRun.BackColor = dryRunDone ? Color.LightSalmon : SystemColors.Control; lblStatus.Text = "Cancelled"; return; }
+            if (dryRunCts != null) { dryRunCts.Cancel(); dryRunCts.Dispose(); dryRunCts = null; btnDryRun.Text = dryRunDone ? "Upload" : "DryRun"; btnDryRun.BackColor = dryRunDone ? wikiActiveColor : wikiInactiveColor; lblStatus.Text = "Cancelled"; return; }
             if (batchCts != null) { lblStatus.Text = "Batch is running"; return; }
-            if (batchDryDone) { batchDryDone = false; btnBatchDR.Text = "BatchDR"; btnBatchDR.BackColor = SystemColors.Control; }
+            if (batchDryDone) { batchDryDone = false; btnBatchDR.Text = "BatchDR"; btnBatchDR.BackColor = wikiInactiveColor; }
             if (dryRunDone && string.IsNullOrWhiteSpace(txtOutput.Text)) { lblStatus.Text = "Result is empty."; return; }
 
             if (!dryRunDone && string.IsNullOrWhiteSpace(txtOutput.Text))
@@ -444,7 +445,7 @@ public partial class Form1
                 if (!dryRunDone) { await Task.Run(() => token.ThrowIfCancellationRequested(), token); lblStatus.Text = $"Ready: {txtPage.Text} (click Upload)"; }
                 else
                 {
-                    if (!await EnsureLogin(txtUser.Text, txtPw.Text, lblStatus)) { ExitCancel(btnDryRun, dryRunDone ? "Upload" : "DryRun", dryRunDone ? Color.LightSalmon : SystemColors.Control, h); return; }
+                    if (!await EnsureLogin(txtUser.Text, txtPw.Text, lblStatus)) { ExitCancel(btnDryRun, dryRunDone ? "Upload" : "DryRun", dryRunDone ? wikiActiveColor : wikiInactiveColor, h); return; }
                     token.ThrowIfCancellationRequested();
                     //与wiki现有内容比较 未变更则跳过
                     if (await WikiApiService.IsSameContentAsync(txtPage.Text, txtOutput.Text)) { lblStatus.Text = "Unchanged, skip"; }
@@ -459,15 +460,15 @@ public partial class Form1
                 }
                 ToggleDryRun(); ExitCancel(btnDryRun, btnDryRun.Text, btnDryRun.BackColor, h);
             }
-            catch (OperationCanceledException) { lblStatus.Text = "Cancelled"; ExitCancel(btnDryRun, dryRunDone ? "Upload" : "DryRun", dryRunDone ? Color.LightSalmon : SystemColors.Control, h); }
+            catch (OperationCanceledException) { lblStatus.Text = "Cancelled"; ExitCancel(btnDryRun, dryRunDone ? "Upload" : "DryRun", dryRunDone ? wikiActiveColor : wikiInactiveColor, h); }
             finally { dryRunCts?.Dispose(); dryRunCts = null; }
         };
 
         btnBatchDR.Click += async (_, _) =>
         {
-            if (batchCts != null) { batchCts.Cancel(); batchCts.Dispose(); batchCts = null; btnBatchDR.Text = batchDryDone ? "BatchUp" : "BatchDR"; btnBatchDR.BackColor = batchDryDone ? Color.LightSalmon : SystemColors.Control; lblStatus.Text = "Batch cancelled"; return; }
+            if (batchCts != null) { batchCts.Cancel(); batchCts.Dispose(); batchCts = null; btnBatchDR.Text = batchDryDone ? "BatchUp" : "BatchDR"; btnBatchDR.BackColor = batchDryDone ? wikiActiveColor : wikiInactiveColor; lblStatus.Text = "Batch cancelled"; return; }
             if (dryRunCts != null) { lblStatus.Text = "DryRun is running"; return; }
-            if (dryRunDone) { dryRunDone = false; btnDryRun.Text = "DryRun"; btnDryRun.BackColor = SystemColors.Control; }
+            if (dryRunDone) { dryRunDone = false; btnDryRun.Text = "DryRun"; btnDryRun.BackColor = wikiInactiveColor; }
 
             if (selectedDir == null || !Directory.Exists(selectedDir)) PickDir();
             if (selectedDir == null) return;
@@ -487,7 +488,7 @@ public partial class Form1
 
                 if (!batchDryDone)
                 {
-                    if (!await EnsureLogin(txtUser.Text, txtPw.Text, lblStatus)) { ExitCancel(btnBatchDR, "BatchDR", SystemColors.Control, h); return; }
+                    if (!await EnsureLogin(txtUser.Text, txtPw.Text, lblStatus)) { ExitCancel(btnBatchDR, "BatchDR", wikiInactiveColor, h); return; }
                     string resumeTag = chkSkipCached.Checked ? " [skip cached]" : "";
                     Out($"Batch DryRun — {links.Count} pages — {DateTime.Now:HH:mm:ss}{resumeTag}");
                     Out(new string('-', 40));
@@ -534,7 +535,7 @@ public partial class Form1
                 }
                 else
                 {
-                    if (!await EnsureLogin(txtUser.Text, txtPw.Text, lblStatus)) { ExitCancel(btnBatchDR, "BatchUp", Color.LightSalmon, h); return; }
+                    if (!await EnsureLogin(txtUser.Text, txtPw.Text, lblStatus)) { ExitCancel(btnBatchDR, "BatchUp", wikiActiveColor, h); return; }
                     Out($"Batch Upload — {links.Count} pages — {DateTime.Now:HH:mm:ss}");
                     Out(new string('-', 40));
                     foreach (var link in links)
@@ -566,9 +567,15 @@ public partial class Form1
                 }
                 ToggleBatch(); ExitCancel(btnBatchDR, btnBatchDR.Text, btnBatchDR.BackColor, h);
             }
-            catch (OperationCanceledException) { lblStatus.Text = "Batch cancelled"; ExitCancel(btnBatchDR, batchDryDone ? "BatchUp" : "BatchDR", batchDryDone ? Color.LightSalmon : SystemColors.Control, h); }
+            catch (OperationCanceledException) { lblStatus.Text = "Batch cancelled"; ExitCancel(btnBatchDR, batchDryDone ? "BatchUp" : "BatchDR", batchDryDone ? wikiActiveColor : wikiInactiveColor, h); }
             finally { batchCts?.Dispose(); batchCts = null; }
         };
+
+        if (_darkMode)
+        {
+            dlg.BackColor = Color.FromArgb(32, 32, 32);
+            dlg.ForeColor = Color.FromArgb(240, 240, 240);
+        }
 
         var tooltip = new ToolTip();
         tooltip.SetToolTip(txtPage, "Wiki page name (e.g. AK-47) or script name (e.g. AK47, weapon_akm)\nPaste a full URL to auto extract the page name");
@@ -590,12 +597,33 @@ public partial class Form1
             btnSelectDir, lblDir, chkSkipCached, btnConvert, btnCopy, btnReset
         });
 
+        if (_darkMode)
+        {
+            foreach (Control c in dlg.Controls)
+            {
+                if (c is TextBox tb) { tb.BackColor = Color.FromArgb(50, 50, 50); tb.ForeColor = Color.FromArgb(240, 240, 240); }
+                else if (c is Button btn) { btn.BackColor = Color.FromArgb(60, 60, 60); btn.ForeColor = Color.FromArgb(240, 240, 240); btn.FlatStyle = FlatStyle.Flat; btn.FlatAppearance.BorderColor = Color.FromArgb(80, 80, 80); }
+                else if (c is Label lbl) { lbl.ForeColor = Color.FromArgb(240, 240, 240); }
+                else if (c is CheckBox chk) { chk.ForeColor = Color.FromArgb(240, 240, 240); }
+            }
+        }
+
         dlg.FormClosing += (_, _) =>
         {
             if (dryRunCts != null) { dryRunCts.Cancel(); dryRunCts.Dispose(); dryRunCts = null; }
             if (batchCts != null) { batchCts.Cancel(); batchCts.Dispose(); batchCts = null; }
             if (genCts != null) { genCts.Cancel(); genCts.Dispose(); genCts = null; }
         };
+
+        if (_darkMode)
+        {
+            try
+            {
+                int useDark = 1;
+                DwmSetWindowAttribute(dlg.Handle, DWMWA_USE_IMMERSIVE_DARK_MODE, ref useDark, sizeof(int));
+            }
+            catch { }
+        }
         dlg.ShowDialog(this);
     }
 

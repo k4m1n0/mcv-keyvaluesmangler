@@ -67,6 +67,7 @@ public partial class Form1 : Form
     private PanelRenderer recoilRenderer = null!;
 
     private bool lastFocusLeft = true;
+    private bool _darkMode = false;
 
     private int hotkeyId = 9001;
 
@@ -118,6 +119,8 @@ public partial class Form1 : Form
             InitC64Labels();
             InitTopButtons();
             MarkPanelControls();
+            if (SystemUsesDarkMode())
+                ApplyDarkMode();
 
             this.KeyPreview = true;
             this.KeyDown += Form1_KeyDown;
@@ -315,13 +318,16 @@ public partial class Form1 : Form
     //给所有可交互控件绑Enter事件 追踪最后焦点所在面板侧
     private void MarkPanelControls()
     {
+        int count = 0;
         foreach (Control c in GetAllDescendants(this))
         {
             if (c is TextBox || c is NumericUpDown || c is TrackBar || c is CheckBox || c is ComboBox)
             {
                 c.Enter += MarkFocusSide;
+                count++;
             }
         }
+        LogService.Debug($"MarkPanelControls: {count} controls bound");
     }
 
     private static IEnumerable<Control> GetAllDescendants(Control parent)
@@ -420,7 +426,9 @@ public partial class Form1 : Form
         try
         {
             using var p = Process.GetProcessById((int)pid);
-            return p.ProcessName.Equals("mcv_x64", StringComparison.OrdinalIgnoreCase);
+            bool isMcv = p.ProcessName.Equals("mcv_x64", StringComparison.OrdinalIgnoreCase);
+            LogService.Debug($"IsMcvForeground: {p.ProcessName} -> {isMcv}");
+            return isMcv;
         }
         catch (Exception ex)
         {
@@ -435,6 +443,7 @@ public partial class Form1 : Form
         _undoPending = true;
         _undoTimer?.Stop();
         _undoTimer?.Start();
+        LogService.DebugDebounce("schedule_undo", "ScheduleUndo", 200);
     }
 
     public void PushUndoNow()
@@ -839,6 +848,103 @@ public partial class Form1 : Form
             null, control, new object[] { true });
     }
 
+    private bool SystemUsesDarkMode()
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+            var value = key?.GetValue("AppsUseLightTheme");
+            if (value is int intVal && intVal == 0)
+                return true;
+        }
+        catch { }
+
+        string gtkTheme = Environment.GetEnvironmentVariable("GTK_THEME") ?? "";
+        if (gtkTheme.Contains("dark", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        string kdeTheme = Environment.GetEnvironmentVariable("KDE_THEME") ?? "";
+        if (kdeTheme.Contains("dark", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return false;
+    }
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+    private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+
+    private void SetTitleBarDark()
+    {
+        try
+        {
+            int useDark = 1;
+            DwmSetWindowAttribute(this.Handle, DWMWA_USE_IMMERSIVE_DARK_MODE, ref useDark, sizeof(int));
+        }
+        catch { }
+    }
+
+    private void ApplyDarkMode()
+    {
+        this.BackColor = Color.FromArgb(32, 32, 32);
+        this.ForeColor = Color.FromArgb(240, 240, 240);
+
+        foreach (Control c in GetAllDescendants(this))
+        {
+            if (c is Label lbl)
+            {
+                if (lbl == lblC64_1 || lbl == lblC64_2 || lbl == lblC64_3) continue;
+                if (lbl.ForeColor == Color.DarkRed)
+                    lbl.ForeColor = Color.FromArgb(255, 100, 100);
+                else
+                    lbl.ForeColor = Color.FromArgb(240, 240, 240);
+            }
+            else if (c is Button btn)
+            {
+                btn.BackColor = Color.FromArgb(60, 60, 60);
+                btn.ForeColor = Color.FromArgb(240, 240, 240);
+                btn.FlatStyle = FlatStyle.Flat;
+                btn.FlatAppearance.BorderColor = Color.FromArgb(80, 80, 80);
+            }
+            else if (c is TextBox txt)
+            {
+                txt.BackColor = Color.FromArgb(50, 50, 50);
+                txt.ForeColor = Color.FromArgb(240, 240, 240);
+            }
+            else if (c is NumericUpDown nud)
+            {
+                nud.BackColor = Color.FromArgb(50, 50, 50);
+                nud.ForeColor = Color.FromArgb(240, 240, 240);
+            }
+            else if (c is ComboBox cmb)
+            {
+                cmb.BackColor = Color.FromArgb(50, 50, 50);
+                cmb.ForeColor = Color.FromArgb(240, 240, 240);
+            }
+            else if (c is TrackBar tb)
+            {
+                tb.BackColor = Color.FromArgb(32, 32, 32);
+            }
+            else if (c is GroupBox gb)
+            {
+                gb.ForeColor = Color.FromArgb(200, 200, 200);
+            }
+            else if (c is CheckBox chk)
+            {
+                chk.ForeColor = Color.FromArgb(240, 240, 240);
+            }
+            else if (c is Panel pnl)
+            {
+                if (pnl == pnlSpread || pnl == pnlRecoil) continue;
+                pnl.BackColor = Color.FromArgb(40, 40, 40);
+            }
+        }
+        _darkMode = true;
+        SetTitleBarDark();
+    }
+
     private void PnlSpread_Paint(object sender, PaintEventArgs e)
     {
         bool leftAds = nudIronSightL.Value != 0;
@@ -869,7 +975,7 @@ public partial class Form1 : Form
 
     public class LogForm : Form
     {
-        public LogForm(string title, string logText)
+        public LogForm(string title, string logText, bool darkMode = false)
         {
             this.Text = title;
             this.Size = new Size(320, 240);
@@ -879,6 +985,22 @@ public partial class Form1 : Form
             this.MaximizeBox = false;
             this.TopMost = true;
             var txt = new TextBox { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Dock = DockStyle.Fill, Font = new Font("Consolas", 9), Text = logText.Replace("\n", "\r\n") };
+            if (darkMode)
+            {
+                this.BackColor = Color.FromArgb(32, 32, 32);
+                this.ForeColor = Color.FromArgb(240, 240, 240);
+                txt.BackColor = Color.FromArgb(50, 50, 50);
+                txt.ForeColor = Color.FromArgb(240, 240, 240);
+                this.Shown += (_, _) =>
+                {
+                    try
+                    {
+                        int useDark = 1;
+                        DwmSetWindowAttribute(this.Handle, DWMWA_USE_IMMERSIVE_DARK_MODE, ref useDark, sizeof(int));
+                    }
+                    catch { }
+                };
+            }
             this.Controls.Add(txt);
         }
     }

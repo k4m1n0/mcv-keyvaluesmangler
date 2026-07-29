@@ -474,7 +474,7 @@ public partial class Form1
             try
             {
                 string log = WeaponScriptService.ExportCsvToScripts(csv, dir);
-                this.Invoke(() => { using var lf = new LogForm("Export Complete", log); lf.ShowDialog(this); });
+                this.Invoke(() => { using var lf = new LogForm("Export Complete", log, _darkMode); lf.ShowDialog(this); });
             }
             catch (Exception ex)
             {
@@ -624,7 +624,7 @@ public partial class Form1
             try
             {
                 string log = WeaponScriptService.ImportScriptsToCsv(dir, csv);
-                this.Invoke(() => { RefreshWeaponList(); ClearUndoHistory(); using var lf = new LogForm("Import Complete", log); lf.ShowDialog(this); });
+                this.Invoke(() => { RefreshWeaponList(); ClearUndoHistory(); using var lf = new LogForm("Import Complete", log, _darkMode); lf.ShowDialog(this); });
             }
             catch (Exception ex)
             {
@@ -650,7 +650,7 @@ public partial class Form1
             try
             {
                 string log = Tools.ScriptToTemplateConverter.ConvertAll(dir, simpleMode);
-                this.Invoke(() => { RefreshWeaponList(); using var lf = new LogForm("Template Convert", log); lf.ShowDialog(this); });
+                this.Invoke(() => { RefreshWeaponList(); using var lf = new LogForm("Template Convert", log, _darkMode); lf.ShowDialog(this); });
             }
             catch (Exception ex)
             {
