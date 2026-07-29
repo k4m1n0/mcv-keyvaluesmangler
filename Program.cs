@@ -132,6 +132,9 @@ Global Options:
 
 Commands:
 
+  --help, -h, /?
+      Show this help
+
   --csv-to-scripts <csv> <dir>
       Export CSV weapon data to script files in <dir>
 
