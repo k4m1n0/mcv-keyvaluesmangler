@@ -67,6 +67,8 @@ public partial class Form1 : Form
     private PanelRenderer recoilRenderer = null!;
 
     private bool lastFocusLeft = true;
+    public static bool ForceDarkMode = false;
+    public static bool ForceLightMode = false;
     private bool _darkMode = false;
 
     private int hotkeyId = 9001;
@@ -848,26 +850,166 @@ public partial class Form1 : Form
             null, control, new object[] { true });
     }
 
-    private bool SystemUsesDarkMode()
+    private static bool SystemUsesDarkMode()
     {
         try
         {
             using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
                 @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
-            var value = key?.GetValue("AppsUseLightTheme");
-            if (value is int intVal && intVal == 0)
+            if (key?.GetValue("AppsUseLightTheme") is int intVal && intVal == 0)
+            {
+                LogService.Info("DarkMode: detected via Windows registry");
                 return true;
+            }
         }
-        catch { }
+        catch (Exception ex) { LogService.Info($"DarkMode: Windows registry check failed: {ex.Message}"); }
 
+        //下面这些真的会有人用到吗
         string gtkTheme = Environment.GetEnvironmentVariable("GTK_THEME") ?? "";
-        if (gtkTheme.Contains("dark", StringComparison.OrdinalIgnoreCase))
-            return true;
+        if (!string.IsNullOrEmpty(gtkTheme))
+        {
+            LogService.Info($"DarkMode: GTK_THEME={gtkTheme}");
+            if (gtkTheme.Contains("dark", StringComparison.OrdinalIgnoreCase))
+            {
+                LogService.Info("DarkMode: detected via GTK_THEME");
+                return true;
+            }
+        }
+        else
+        {
+            LogService.Info("DarkMode: GTK_THEME not set, trying config files");
+        }
 
-        string kdeTheme = Environment.GetEnvironmentVariable("KDE_THEME") ?? "";
-        if (kdeTheme.Contains("dark", StringComparison.OrdinalIgnoreCase))
-            return true;
+        var homes = new[] {
+            Environment.GetEnvironmentVariable("HOME") ?? "",
+            "/home/" + (Environment.GetEnvironmentVariable("USER") ?? ""),
+            "/home/" + (Environment.GetEnvironmentVariable("LOGNAME") ?? "")
+        }.Where(h => !string.IsNullOrEmpty(h)).Distinct().ToList();
 
+        LogService.Info($"DarkMode: trying {homes.Count} home paths: [{string.Join(", ", homes)}]");
+
+        if (TryDetectLinuxDark(homes,
+            new[] { ".config/gtk-4.0/settings.ini", ".config/gtk-3.0/settings.ini" },
+            "[Settings]", "gtk-theme-name", out string gtkSource))
+        {
+            LogService.Info($"DarkMode: detected via {gtkSource}");
+            return true;
+        }
+
+        if (TryDetectLinuxDark(homes,
+            new[] { ".config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml" },
+            "", "ThemeName", out string xfceSource, isXml: true))
+        {
+            LogService.Info($"DarkMode: detected via {xfceSource}");
+            return true;
+        }
+
+        if (TryDetectKdeDark(homes))
+        {
+            LogService.Info("DarkMode: detected via KDE activeBackground");
+            return true;
+        }
+
+        LogService.Info("DarkMode: not detected");
+        return false;
+    }
+
+    private static bool TryDetectLinuxDark(List<string> homes, string[] relativePaths,
+        string section, string keyName, out string source, bool isXml = false)
+    {
+        source = "";
+        try
+        {
+            foreach (string home in homes)
+            {
+                foreach (string relPath in relativePaths)
+                {
+                    string path = System.IO.Path.Combine(home, relPath);
+                    if (!File.Exists(path))
+                    {
+                        LogService.Info($"DarkMode: config not found: {path}");
+                        continue;
+                    }
+
+                    LogService.Info($"DarkMode: reading {path}");
+                    string value = isXml
+                        ? ExtractXmlValue(path, keyName)
+                        : ExtractIniValue(path, section, keyName);
+
+                    if (!string.IsNullOrEmpty(value))
+                    {
+                        LogService.Info($"DarkMode: {System.IO.Path.GetFileName(path)} {keyName}={value}");
+                        if (value.Contains("dark", StringComparison.OrdinalIgnoreCase))
+                        {
+                            source = path;
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex) { LogService.Info($"DarkMode: config check failed: {ex.Message}"); }
+        return false;
+    }
+
+    private static string ExtractIniValue(string path, string section, string key)
+    {
+        bool inSection = false;
+        foreach (string line in File.ReadLines(path))
+        {
+            string trimmed = line.Trim();
+            if (trimmed.Equals(section, StringComparison.OrdinalIgnoreCase))
+            { inSection = true; continue; }
+            if (inSection && trimmed.StartsWith("[")) break;
+            if (inSection && trimmed.StartsWith(key, StringComparison.OrdinalIgnoreCase))
+            {
+                string[] parts = trimmed.Split('=');
+                return parts.Length >= 2 ? parts[1].Trim() : "";
+            }
+        }
+        return "";
+    }
+
+    private static string ExtractXmlValue(string path, string key)
+    {
+        string content = File.ReadAllText(path);
+        var match = System.Text.RegularExpressions.Regex.Match(content,
+            $@"<property\s+name=""{key}""[^>]*>\s*<value[^>]*>\s*([^<]+)");
+        return match.Success ? match.Groups[1].Value.Trim() : "";
+    }
+
+    private static bool TryDetectKdeDark(List<string> homes)
+    {
+        try
+        {
+            foreach (string home in homes)
+            {
+                string path = System.IO.Path.Combine(home, ".config", "kdeglobals");
+                if (!File.Exists(path))
+                {
+                    LogService.Info($"DarkMode: KDE config not found: {path}");
+                    continue;
+                }
+
+                LogService.Info($"DarkMode: reading {path}");
+                string color = ExtractIniValue(path, "[WM]", "activeBackground");
+                if (string.IsNullOrEmpty(color))
+                {
+                    LogService.Info("DarkMode: KDE activeBackground not found");
+                    continue;
+                }
+
+                LogService.Info($"DarkMode: KDE activeBackground={color}");
+                string[] rgb = color.Split(',');
+                if (rgb.Length == 3 &&
+                    int.TryParse(rgb[0], out int r) &&
+                    int.TryParse(rgb[1], out int g) &&
+                    int.TryParse(rgb[2], out int b) &&
+                    (r + g + b) / 3.0 < 120)
+                    return true;
+            }
+        }
+        catch (Exception ex) { LogService.Info($"DarkMode: KDE check failed: {ex.Message}"); }
         return false;
     }
 

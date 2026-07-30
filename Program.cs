@@ -42,11 +42,35 @@ internal static class Program
             return 0;
         }
 
+        // 分离 GUI 参数和 CLI 位置参数
+        var cliArgs = new List<string>();
+        for (int i = 0; i < args.Length; i++)
+        {
+            if (args[i].Equals("--darkmode", StringComparison.OrdinalIgnoreCase))
+                Form1.ForceDarkMode = true;
+            else if (args[i].Equals("--lightmode", StringComparison.OrdinalIgnoreCase))
+                Form1.ForceLightMode = true;
+            else if (args[i].Equals("--log-level", StringComparison.OrdinalIgnoreCase))
+            { i++; continue; }
+            else if (args[i].Equals("--verbose", StringComparison.OrdinalIgnoreCase))
+                continue;
+            else
+                cliArgs.Add(args[i]);
+        }
+
+        var cliArgsArr = cliArgs.ToArray();
         var logLevelArg = Opt(args, "--log-level");
 
-        if (args.Length > 0 && args[0].Equals("--log-level", StringComparison.OrdinalIgnoreCase) && args.Length > 1)
+        if (cliArgsArr.Length > 0)
         {
-            var guiLogLevel = args[1].ToLowerInvariant() switch
+            return RunCliMode(cliArgsArr, logLevelArg != null ? ParseLogLevel(logLevelArg) : LogService.Level.Warn);
+        }
+
+        var guiLogLvl = Opt(args, "--log-level");
+        if (guiLogLvl != null)
+        {
+            LogService.Enabled = true;
+            LogService.MinLevel = guiLogLvl.ToLowerInvariant() switch
             {
                 "debug" => LogService.Level.Debug,
                 "info"  => LogService.Level.Info,
@@ -54,22 +78,6 @@ internal static class Program
                 "error" => LogService.Level.Error,
                 _       => LogService.Level.Debug
             };
-            var remaining = args.Skip(2).ToArray();
-            if (remaining.Length > 0)
-            {
-                return RunCliMode(remaining, guiLogLevel);
-            }
-            LogService.Enabled = true;
-            LogService.MinLevel = guiLogLevel;
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new Form1());
-            return 0;
-        }
-
-        if (args.Length > 0)
-        {
-            return RunCliMode(args, logLevelArg != null ? ParseLogLevel(logLevelArg) : LogService.Level.Warn);
         }
 
         Application.EnableVisualStyles();
@@ -115,8 +123,11 @@ Keyvalues Mangler™ 5000 — MCV Weapon Stats Tool
 
 Usage:
   {exeName}.exe [command] [options]
-  {exeName}.exe --log-level <level>           (GUI with logging)
+  {exeName}.exe [--darkmode|--lightmode] [--log-level <level>]
+
   Without arguments, launches the GUI
+  --darkmode   Force dark color scheme
+  --lightmode  Force light color scheme
 
 Global Options:
   --log-level <debug|info|warn|error>
