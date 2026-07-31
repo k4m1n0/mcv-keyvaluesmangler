@@ -37,7 +37,7 @@ public partial class Form1
     private void UpdateC64Labels(bool hasData)
     {
         lblC64_1.Text = hasData ? "        **** COMMODORE 64 BASIC V2 ****" : "";
-        lblC64_2.Text = hasData ? "     64K RAM SYSTEM  38911 BASIC BYTES FREE" : "";
+        lblC64_2.Text = hasData ? "    64K RAM SYSTEM  38911 BASIC BYTES FREE" : "";
         lblC64_3.Text = hasData ? "READY." : "";
     }
 

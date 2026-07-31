@@ -130,6 +130,56 @@ public partial class Form1 : Form
 
             this.Shown += (s, e) =>
             {
+                var screen = Screen.FromControl(this);
+                float scale = Math.Min((float)screen.WorkingArea.Width / 1366f, (float)screen.WorkingArea.Height / 768f);
+                scale = scale < 1.0f ? Math.Max(scale, 1280f / 1366f) : 1.0f;
+                this.Scale(new SizeF(scale, scale));
+                int w = (int)(1366 * scale), h = (int)(768 * scale);
+                this.Size = new Size(Math.Min(w, screen.WorkingArea.Width), Math.Min(h, screen.WorkingArea.Height));
+
+                bool needDrag = screen.Bounds.Width < 1280 || screen.Bounds.Height < 720;
+                LogService.Info($"Scale: {scale:F3}, screen: {screen.WorkingArea.Width}x{screen.WorkingArea.Height}, needDrag={needDrag}");
+                if (needDrag)
+                {
+                    var panel = new Panel { Location = Point.Empty, Size = new Size(w, h), AutoScroll = true };
+                    EnableDoubleBuffering(panel);
+                    foreach (var c in this.Controls.Cast<Control>().ToList()) { this.Controls.Remove(c); panel.Controls.Add(c); }
+                    this.Controls.Add(panel);
+                    //收缩panel至实际控件底部 消除多余空白
+                    int bottom = 0;
+                    foreach (Control c in panel.Controls) bottom = Math.Max(bottom, c.Bottom);
+                    if (bottom < panel.Height) panel.Height = bottom;
+
+                    bool dragging = false;
+                    Point last = Point.Empty, off = Point.Empty;
+                    int mx = Math.Min(this.ClientSize.Width - panel.Width, 0), my = Math.Min(this.ClientSize.Height - panel.Height, 0);
+                    void Bind(Control p)
+                    {
+                        p.MouseDown += (_, me) => { dragging = true; last = p.PointToScreen(me.Location); };
+                        p.MouseUp += (_, _) => dragging = false;
+                        p.MouseMove += (_, me) =>
+                        {
+                            if (!dragging) return;
+                            var cur = p.PointToScreen(me.Location);
+                            off.X = Math.Clamp(off.X + cur.X - last.X, mx, 0);
+                            off.Y = Math.Clamp(off.Y + cur.Y - last.Y, my, 0);
+                            panel.Location = off;
+                            last = cur;
+                        };
+                        foreach (Control c in p.Controls) Bind(c);
+                    }
+                    Bind(panel);
+                    //跨屏幕拖动时重算可拖动范围
+                    this.Resize += (_, _) =>
+                    {
+                        mx = Math.Min(this.ClientSize.Width - panel.Width, 0);
+                        my = Math.Min(this.ClientSize.Height - panel.Height, 0);
+                        off.X = Math.Clamp(off.X, mx, 0);
+                        off.Y = Math.Clamp(off.Y, my, 0);
+                        panel.Location = off;
+                    };
+                }
+
                 var originalTitle = this.Text;
                 this.Text = "Keyvalues Mangler™ 5000 — Ctrl+T to toggle topmost/minimize";
                 var titleTimer = new System.Windows.Forms.Timer { Interval = 1919 };
@@ -223,12 +273,12 @@ public partial class Form1 : Form
         btnRefresh.Click += BtnRefresh_Click;
         this.Controls.Add(btnRefresh);
 
-        var btnCopy = new Button { Text = "L>R", Location = new Point(cx + 22, 620), Size = new Size(48, 24) };
+        var btnCopy = new Button { Text = "L>R", Location = new Point(cx + 22, 618), Size = new Size(48, 26) };
         btnCopy.Click += CopyLeftToRight;
         this.Controls.Add(btnCopy);
 
         //glory to our coders all i dont need to write a hook myself but just call a cvar
-        var btnCopyCvar = new Button { Text = "wpn_reload_script all", Location = new Point(cx + 72, 620), Size = new Size(154, 24) };
+        var btnCopyCvar = new Button { Text = "wpn_reload_script all", Location = new Point(cx + 73, 618), Size = new Size(154, 26) };
         btnCopyCvar.Tag = false;
         btnCopyCvar.Click += BtnQuickExport_Click;
         btnCopyCvar.MouseLeave += (s, e) => CancelConfirm(btnCopyCvar);
@@ -238,23 +288,23 @@ public partial class Form1 : Form
         };
         this.Controls.Add(btnCopyCvar);
         
-        var btnConvertToTemplate = new Button { Text = "Tmpl", Location = new Point(cx + 22, 644), Size = new Size(48, 24) };
+        var btnConvertToTemplate = new Button { Text = "Tmpl", Location = new Point(cx + 22, 646), Size = new Size(48, 26) };
         btnConvertToTemplate.Click += BtnConvertToTemplate_Click;
         this.Controls.Add(btnConvertToTemplate);
 
-        var btnToggleDov = new Button { Text = "DoV", Location = new Point(cx + 72, 644), Size = new Size(77, 24), BackColor = SystemColors.Control };
+        var btnToggleDov = new Button { Text = "DoV", Location = new Point(cx + 73, 646), Size = new Size(76, 26), BackColor = SystemColors.Control };
         btnToggleDov.Click += (s, e) => ToggleAltStats(WeaponScriptService.AltStatMode.Dov);
         this.Controls.Add(btnToggleDov);
 
-        var btnToggleZombie = new Button { Text = "Zmb", Location = new Point(cx + 149, 644), Size = new Size(77, 24), BackColor = SystemColors.Control };
+        var btnToggleZombie = new Button { Text = "Zmb", Location = new Point(cx + 150, 646), Size = new Size(76, 26), BackColor = SystemColors.Control };
         btnToggleZombie.Click += (s, e) => ToggleAltStats(WeaponScriptService.AltStatMode.Zombie);
         this.Controls.Add(btnToggleZombie);
 
-        var btnCopyR = new Button { Text = "L<R", Location = new Point(cx + 228, 620), Size = new Size(48, 24) };
+        var btnCopyR = new Button { Text = "L<R", Location = new Point(cx + 228, 618), Size = new Size(48, 26) };
         btnCopyR.Click += CopyRightToLeft;
         this.Controls.Add(btnCopyR);
 
-        var btnWiki = new Button { Text = "Wiki", Location = new Point(cx + 228, 644), Size = new Size(48, 24) };
+        var btnWiki = new Button { Text = "Wiki", Location = new Point(cx + 228, 646), Size = new Size(48, 26) };
         btnWiki.Click += BtnWiki_Click;
         this.Controls.Add(btnWiki);
 

@@ -131,15 +131,18 @@ Usage:
 
 Global Options:
   --log-level <debug|info|warn|error>
-      Minimum log level written to mangler.log (default: GUI=debug, CLI=warn)
+      Minimum log level written to mangler.log
+      (default: GUI=debug, CLI=warn)
       DEBUG  Log everything including control value changes and hotkeys
       INFO   Log operations (save, export, import, wiki actions)
-      WARN   Log warnings and errors only (missing files, failed operations)
+      WARN   Log warnings and errors only
+             (missing files, failed operations)
       ERROR  Log errors and fatal events only
       FATAL  No need to specify, this program gets fucked
-      The log file auto-rotates at 5 MiB. Warn/Error entries include source
-      location in Debug builds. In CLI mode, --verbose prints progress to
-      console; the log file independently follows --log-level
+      The log file auto rotates at 5 MiB.
+      Warn/Error entries include source location in Debug builds.
+      In CLI mode, --verbose prints progress to console;
+      the log file independently follows --log-level
 
 Commands:
 
@@ -150,31 +153,42 @@ Commands:
       Export CSV weapon data to script files in <dir>
 
   --scripts-to-csv <dir> [csv]
-      Import script files from <dir> into CSV. Default: .\weapons.csv
+      Import script files from <dir> into CSV.
+      Default: .\weapons.csv
 
   --convert-templates <dir> [--simple]
       Convert old weapon scripts to preset_file template format
       --simple  Skip empty keys and compress blank lines
 
   --wiki-dryrun <page> <scripts_dir> [--single] [--verbose]
-      Fetch <page> from wiki, convert with scripts, save to .\wiki\
-      --single   Treat <page> as a single weapon page (not a summary)
+      Fetch <page> from wiki, convert with scripts,
+      save to .\wiki\
+      --single   Treat <page> as a single weapon page
+                 (not a summary)
 
-  --wiki-upload <page> <scripts_dir> --user <u> --pw <p> [--single] [--verbose]
-      Fetch, convert, and upload <page> to wiki. Requires login
+  --wiki-upload <page> <scripts_dir> --user <u> --pw <p>
+      [--single] [--verbose]
+      Fetch, convert, and upload <page> to wiki.
+      Requires login
 
-  --batch-dryrun <summary_page> <scripts_dir> [--verbose] [--skip-cached]
+  --batch-dryrun <summary_page> <scripts_dir>
+      [--verbose] [--skip-cached]
       Batch convert all weapons linked from <summary_page>
       --skip-cached  Skip pages already saved in .\wiki\
 
-  --batch-upload <summary_page> <scripts_dir> --user <u> --pw <p> [--verbose]
+  --batch-upload <summary_page> <scripts_dir>
+      --user <u> --pw <p> [--verbose]
       Batch upload all weapons linked from <summary_page>
 
-  --generate <scripts_dir> [output_dir] [--include-existing] [--check-wiki] [--verbose]
-      Generate wiki weapon pages from game scripts and resource files
+  --generate <scripts_dir> [output_dir]
+      [--include-existing] [--check-wiki] [--verbose]
+      Generate wiki weapon pages from game scripts
+      and resource files
       Default output: .\generated\
-      --include-existing  Overwrite even if wiki pages already exist
-      --check-wiki        Query wiki API to skip existing pages
+      --include-existing  Overwrite even if wiki pages
+                          already exist
+      --check-wiki        Query wiki API to skip
+                          existing pages
 
 Return codes:
   0  Success   1  Usage error   2  Login failed
@@ -182,13 +196,21 @@ Return codes:
 
 Examples:
   {exeName}.exe --log-level debug
-  {exeName}.exe --csv-to-scripts weapons.csv ""X:\...\vietnam\scripts""
-  {exeName}.exe --wiki-dryrun ""Weapons of Vietnam"" ""X:\...\vietnam\scripts"" --verbose
-  {exeName}.exe --wiki-upload ""AK-47"" ""X:\...\vietnam\scripts"" --user user --pw pass --single
-  {exeName}.exe --batch-dryrun ""Weapons of Vietnam"" ""X:\...\vietnam\scripts"" --skip-cached
-  {exeName}.exe --generate ""X:\...\vietnam\scripts"" ""X:\output"" --check-wiki
-  {exeName}.exe --convert-templates ""X:\...\vietnam\scripts"" --simple
-  {exeName}.exe --scripts-to-csv ""X:\...\vietnam\scripts""
+  {exeName}.exe --csv-to-scripts weapons.csv
+      ""X:\...\vietnam\scripts""
+  {exeName}.exe --wiki-dryrun ""Weapons of Vietnam""
+      ""X:\...\vietnam\scripts"" --verbose
+  {exeName}.exe --wiki-upload ""AK-47""
+      ""X:\...\vietnam\scripts"" --user user --pw pass
+      --single
+  {exeName}.exe --batch-dryrun ""Weapons of Vietnam""
+      ""X:\...\vietnam\scripts"" --skip-cached
+  {exeName}.exe --generate ""X:\...\vietnam\scripts""
+      ""X:\output"" --check-wiki
+  {exeName}.exe --convert-templates
+      ""X:\...\vietnam\scripts"" --simple
+  {exeName}.exe --scripts-to-csv
+      ""X:\...\vietnam\scripts""
 ");
     }
 

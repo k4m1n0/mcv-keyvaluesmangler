@@ -41,9 +41,9 @@ public partial class Form1
         _genState = GenState.Ready;
         _genDir = null;
 
-        var dlg = new Form
-        {
-            Text = "Wiki Stats Updater", Size = new Size(660, 680),
+var dlg = new Form
+{
+            Text = "Wiki Stats Updater", Size = new Size(660, 600),
             StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedSingle,
             MinimizeBox = false, MaximizeBox = false
         };
@@ -64,18 +64,18 @@ public partial class Form1
         var chkOverwriteExisting = new CheckBox { Text = "Overwrite existing", Location = new Point(498, 41), Size = new Size(110, 24), Checked = false, AutoSize = true };
 
         var lblInput = new Label { Text = "Source:", Location = new Point(12, 74), AutoSize = true };
-        var txtInput = new TextBox { Location = new Point(12, 92), Size = new Size(620, 228), Multiline = true, ScrollBars = ScrollBars.Vertical, Font = new Font("Consolas", 9), MaxLength = 0 };
-        var lblOutput = new Label { Text = "Result:", Location = new Point(12, 326), AutoSize = true };
-        var txtOutput = new TextBox { Location = new Point(12, 344), Size = new Size(620, 228), Multiline = true, ScrollBars = ScrollBars.Vertical, Font = new Font("Consolas", 9), ReadOnly = true, MaxLength = 0 };
+        var txtInput = new TextBox { Location = new Point(12, 92), Size = new Size(620, 188), Multiline = true, ScrollBars = ScrollBars.Vertical, Font = new Font("Consolas", 9), MaxLength = 0 };
+        var lblOutput = new Label { Text = "Result:", Location = new Point(12, 286), AutoSize = true };
+        var txtOutput = new TextBox { Location = new Point(12, 304), Size = new Size(620, 188), Multiline = true, ScrollBars = ScrollBars.Vertical, Font = new Font("Consolas", 9), ReadOnly = true, MaxLength = 0 };
 
         void Out(string s) { txtOutput.AppendText(s + "\r\n"); }
 
-        var btnSelectDir = new Button { Text = "Scripts...", Location = new Point(12, 578), Size = new Size(85, 26) };
-        var lblDir = new Label { Location = new Point(98, 583), AutoSize = true, ForeColor = Color.Gray };
-        var btnConvert = new Button { Text = "Convert", Location = new Point(12, 608), Size = new Size(85, 26) };
-        var btnCopy = new Button { Text = "Copy", Location = new Point(103, 608), Size = new Size(85, 26) };
-        var btnReset = new Button { Text = "Reset", Location = new Point(194, 608), Size = new Size(85, 26) };
-        var chkSkipCached = new CheckBox { Text = "Skip cached", Location = new Point(290, 610), Size = new Size(100, 24), Checked = false, AutoSize = true };
+        var btnSelectDir = new Button { Text = "Scripts...", Location = new Point(12, 498), Size = new Size(85, 26) };
+        var lblDir = new Label { Location = new Point(98, 503), AutoSize = true, ForeColor = Color.Gray };
+        var btnConvert = new Button { Text = "Convert", Location = new Point(12, 528), Size = new Size(85, 26) };
+        var btnCopy = new Button { Text = "Copy", Location = new Point(103, 528), Size = new Size(85, 26) };
+        var btnReset = new Button { Text = "Reset", Location = new Point(194, 528), Size = new Size(85, 26) };
+        var chkSkipCached = new CheckBox { Text = "Skip cached", Location = new Point(290, 530), Size = new Size(100, 24), Checked = false, AutoSize = true };
         Color wikiInactiveColor = _darkMode ? Color.FromArgb(60, 60, 60) : SystemColors.Control;
         Color wikiActiveColor = _darkMode ? Color.FromArgb(180, 80, 60) : Color.LightSalmon;
 

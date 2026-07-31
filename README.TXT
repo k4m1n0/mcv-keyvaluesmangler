@@ -54,12 +54,13 @@
   MINIMUM:
     - Windows 7 SP1 with KB3063858 (use the self contained one)
     - Wine/Proton 9.0+ for the OS of evil
-    - 1366x768 display resolution
+    - Pentium 4 630 with SVGA graphics
     - 720 KB floppy (Desktop Runtime) or 64 MB drive space available
     - A keyboard. A mouse. Fingers optional but recommended
 
   RECOMMENDED:
     - Windows 10 x64 1607 (20H1 or later for dark mode title bar via DWM)
+    - 1366x768 display resolution
     - MC:V game instead of the scripts folder only
     - Internet connection for wiki stuff
 
@@ -111,7 +112,7 @@
             Click again to upload
 
   BATCH:    Process ALL weapons linked from a summary page
-            Supports dry-run (convert and cache) then batch upload
+            Supports dryrun (convert and cache) then batch upload
 
   GENERATE: Create brand new wiki pages from game scripts + resource
             files. Automatically checks for existing pages on the wiki
