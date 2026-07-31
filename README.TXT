@@ -194,6 +194,6 @@
   Batteries not included. Use only as directed
   If symptoms persist, consult your physician
 
-  (C) 2026. Made with Visual Studio and spite
+  (C) Juche 115. Made with Visual Studio and spite
 
 ================================================================================
