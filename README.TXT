@@ -61,7 +61,7 @@
   RECOMMENDED:
     - Windows 10 x64 1607 (20H1 or later for dark mode title bar via DWM)
     - 1366x768 display resolution
-    - MC:V game instead of the scripts folder only
+    - MCV game instead of the scripts folder only
     - Internet connection for wiki stuff
 
 ================================================================================
