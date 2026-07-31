@@ -55,7 +55,7 @@
     - Windows 7 SP1 with KB3063858 (use the self contained one)
     - Wine/Proton 9.0+ for the OS of evil
     - 1366x768 display resolution
-    - 720 KB (Desktop Runtime) or 64 MB drive space available
+    - 720 KB floppy (Desktop Runtime) or 64 MB drive space available
     - A keyboard. A mouse. Fingers optional but recommended
 
   RECOMMENDED:
