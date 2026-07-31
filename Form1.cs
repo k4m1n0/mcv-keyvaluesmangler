@@ -278,7 +278,7 @@ public partial class Form1 : Form
         this.Controls.Add(btnCopy);
 
         //glory to our coders all i dont need to write a hook myself but just call a cvar
-        var btnCopyCvar = new Button { Text = "wpn_reload_script all", Location = new Point(cx + 73, 618), Size = new Size(154, 26) };
+        var btnCopyCvar = new Button { Text = "wpn_reload_script all", Location = new Point(cx + 73, 618), Size = new Size(152, 26) };
         btnCopyCvar.Tag = false;
         btnCopyCvar.Click += BtnQuickExport_Click;
         btnCopyCvar.MouseLeave += (s, e) => CancelConfirm(btnCopyCvar);
@@ -292,11 +292,11 @@ public partial class Form1 : Form
         btnConvertToTemplate.Click += BtnConvertToTemplate_Click;
         this.Controls.Add(btnConvertToTemplate);
 
-        var btnToggleDov = new Button { Text = "DoV", Location = new Point(cx + 73, 646), Size = new Size(76, 26), BackColor = SystemColors.Control };
+        var btnToggleDov = new Button { Text = "DoV", Location = new Point(cx + 73, 646), Size = new Size(75, 26), BackColor = SystemColors.Control };
         btnToggleDov.Click += (s, e) => ToggleAltStats(WeaponScriptService.AltStatMode.Dov);
         this.Controls.Add(btnToggleDov);
 
-        var btnToggleZombie = new Button { Text = "Zmb", Location = new Point(cx + 150, 646), Size = new Size(76, 26), BackColor = SystemColors.Control };
+        var btnToggleZombie = new Button { Text = "Zmb", Location = new Point(cx + 150, 646), Size = new Size(75, 26), BackColor = SystemColors.Control };
         btnToggleZombie.Click += (s, e) => ToggleAltStats(WeaponScriptService.AltStatMode.Zombie);
         this.Controls.Add(btnToggleZombie);
 
