@@ -69,7 +69,7 @@
 
   GUI MODE:
     1. Double click the EXE
-    2. Imoprt from weapon scripts
+    2. Import from weapon scripts
     3. Pick weapons from the dropdowns
     4. Change numbers until they look good
     5. Ctrl+S to save or Ctrl+Shift+S to save && export to scripts
