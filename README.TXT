@@ -44,7 +44,7 @@
     - One click export to game script files
     - Wiki integration: convert, generate, and upload weapon pages
     - Run from command line if you hate GUIs for some reason
-    - Detect dark mode so your eyeballs donot bleed at 3 AM
+    - Detect dark mode so your eyeballs does not bleed at 3 AM
       (Win/GTK/KDE/Xfce)
 
 ================================================================================
@@ -101,7 +101,7 @@
 ================================================================================
 
   weapons.csv       Master weapon database
-  mangler.log       Diagnostic log File
+  mangler.log       Diagnostic log file
   preset_file.txt   Optional script template (overrides embedded)
   generated\        Wiki page output directory
   wiki\             Wiki conversion cache directory
