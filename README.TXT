@@ -75,8 +75,12 @@
     4. Change numbers until they look good
     5. Ctrl+S to save or Ctrl+Shift+S to save && export to scripts
 
+  WINELATOR:
+    set DOTNET_GCHeapHardLimit=0x10000000
+    set DOTNET_EnableWriteXorExecute=0
+
   CLI MODE:
-    1. Too long, see 7. or just use this:
+    Too long, see 7. or just use this:
     keyvaluesmangler_x.x.x.x_win_amd64[-selfcontained].exe --help
 
 ================================================================================
@@ -185,12 +189,13 @@
 ================================================================================
 
   Written for the MCV community by
-      John "k0u74ku" Doe
-  who clearly has too much time
+        John "k0u74ku" Doe
+   who clearly has too much time
 
   Powered by .NET, CsvHelper, caffeine, and poor life choices
 
-  Keyvalues Mangler is a trademark of absolute nonsense
+  Keyvalues Mangler is a trademark of someone
+  I guess, so please just steal it responsibly
   All rights reversed. Some assembly required
   Batteries not included. Use only as directed
   If symptoms persist, consult your physician
