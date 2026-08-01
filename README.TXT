@@ -75,7 +75,7 @@
     4. Change numbers until they look good
     5. Ctrl+S to save or Ctrl+Shift+S to save && export to scripts
 
-  WINELATOR:
+  WINLATOR:
     set DOTNET_GCHeapHardLimit=0x10000000
     set DOTNET_EnableWriteXorExecute=0
 
