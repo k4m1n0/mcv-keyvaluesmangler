@@ -42,7 +42,6 @@ internal static class Program
             return 0;
         }
 
-        // 分离 GUI 参数和 CLI 位置参数
         var rgCliArgs = new List<string>();
         for (int i = 0; i < rgArgs.Length; i++)
         {
@@ -119,7 +118,7 @@ internal static class Program
     {
         string sExeName = Path.GetFileNameWithoutExtension(Environment.ProcessPath ?? "WeaponDamageCalc.exe");
         Console.WriteLine($@"
-Keyvalues Mangler™ 5000 — MCV Weapon Stats Tool
+Keyvalues Mangler(TM) 5000 — MCV Weapon Stats Tool
 
 Usage:
   {sExeName}.exe [command] [options]
@@ -131,7 +130,7 @@ Usage:
 
 Global Options:
   --log-level <debug|info|warn|error>
-      Minimum log level written to mangler.log
+      Minimum log level written to .\mangler.log
       (default: GUI=debug, CLI=warn)
       DEBUG  Log everything including control value changes and hotkeys
       INFO   Log operations (save, export, import, wiki actions)
@@ -139,9 +138,9 @@ Global Options:
              (missing files, failed operations)
       ERROR  Log errors and fatal events only
       FATAL  No need to specify, this program gets fucked
-      The log file auto rotates at 5 MiB.
-      Warn/Error entries include source location in Debug builds.
-      In CLI mode, --verbose prints progress to console;
+      The log file auto rotates at 5 MiB
+      Warn/Error entries include source location in Debug builds
+      In CLI mode, --verbose prints progress to console
       the log file independently follows --log-level
 
 Commands:
@@ -153,7 +152,7 @@ Commands:
       Export CSV weapon data to script files in <dir>
 
   --scripts-to-csv <dir> [csv]
-      Import script files from <dir> into CSV.
+      Import script files from <dir> into CSV
       Default: .\weapons.csv
 
   --convert-templates <dir> [--simple]
@@ -168,7 +167,7 @@ Commands:
 
   --wiki-upload <page> <scripts_dir> --user <u> --pw <p>
       [--single] [--verbose]
-      Fetch, convert, and upload <page> to wiki.
+      Fetch, convert, and upload <page> to wiki
       Requires login
 
   --batch-dryrun <summary_page> <scripts_dir>
