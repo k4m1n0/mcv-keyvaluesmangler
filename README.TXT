@@ -169,7 +169,7 @@
   9. BUILD FROM SOURCE
 ================================================================================
 
-  NEEDS: .NET 8.0 SDK, CsvHelper (NuGet handles it)
+  It just needs a .NET 8.0 SDK
 
    BUILD WITH:
       dotnet publish -c Release -r win-x64
@@ -192,7 +192,7 @@
         John "k0u74ku" Doe
    who clearly has too much time
 
-  Powered by .NET, CsvHelper, caffeine, and poor life choices
+  Powered by .NET, caffeine, and poor life choices
 
   Keyvalues Mangler is a trademark of someone
   I guess, so please just steal it responsibly
