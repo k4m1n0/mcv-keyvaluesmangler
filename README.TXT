@@ -44,7 +44,7 @@
     - One click export to game script files
     - Wiki integration: convert, generate, and upload weapon pages
     - Run from command line if you hate GUIs for some reason
-    - Detect dark mode so your eyeballs donot bleed at 3 AM
+    - Detect dark mode so your eyeballs does not bleed at 3 AM
       (Win/GTK/KDE/Xfce)
 
 ================================================================================
@@ -75,8 +75,12 @@
     4. Change numbers until they look good
     5. Ctrl+S to save or Ctrl+Shift+S to save && export to scripts
 
+  WINLATOR:
+    set DOTNET_GCHeapHardLimit=0x10000000
+    set DOTNET_EnableWriteXorExecute=0
+
   CLI MODE:
-    1. Too long, see 7. or just use this:
+    Too long, see 7. or just use this:
     keyvaluesmangler_x.x.x.x_win_amd64[-selfcontained].exe --help
 
 ================================================================================
@@ -97,7 +101,7 @@
 ================================================================================
 
   weapons.csv       Master weapon database
-  mangler.log       Diagnostic log File
+  mangler.log       Diagnostic log file
   preset_file.txt   Optional script template (overrides embedded)
   generated\        Wiki page output directory
   wiki\             Wiki conversion cache directory
@@ -185,12 +189,13 @@
 ================================================================================
 
   Written for the MCV community by
-      John "k0u74ku" Doe
-  who clearly has too much time
+        John "k0u74ku" Doe
+   who clearly has too much time
 
   Powered by .NET, CsvHelper, caffeine, and poor life choices
 
-  Keyvalues Mangler is a trademark of absolute nonsense
+  Keyvalues Mangler is a trademark of someone
+  I guess, so please just steal it responsibly
   All rights reversed. Some assembly required
   Batteries not included. Use only as directed
   If symptoms persist, consult your physician
