@@ -302,6 +302,7 @@ public static class WeaponScriptService
                     updated++;
                 }
 
+                content = content.TrimEnd('\r', '\n');
                 File.WriteAllText(scriptPath, content, new UTF8Encoding(false));
                 success++;
                 log.Add($"[{i + 1}/{total}] {scriptName} ({updated} 字段)");
@@ -396,6 +397,7 @@ public static class WeaponScriptService
 
                 if (content != originalContent)
                 {
+                    content = content.TrimEnd('\r', '\n');
                     File.WriteAllText(scriptPath, content, new UTF8Encoding(false));
                     updated++;
                 }
