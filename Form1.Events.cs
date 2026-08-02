@@ -38,6 +38,18 @@ public partial class Form1
                         SyncAltStatFields(wCurrentLeft, amCurrentAltStat);
                     else if (!bFocusLeft && wCurrentRight != null && WeaponHasAltStats(wCurrentRight, amCurrentAltStat))
                         SyncAltStatFields(wCurrentRight, amCurrentAltStat);
+                    if (wCurrentLeft != null && HasUnsavedChanges(true, bCheckBothSides: true))
+                    {
+                        var drResult = MessageBox.Show("Unsaved alt stat changes to left weapon. Discard?",
+                            "Unsaved Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                        if (drResult != DialogResult.Yes)
+                        {
+                            cmbWeaponsL.SelectedIndexChanged -= WeaponSelectedL;
+                            cmbWeaponsL.SelectedItem = wCurrentLeft;
+                            cmbWeaponsL.SelectedIndexChanged += WeaponSelectedL;
+                            return;
+                        }
+                    }
                 }
                 else if (wCurrentLeft != null && HasUnsavedChanges(true))
                 {
@@ -126,6 +138,18 @@ public partial class Form1
                         SyncAltStatFields(wCurrentLeft, amCurrentAltStat);
                     else if (!bFocusLeft && wCurrentRight != null && WeaponHasAltStats(wCurrentRight, amCurrentAltStat))
                         SyncAltStatFields(wCurrentRight, amCurrentAltStat);
+                    if (wCurrentRight != null && HasUnsavedChanges(false, bCheckBothSides: true))
+                    {
+                        var drResult = MessageBox.Show("Unsaved alt stat changes to right weapon. Discard?",
+                            "Unsaved Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                        if (drResult != DialogResult.Yes)
+                        {
+                            cmbWeaponsR.SelectedIndexChanged -= WeaponSelectedR;
+                            cmbWeaponsR.SelectedItem = wCurrentRight;
+                            cmbWeaponsR.SelectedIndexChanged += WeaponSelectedR;
+                            return;
+                        }
+                    }
                 }
                 else if (wCurrentRight != null && HasUnsavedChanges(false))
                 {
