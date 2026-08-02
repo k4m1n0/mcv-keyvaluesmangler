@@ -211,6 +211,8 @@ public partial class Form1
                 ctsGen.Cancel();
                 return;
             }
+            if (bDryRunDone) { bDryRunDone = false; btnDryRun.Text = "DryRun"; btnDryRun.BackColor = cWikiInactive; SetEditControlsEnabled(btnConvert, btnSelectDir, true); }
+            if (bBatchDryDone) { bBatchDryDone = false; btnBatchDR.Text = "BatchDR"; btnBatchDR.BackColor = cWikiInactive; SetEditControlsEnabled(btnConvert, btnSelectDir, true); }
 
             if (gsState == GenState.Generated && sGenDir != null && Directory.Exists(sGenDir))
             {
@@ -421,7 +423,9 @@ public partial class Form1
         {
             if (ctsDryRun != null) { ctsDryRun.Cancel(); ctsDryRun.Dispose(); ctsDryRun = null; btnDryRun.Text = bDryRunDone ? "Upload" : "DryRun"; btnDryRun.BackColor = bDryRunDone ? cWikiActive : cWikiInactive; lblStatus.Text = "Cancelled"; return; }
             if (ctsBatch != null) { lblStatus.Text = "Batch is running"; return; }
-            if (bBatchDryDone) { bBatchDryDone = false; btnBatchDR.Text = "BatchDR"; btnBatchDR.BackColor = cWikiInactive; }
+            if (ctsGen != null) { lblStatus.Text = "Generate is running"; return; }
+            if (bBatchDryDone) { bBatchDryDone = false; btnBatchDR.Text = "BatchDR"; btnBatchDR.BackColor = cWikiInactive; SetEditControlsEnabled(btnConvert, btnSelectDir, true); }
+            if (gsState == GenState.Generated) { SetGenerateState(btnGenerate, GenState.Ready); }
             if (bDryRunDone && string.IsNullOrWhiteSpace(txtOutput.Text)) { lblStatus.Text = "Result is empty."; return; }
 
             if (!bDryRunDone && string.IsNullOrWhiteSpace(txtOutput.Text))
@@ -468,7 +472,9 @@ public partial class Form1
         {
             if (ctsBatch != null) { ctsBatch.Cancel(); ctsBatch.Dispose(); ctsBatch = null; btnBatchDR.Text = bBatchDryDone ? "BatchUp" : "BatchDR"; btnBatchDR.BackColor = bBatchDryDone ? cWikiActive : cWikiInactive; lblStatus.Text = "Batch cancelled"; return; }
             if (ctsDryRun != null) { lblStatus.Text = "DryRun is running"; return; }
-            if (bDryRunDone) { bDryRunDone = false; btnDryRun.Text = "DryRun"; btnDryRun.BackColor = cWikiInactive; }
+            if (ctsGen != null) { lblStatus.Text = "Generate is running"; return; }
+            if (bDryRunDone) { bDryRunDone = false; btnDryRun.Text = "DryRun"; btnDryRun.BackColor = cWikiInactive; SetEditControlsEnabled(btnConvert, btnSelectDir, true); }
+            if (gsState == GenState.Generated) { SetGenerateState(btnGenerate, GenState.Ready); }
 
             if (sSelectedDir == null || !Directory.Exists(sSelectedDir)) PickDir();
             if (sSelectedDir == null) return;
