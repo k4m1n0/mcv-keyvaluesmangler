@@ -1,66 +1,67 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.RegularExpressions;
 
 namespace WeaponDamageCalc.Services;
 
 public static class LocalizationService
 {
-    public static Dictionary<string, string> LoadTokens(string filePath)
+    public static Dictionary<string, string> LoadTokens(string sFilePath)
     {
-        var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (!File.Exists(filePath))
+        var mpTokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (!File.Exists(sFilePath))
         {
-            LogService.Warn($"Localization file not found: {filePath}");
-            return tokens;
+            LogService.Warn($"Localization file not found: {sFilePath}");
+            return mpTokens;
         }
 
-        LogService.Info($"Loading localization tokens: {filePath}");
-        string content = WeaponScriptService.ReadScriptFile(filePath)
+        LogService.Info($"Loading localization tokens: {sFilePath}");
+        string sContent = WeaponScriptService.ReadScriptFile(sFilePath)
             .Replace("\r\n", "\n").Replace('\r', '\n');
-        var stack = new List<string>();
-        string? pendingKey = null;
+        var rgStack = new List<string>();
+        string? sPendingKey = null;
 
-        foreach (string rawLine in content.Split('\n'))
+        foreach (string sRawLine in sContent.Split('\n'))
         {
-            string line = StripComment(rawLine).Trim();
-            if (string.IsNullOrEmpty(line)) continue;
+            string sLine = StripComment(sRawLine).Trim();
+            if (string.IsNullOrEmpty(sLine)) continue;
 
-            var inlineOpen = System.Text.RegularExpressions.Regex.Match(line, @"^""([^""]+)""\s*\{");
-            if (inlineOpen.Success) { stack.Add(inlineOpen.Groups[1].Value); continue; }
-            if (line == "{") { stack.Add(pendingKey ?? "__anon__"); pendingKey = null; continue; }
-            if (line == "}") { if (stack.Count > 0) stack.RemoveAt(stack.Count - 1); continue; }
+            var mInlineOpen = Regex.Match(sLine, @"^""([^""]+)""\s*\{");
+            if (mInlineOpen.Success) { rgStack.Add(mInlineOpen.Groups[1].Value); continue; }
+            if (sLine == "{") { rgStack.Add(sPendingKey ?? "__anon__"); sPendingKey = null; continue; }
+            if (sLine == "}") { if (rgStack.Count > 0) rgStack.RemoveAt(rgStack.Count - 1); continue; }
 
-            var kv = System.Text.RegularExpressions.Regex.Match(line, @"""([^""]+)""\s+""([^""]*)""");
-            if (kv.Success && IsInsideTokensBlock(stack))
-                tokens[kv.Groups[1].Value] = kv.Groups[2].Value;
+            var mKv = Regex.Match(sLine, @"""([^""]+)""\s+""([^""]*)""");
+            if (mKv.Success && IsInsideTokensBlock(rgStack))
+                mpTokens[mKv.Groups[1].Value] = mKv.Groups[2].Value;
 
-            var keyOnly = System.Text.RegularExpressions.Regex.Match(line, @"""([^""]+)""$");
-            if (keyOnly.Success) pendingKey = keyOnly.Groups[1].Value;
+            var mKeyOnly = Regex.Match(sLine, @"""([^""]+)""$");
+            if (mKeyOnly.Success) sPendingKey = mKeyOnly.Groups[1].Value;
         }
-        LogService.Info($"Tokens loaded: {tokens.Count}");
-        return tokens;
+        LogService.Info($"Tokens loaded: {mpTokens.Count}");
+        return mpTokens;
     }
 
-    private static bool IsInsideTokensBlock(List<string> stack) =>
-        stack.Count == 2 && stack[0].Equals("lang", StringComparison.OrdinalIgnoreCase)
-                        && stack[1].Equals("Tokens", StringComparison.OrdinalIgnoreCase);
+    private static bool IsInsideTokensBlock(List<string> rgStack) =>
+        rgStack.Count == 2 && rgStack[0].Equals("lang", StringComparison.OrdinalIgnoreCase)
+                           && rgStack[1].Equals("Tokens", StringComparison.OrdinalIgnoreCase);
 
-    public static string Lookup(Dictionary<string, string> tokens, string key, string fallback = "")
+    public static string Lookup(Dictionary<string, string> mpTokens, string sKey, string sFallback = "")
     {
-        if (string.IsNullOrEmpty(key)) return fallback;
-        string k = key.StartsWith("#") ? key.Substring(1) : key;
-        return tokens.TryGetValue(k, out var v) ? v : fallback;
+        if (string.IsNullOrEmpty(sKey)) return sFallback;
+        string sK = sKey.StartsWith("#") ? sKey.Substring(1) : sKey;
+        return mpTokens.TryGetValue(sK, out var sVal) ? sVal : sFallback;
     }
 
-    public static string StripComment(string line)
+    public static string StripComment(string sLine)
     {
-        bool inQuote = false;
-        for (int i = 0; i < line.Length - 1; i++)
+        bool bInQuote = false;
+        for (int i = 0; i < sLine.Length - 1; i++)
         {
-            if (line[i] == '"') inQuote = !inQuote;
-            if (!inQuote && line[i] == '/' && line[i + 1] == '/') return line.Substring(0, i);
+            if (sLine[i] == '"') bInQuote = !bInQuote;
+            if (!bInQuote && sLine[i] == '/' && sLine[i + 1] == '/') return sLine.Substring(0, i);
         }
-        return line;
+        return sLine;
     }
 }

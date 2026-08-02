@@ -22,23 +22,23 @@ public partial class Form1
     private Label lblHeadDmgR, lblChestDmgR, lblStomachDmgR, lblLegDmgR, lblArmDmgR;
     private CheckBox chkVestR;
 
-    private void InitRightPanel(List<WeaponData> weapons)
+    private void InitRightPanel(List<WeaponData> rgWeapons)
     {
-        int x = 825;
-        this.Controls.Add(new Label { Text = "WeaponR", Location = new Point(x + 190, 8), Size = new Size(65, 20) });
-        cmbWeaponsR = new ComboBox { Location = new Point(x + 5, 6), Size = new Size(180, 23), AutoCompleteMode = AutoCompleteMode.SuggestAppend, AutoCompleteSource = AutoCompleteSource.ListItems, DisplayMember = "PrintName" };
+        int iX = 825;
+        this.Controls.Add(new Label { Text = "WeaponR", Location = new Point(iX + 190, 8), Size = new Size(65, 20) });
+        cmbWeaponsR = new ComboBox { Location = new Point(iX + 5, 6), Size = new Size(180, 23), AutoCompleteMode = AutoCompleteMode.SuggestAppend, AutoCompleteSource = AutoCompleteSource.ListItems, DisplayMember = "PrintName" };
         cmbWeaponsR.SelectedIndexChanged += WeaponSelectedR;
         this.Controls.Add(cmbWeaponsR);
-        nudDamageGenericR = new NumericUpDown { Location = new Point(x + 417, 6), Size = new Size(65, 23), DecimalPlaces = 1, Increment = 1m, Minimum = 0m, Maximum = 999m, Value = 0m };
+        nudDamageGenericR = new NumericUpDown { Location = new Point(iX + 417, 6), Size = new Size(65, 23), DecimalPlaces = 1, Increment = 1m, Minimum = 0m, Maximum = 999m, Value = 0m };
         nudDamageGenericR.ValueChanged += (s, e) => { ScheduleUndo(); UpdateAllDamage(); LogService.DebugDebounce("nud_Dmg_R", $"Dmg R: {nudDamageGenericR.Value}", 500); };
         nudDamageGenericR.MouseUp += (_, _) => PushUndoNow();
         this.Controls.Add(nudDamageGenericR);
-        this.Controls.Add(new Label { Text = "Dmg", Location = new Point(x + 485, 8), AutoSize = true });
+        this.Controls.Add(new Label { Text = "Dmg", Location = new Point(iX + 485, 8), AutoSize = true });
 
-        CreateDamageMultiplierGroup(x, false);
-        CreateRangeGroup(x, false);
-        CreateSpreadRecoilAndPropertiesGroups(x, false);
-        CreateSpreadMultiplierGroup(x, false);
-        CreateOtherStatsGroup(x, false);
+        CreateDamageMultiplierGroup(iX, false);
+        CreateRangeGroup(iX, false);
+        CreateSpreadRecoilAndPropertiesGroups(iX, false);
+        CreateSpreadMultiplierGroup(iX, false);
+        CreateOtherStatsGroup(iX, false);
     }
 }

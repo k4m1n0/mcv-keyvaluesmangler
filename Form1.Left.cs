@@ -22,9 +22,9 @@ public partial class Form1
     private Label lblHeadDmgL, lblChestDmgL, lblStomachDmgL, lblLegDmgL, lblArmDmgL;
     private CheckBox chkVestL;
 
-    private void InitLeftPanel(List<WeaponData> weapons)
+    private void InitLeftPanel(List<WeaponData> rgWeapons)
     {
-        int x = 5;
+        int iX = 5;
         cmbWeaponsL = new ComboBox { Location = new Point(340, 6), Size = new Size(180, 23), AutoCompleteMode = AutoCompleteMode.SuggestAppend, AutoCompleteSource = AutoCompleteSource.ListItems, DisplayMember = "PrintName" };
         cmbWeaponsL.SelectedIndexChanged += WeaponSelectedL;
         this.Controls.Add(cmbWeaponsL);
@@ -34,10 +34,10 @@ public partial class Form1
         nudDamageGenericL.ValueChanged += (s, e) => { ScheduleUndo(); UpdateAllDamage(); LogService.DebugDebounce("nud_Dmg_L", $"Dmg L: {nudDamageGenericL.Value}", 500); };
         nudDamageGenericL.MouseUp += (_, _) => PushUndoNow();
         this.Controls.Add(nudDamageGenericL);
-        CreateDamageMultiplierGroup(x, true);
-        CreateRangeGroup(x, true);
-        CreateSpreadRecoilAndPropertiesGroups(x, true);
-        CreateSpreadMultiplierGroup(x, true);
-        CreateOtherStatsGroup(x, true);
+        CreateDamageMultiplierGroup(iX, true);
+        CreateRangeGroup(iX, true);
+        CreateSpreadRecoilAndPropertiesGroups(iX, true);
+        CreateSpreadMultiplierGroup(iX, true);
+        CreateOtherStatsGroup(iX, true);
     }
 }

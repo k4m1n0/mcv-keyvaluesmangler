@@ -16,14 +16,14 @@ public partial class Form1
 
     private void InitC64Labels()
     {
-        int cx = 525;
-        lblC64_1 = new Label { Location = new Point(cx, 675), Size = new Size(300, 13), Font = new Font("Consolas", 8, FontStyle.Bold), ForeColor = Color.FromArgb(200, 200, 255), BackColor = Color.FromArgb(60, 60, 160), TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0), Padding = new Padding(0) };
-        lblC64_2 = new Label { Location = new Point(cx, 686), Size = new Size(300, 13), Font = new Font("Consolas", 8, FontStyle.Bold), ForeColor = Color.FromArgb(200, 200, 255), BackColor = Color.FromArgb(60, 60, 160), TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0), Padding = new Padding(0) };
-        lblC64_3 = new Label { Location = new Point(cx, 697), Size = new Size(300, 13), Font = new Font("Consolas", 8, FontStyle.Bold), ForeColor = Color.FromArgb(200, 200, 255), BackColor = Color.FromArgb(60, 60, 160), TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0), Padding = new Padding(0) };
+        int iCx = 525;
+        lblC64_1 = new Label { Location = new Point(iCx, 675), Size = new Size(300, 13), Font = new Font("Consolas", 8, FontStyle.Bold), ForeColor = Color.FromArgb(200, 200, 255), BackColor = Color.FromArgb(60, 60, 160), TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0), Padding = new Padding(0) };
+        lblC64_2 = new Label { Location = new Point(iCx, 686), Size = new Size(300, 13), Font = new Font("Consolas", 8, FontStyle.Bold), ForeColor = Color.FromArgb(200, 200, 255), BackColor = Color.FromArgb(60, 60, 160), TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0), Padding = new Padding(0) };
+        lblC64_3 = new Label { Location = new Point(iCx, 697), Size = new Size(300, 13), Font = new Font("Consolas", 8, FontStyle.Bold), ForeColor = Color.FromArgb(200, 200, 255), BackColor = Color.FromArgb(60, 60, 160), TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0), Padding = new Padding(0) };
 
-        var tadaPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Media", "tada.wav");
-        System.Media.SoundPlayer? tada = File.Exists(tadaPath) ? new System.Media.SoundPlayer(tadaPath) : null;
-        void PlayTada() { try { tada?.Play(); } catch { } }
+        var sTadaPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Media", "tada.wav");
+        System.Media.SoundPlayer? spTada = File.Exists(sTadaPath) ? new System.Media.SoundPlayer(sTadaPath) : null;
+        void PlayTada() { try { spTada?.Play(); } catch { } }
         lblC64_1.Click += (_, _) => PlayTada();
         lblC64_2.Click += (_, _) => PlayTada();
         lblC64_3.Click += (_, _) => PlayTada();
@@ -31,46 +31,46 @@ public partial class Form1
         this.Controls.Add(lblC64_1);
         this.Controls.Add(lblC64_2);
         this.Controls.Add(lblC64_3);
-        UpdateC64Labels(weapons.Count > 0);
+        UpdateC64Labels(rgWeapons.Count > 0);
     }
 
-    private void UpdateC64Labels(bool hasData)
+    private void UpdateC64Labels(bool bHasData)
     {
-        lblC64_1.Text = hasData ? "         **** COMMODORE 64 BASIC V2 ****" : "";
-        lblC64_2.Text = hasData ? "     64K RAM SYSTEM  38911 BASIC BYTES FREE" : "";
-        lblC64_3.Text = hasData ? "READY." : "";
+        lblC64_1.Text = bHasData ? "         **** COMMODORE 64 BASIC V2 ****" : "";
+        lblC64_2.Text = bHasData ? "     64K RAM SYSTEM  38911 BASIC BYTES FREE" : "";
+        lblC64_3.Text = bHasData ? "READY." : "";
     }
 
     #region 伤害倍率和衰减
 
-    private void CreateDamageMultiplierGroup(int x, bool isLeft)
+    private void CreateDamageMultiplierGroup(int iX, bool bIsLeft)
     {
-        var gb = new GroupBox { Text = "Damage Multiplier", Location = new Point(x, 38), Size = new Size(520, 215) };
-        int y = 18;
-        if (isLeft)
+        var gb = new GroupBox { Text = "Damage Multiplier", Location = new Point(iX, 38), Size = new Size(520, 215) };
+        int iY = 18;
+        if (bIsLeft)
         {
-            (trkHeadL, nudHeadL, lblHeadDmgL) = CreateSliderRow(gb, "Head", ref y, true);
-            (trkChestL, nudChestL, lblChestDmgL) = CreateSliderRow(gb, "Chest", ref y, true);
-            (trkStomachL, nudStomachL, lblStomachDmgL) = CreateSliderRow(gb, "Stomach", ref y, true);
-            (trkLegL, nudLegL, lblLegDmgL) = CreateSliderRow(gb, "Leg", ref y, true);
-            (trkArmL, nudArmL, lblArmDmgL) = CreateSliderRow(gb, "Arm", ref y, true);
+            (trkHeadL, nudHeadL, lblHeadDmgL) = CreateSliderRow(gb, "Head", ref iY, true);
+            (trkChestL, nudChestL, lblChestDmgL) = CreateSliderRow(gb, "Chest", ref iY, true);
+            (trkStomachL, nudStomachL, lblStomachDmgL) = CreateSliderRow(gb, "Stomach", ref iY, true);
+            (trkLegL, nudLegL, lblLegDmgL) = CreateSliderRow(gb, "Leg", ref iY, true);
+            (trkArmL, nudArmL, lblArmDmgL) = CreateSliderRow(gb, "Arm", ref iY, true);
         }
         else
         {
-            (trkHeadR, nudHeadR, lblHeadDmgR) = CreateSliderRow(gb, "Head", ref y, false);
-            (trkChestR, nudChestR, lblChestDmgR) = CreateSliderRow(gb, "Chest", ref y, false);
-            (trkStomachR, nudStomachR, lblStomachDmgR) = CreateSliderRow(gb, "Stomach", ref y, false);
-            (trkLegR, nudLegR, lblLegDmgR) = CreateSliderRow(gb, "Leg", ref y, false);
-            (trkArmR, nudArmR, lblArmDmgR) = CreateSliderRow(gb, "Arm", ref y, false);
+            (trkHeadR, nudHeadR, lblHeadDmgR) = CreateSliderRow(gb, "Head", ref iY, false);
+            (trkChestR, nudChestR, lblChestDmgR) = CreateSliderRow(gb, "Chest", ref iY, false);
+            (trkStomachR, nudStomachR, lblStomachDmgR) = CreateSliderRow(gb, "Stomach", ref iY, false);
+            (trkLegR, nudLegR, lblLegDmgR) = CreateSliderRow(gb, "Leg", ref iY, false);
+            (trkArmR, nudArmR, lblArmDmgR) = CreateSliderRow(gb, "Arm", ref iY, false);
         }
         this.Controls.Add(gb);
     }
 
-    private void CreateRangeGroup(int x, bool isLeft)
+    private void CreateRangeGroup(int iX, bool bIsLeft)
     {
-        var gb = new GroupBox { Text = "Range", Location = new Point(x, 258), Size = new Size(520, 55) };
+        var gb = new GroupBox { Text = "Range", Location = new Point(iX, 258), Size = new Size(520, 55) };
         gb.Controls.Add(new Label { Text = "0", Location = new Point(8, 20), Size = new Size(20, 18) });
-        if (isLeft)
+        if (bIsLeft)
         {
             trkDistanceL = new TrackBar { Location = new Point(30, 16), Size = new Size(380, 35), Minimum = 0, Maximum = 100 };
             trkDistanceL.ValueChanged += (s, e) => { ScheduleUndo(); nudDistanceL.Value = trkDistanceL.Value; UpdateAllDamage(); LogService.DebugDebounce("trk_Distance_L", $"Distance L: {trkDistanceL.Value}", 500); };
@@ -104,75 +104,75 @@ public partial class Form1
     #endregion
     #region 散布后座主属性
 
-    private void CreateSpreadRecoilAndPropertiesGroups(int x, bool isLeft)
+    private void CreateSpreadRecoilAndPropertiesGroups(int iX, bool bIsLeft)
     {
-        var gbSpread = new GroupBox { Text = "Spread (°)", Location = new Point(x, 318), Size = new Size(175, 130) };
-        int y = 20;
-        if (isLeft)
+        var gbSpread = new GroupBox { Text = "Spread (°)", Location = new Point(iX, 318), Size = new Size(175, 130) };
+        int iY = 20;
+        if (bIsLeft)
         {
-            nudHipSpreadL = CreateNullableNumericRow(gbSpread, "Hip", 8, y, 100m); BindNudUndo(nudHipSpreadL, SpreadRecoilChangedL, isLeft); y += 24;
-            nudAdsSpreadL = CreateNullableNumericRow(gbSpread, "ADS", 8, y, 100m); BindNudUndo(nudAdsSpreadL, SpreadRecoilChangedL, isLeft); y += 24;
-            nudBipodHipSpreadL = CreateNullableNumericRow(gbSpread, "Bipod Hip", 8, y, 100m); BindNudUndo(nudBipodHipSpreadL, SpreadRecoilChangedL, isLeft); y += 24;
-            nudBipodAdsSpreadL = CreateNullableNumericRow(gbSpread, "Bipod ADS", 8, y, 100m); BindNudUndo(nudBipodAdsSpreadL, SpreadRecoilChangedL, isLeft);
+            nudHipSpreadL = CreateNullableNumericRow(gbSpread, "Hip", 8, iY, 100m); BindNudUndo(nudHipSpreadL, SpreadRecoilChangedL, bIsLeft); iY += 24;
+            nudAdsSpreadL = CreateNullableNumericRow(gbSpread, "ADS", 8, iY, 100m); BindNudUndo(nudAdsSpreadL, SpreadRecoilChangedL, bIsLeft); iY += 24;
+            nudBipodHipSpreadL = CreateNullableNumericRow(gbSpread, "Bipod Hip", 8, iY, 100m); BindNudUndo(nudBipodHipSpreadL, SpreadRecoilChangedL, bIsLeft); iY += 24;
+            nudBipodAdsSpreadL = CreateNullableNumericRow(gbSpread, "Bipod ADS", 8, iY, 100m); BindNudUndo(nudBipodAdsSpreadL, SpreadRecoilChangedL, bIsLeft);
         }
         else
         {
-            nudHipSpreadR = CreateNullableNumericRow(gbSpread, "Hip", 8, y, 100m); BindNudUndo(nudHipSpreadR, SpreadRecoilChangedR, isLeft); y += 24;
-            nudAdsSpreadR = CreateNullableNumericRow(gbSpread, "ADS", 8, y, 100m); BindNudUndo(nudAdsSpreadR, SpreadRecoilChangedR, isLeft); y += 24;
-            nudBipodHipSpreadR = CreateNullableNumericRow(gbSpread, "Bipod Hip", 8, y, 100m); BindNudUndo(nudBipodHipSpreadR, SpreadRecoilChangedR, isLeft); y += 24;
-            nudBipodAdsSpreadR = CreateNullableNumericRow(gbSpread, "Bipod ADS", 8, y, 100m); BindNudUndo(nudBipodAdsSpreadR, SpreadRecoilChangedR, isLeft);
+            nudHipSpreadR = CreateNullableNumericRow(gbSpread, "Hip", 8, iY, 100m); BindNudUndo(nudHipSpreadR, SpreadRecoilChangedR, bIsLeft); iY += 24;
+            nudAdsSpreadR = CreateNullableNumericRow(gbSpread, "ADS", 8, iY, 100m); BindNudUndo(nudAdsSpreadR, SpreadRecoilChangedR, bIsLeft); iY += 24;
+            nudBipodHipSpreadR = CreateNullableNumericRow(gbSpread, "Bipod Hip", 8, iY, 100m); BindNudUndo(nudBipodHipSpreadR, SpreadRecoilChangedR, bIsLeft); iY += 24;
+            nudBipodAdsSpreadR = CreateNullableNumericRow(gbSpread, "Bipod ADS", 8, iY, 100m); BindNudUndo(nudBipodAdsSpreadR, SpreadRecoilChangedR, bIsLeft);
         }
         this.Controls.Add(gbSpread);
 
-        var gbRecoil = new GroupBox { Text = "Recoil (°)", Location = new Point(x + 180, 318), Size = new Size(175, 130) };
-        y = 20;
-        if (isLeft)
+        var gbRecoil = new GroupBox { Text = "Recoil (°)", Location = new Point(iX + 180, 318), Size = new Size(175, 130) };
+        iY = 20;
+        if (bIsLeft)
         {
-            nudHipRecoilUpL = CreateNullableNumericRow(gbRecoil, "Hip Up", 8, y, 100m); BindNudUndo(nudHipRecoilUpL, SpreadRecoilChangedL, isLeft); y += 24;
-            nudHipRecoilRightL = CreateNullableNumericRow(gbRecoil, "Hip Rt", 8, y, 100m); BindNudUndo(nudHipRecoilRightL, SpreadRecoilChangedL, isLeft); y += 24;
-            nudAdsRecoilUpL = CreateNullableNumericRow(gbRecoil, "ADS Up", 8, y, 100m); BindNudUndo(nudAdsRecoilUpL, SpreadRecoilChangedL, isLeft); y += 24;
-            nudAdsRecoilRightL = CreateNullableNumericRow(gbRecoil, "ADS Rt", 8, y, 100m); BindNudUndo(nudAdsRecoilRightL, SpreadRecoilChangedL, isLeft);
+            nudHipRecoilUpL = CreateNullableNumericRow(gbRecoil, "Hip Up", 8, iY, 100m); BindNudUndo(nudHipRecoilUpL, SpreadRecoilChangedL, bIsLeft); iY += 24;
+            nudHipRecoilRightL = CreateNullableNumericRow(gbRecoil, "Hip Rt", 8, iY, 100m); BindNudUndo(nudHipRecoilRightL, SpreadRecoilChangedL, bIsLeft); iY += 24;
+            nudAdsRecoilUpL = CreateNullableNumericRow(gbRecoil, "ADS Up", 8, iY, 100m); BindNudUndo(nudAdsRecoilUpL, SpreadRecoilChangedL, bIsLeft); iY += 24;
+            nudAdsRecoilRightL = CreateNullableNumericRow(gbRecoil, "ADS Rt", 8, iY, 100m); BindNudUndo(nudAdsRecoilRightL, SpreadRecoilChangedL, bIsLeft);
         }
         else
         {
-            nudHipRecoilUpR = CreateNullableNumericRow(gbRecoil, "Hip Up", 8, y, 100m); BindNudUndo(nudHipRecoilUpR, SpreadRecoilChangedR, isLeft); y += 24;
-            nudHipRecoilRightR = CreateNullableNumericRow(gbRecoil, "Hip Rt", 8, y, 100m); BindNudUndo(nudHipRecoilRightR, SpreadRecoilChangedR, isLeft); y += 24;
-            nudAdsRecoilUpR = CreateNullableNumericRow(gbRecoil, "ADS Up", 8, y, 100m); BindNudUndo(nudAdsRecoilUpR, SpreadRecoilChangedR, isLeft); y += 24;
-            nudAdsRecoilRightR = CreateNullableNumericRow(gbRecoil, "ADS Rt", 8, y, 100m); BindNudUndo(nudAdsRecoilRightR, SpreadRecoilChangedR, isLeft);
+            nudHipRecoilUpR = CreateNullableNumericRow(gbRecoil, "Hip Up", 8, iY, 100m); BindNudUndo(nudHipRecoilUpR, SpreadRecoilChangedR, bIsLeft); iY += 24;
+            nudHipRecoilRightR = CreateNullableNumericRow(gbRecoil, "Hip Rt", 8, iY, 100m); BindNudUndo(nudHipRecoilRightR, SpreadRecoilChangedR, bIsLeft); iY += 24;
+            nudAdsRecoilUpR = CreateNullableNumericRow(gbRecoil, "ADS Up", 8, iY, 100m); BindNudUndo(nudAdsRecoilUpR, SpreadRecoilChangedR, bIsLeft); iY += 24;
+            nudAdsRecoilRightR = CreateNullableNumericRow(gbRecoil, "ADS Rt", 8, iY, 100m); BindNudUndo(nudAdsRecoilRightR, SpreadRecoilChangedR, bIsLeft);
         }
         this.Controls.Add(gbRecoil);
 
-        var gbProp = new GroupBox { Text = "Stats", Location = new Point(x + 360, 318), Size = new Size(160, 130) };
-        y = 20;
-        if (isLeft)
+        var gbProp = new GroupBox { Text = "Stats", Location = new Point(iX + 360, 318), Size = new Size(160, 130) };
+        iY = 20;
+        if (bIsLeft)
         {
-            txtFireModesL = CreateTextBoxRow(gbProp, "Fire Mode", 8, y);
-            txtFireModesL.TextChanged += (s, e) => { if (!updatingControls) { ScheduleUndo(); UpdateAllDamage(); LogService.DebugDebounce("txt_FireModes_L", $"FireModes L: {txtFireModesL.Text}", 500); } };
-            y += 24;
-            nudFireRateL = CreateNullableIntNumericRow(gbProp, "ROF", 8, y, 10000m);
-            BindNudUndo(nudFireRateL, (s, e) => UpdateAllDamage(), isLeft);
-            y += 24;
-            nudRangeModifierL = CreateNullableNumericRow(gbProp, "Range Mod", 8, y, 10m);
+            txtFireModesL = CreateTextBoxRow(gbProp, "Fire Mode", 8, iY);
+            txtFireModesL.TextChanged += (s, e) => { if (!bUpdatingControls) { ScheduleUndo(); UpdateAllDamage(); LogService.DebugDebounce("txt_FireModes_L", $"FireModes L: {txtFireModesL.Text}", 500); } };
+            iY += 24;
+            nudFireRateL = CreateNullableIntNumericRow(gbProp, "ROF", 8, iY, 10000m);
+            BindNudUndo(nudFireRateL, (s, e) => UpdateAllDamage(), bIsLeft);
+            iY += 24;
+            nudRangeModifierL = CreateNullableNumericRow(gbProp, "Range Mod", 8, iY, 10m);
             nudRangeModifierL.DecimalPlaces = 3; nudRangeModifierL.Increment = 0.001m;
-            BindNudUndo(nudRangeModifierL, (s, e) => { RangeModifierChangedL(s, e); }, isLeft);
-            y += 24;
-            txtCapacityL = CreateTextBoxRow(gbProp, "Capacity", 8, y);
-            txtCapacityL.TextChanged += (s, e) => { if (!updatingControls) { ScheduleUndo(); LogService.DebugDebounce("txt_Capacity_L", $"Capacity L: {txtCapacityL.Text}", 500); } };
+            BindNudUndo(nudRangeModifierL, (s, e) => { RangeModifierChangedL(s, e); }, bIsLeft);
+            iY += 24;
+            txtCapacityL = CreateTextBoxRow(gbProp, "Capacity", 8, iY);
+            txtCapacityL.TextChanged += (s, e) => { if (!bUpdatingControls) { ScheduleUndo(); LogService.DebugDebounce("txt_Capacity_L", $"Capacity L: {txtCapacityL.Text}", 500); } };
         }
         else
         {
-            txtFireModesR = CreateTextBoxRow(gbProp, "Fire Mode", 8, y);
-            txtFireModesR.TextChanged += (s, e) => { if (!updatingControls) { ScheduleUndo(); UpdateAllDamage(); LogService.DebugDebounce("txt_FireModes_R", $"FireModes R: {txtFireModesR.Text}", 500); } };
-            y += 24;
-            nudFireRateR = CreateNullableIntNumericRow(gbProp, "ROF", 8, y, 10000m);
-            BindNudUndo(nudFireRateR, (s, e) => UpdateAllDamage(), isLeft);
-            y += 24;
-            nudRangeModifierR = CreateNullableNumericRow(gbProp, "Range Mod", 8, y, 10m);
+            txtFireModesR = CreateTextBoxRow(gbProp, "Fire Mode", 8, iY);
+            txtFireModesR.TextChanged += (s, e) => { if (!bUpdatingControls) { ScheduleUndo(); UpdateAllDamage(); LogService.DebugDebounce("txt_FireModes_R", $"FireModes R: {txtFireModesR.Text}", 500); } };
+            iY += 24;
+            nudFireRateR = CreateNullableIntNumericRow(gbProp, "ROF", 8, iY, 10000m);
+            BindNudUndo(nudFireRateR, (s, e) => UpdateAllDamage(), bIsLeft);
+            iY += 24;
+            nudRangeModifierR = CreateNullableNumericRow(gbProp, "Range Mod", 8, iY, 10m);
             nudRangeModifierR.DecimalPlaces = 3; nudRangeModifierR.Increment = 0.001m;
-            BindNudUndo(nudRangeModifierR, (s, e) => { RangeModifierChangedR(s, e); }, isLeft);
-            y += 24;
-            txtCapacityR = CreateTextBoxRow(gbProp, "Capacity", 8, y);
-            txtCapacityR.TextChanged += (s, e) => { if (!updatingControls) { ScheduleUndo(); LogService.DebugDebounce("txt_Capacity_R", $"Capacity R: {txtCapacityR.Text}", 500); } };
+            BindNudUndo(nudRangeModifierR, (s, e) => { RangeModifierChangedR(s, e); }, bIsLeft);
+            iY += 24;
+            txtCapacityR = CreateTextBoxRow(gbProp, "Capacity", 8, iY);
+            txtCapacityR.TextChanged += (s, e) => { if (!bUpdatingControls) { ScheduleUndo(); LogService.DebugDebounce("txt_Capacity_R", $"Capacity R: {txtCapacityR.Text}", 500); } };
         }
         this.Controls.Add(gbProp);
     }
@@ -180,29 +180,29 @@ public partial class Form1
     #endregion
     #region 散布倍率
 
-    private void CreateSpreadMultiplierGroup(int x, bool isLeft)
+    private void CreateSpreadMultiplierGroup(int iX, bool bIsLeft)
     {
-        var gb = new GroupBox { Text = "Spread Multiplier", Location = new Point(x, 453), Size = new Size(520, 75) };
-        int y = 20;
-        if (isLeft)
+        var gb = new GroupBox { Text = "Spread Multiplier", Location = new Point(iX, 453), Size = new Size(520, 75) };
+        int iY = 20;
+        if (bIsLeft)
         {
-            nudCrouchSpreadL = CreateNullableNumericRow(gb, "Duck", 8, y, 100m); BindNudUndo(nudCrouchSpreadL, null, isLeft);
-            nudProneSpreadL = CreateNullableNumericRow(gb, "Prone", 188, y, 100m); BindNudUndo(nudProneSpreadL, null, isLeft);
-            nudStandMoveSpreadL = CreateNullableNumericRow(gb, "Move", 368, y, 100m); BindNudUndo(nudStandMoveSpreadL, null, isLeft);
-            y += 26;
-            nudSneakMoveSpreadL = CreateNullableNumericRow(gb, "SneakMov", 8, y, 100m); BindNudUndo(nudSneakMoveSpreadL, null, isLeft);
-            nudCrouchMoveSpreadL = CreateNullableNumericRow(gb, "DuckMov", 188, y, 100m); BindNudUndo(nudCrouchMoveSpreadL, null, isLeft);
-            nudJumpSpreadL = CreateNullableNumericRow(gb, "Jump", 368, y, 100m); BindNudUndo(nudJumpSpreadL, null, isLeft);
+            nudCrouchSpreadL = CreateNullableNumericRow(gb, "Duck", 8, iY, 100m); BindNudUndo(nudCrouchSpreadL, null, bIsLeft);
+            nudProneSpreadL = CreateNullableNumericRow(gb, "Prone", 188, iY, 100m); BindNudUndo(nudProneSpreadL, null, bIsLeft);
+            nudStandMoveSpreadL = CreateNullableNumericRow(gb, "Move", 368, iY, 100m); BindNudUndo(nudStandMoveSpreadL, null, bIsLeft);
+            iY += 26;
+            nudSneakMoveSpreadL = CreateNullableNumericRow(gb, "SneakMov", 8, iY, 100m); BindNudUndo(nudSneakMoveSpreadL, null, bIsLeft);
+            nudCrouchMoveSpreadL = CreateNullableNumericRow(gb, "DuckMov", 188, iY, 100m); BindNudUndo(nudCrouchMoveSpreadL, null, bIsLeft);
+            nudJumpSpreadL = CreateNullableNumericRow(gb, "Jump", 368, iY, 100m); BindNudUndo(nudJumpSpreadL, null, bIsLeft);
         }
         else
         {
-            nudCrouchSpreadR = CreateNullableNumericRow(gb, "Duck", 8, y, 100m); BindNudUndo(nudCrouchSpreadR, null, isLeft);
-            nudProneSpreadR = CreateNullableNumericRow(gb, "Prone", 188, y, 100m); BindNudUndo(nudProneSpreadR, null, isLeft);
-            nudStandMoveSpreadR = CreateNullableNumericRow(gb, "Move", 368, y, 100m); BindNudUndo(nudStandMoveSpreadR, null, isLeft);
-            y += 26;
-            nudSneakMoveSpreadR = CreateNullableNumericRow(gb, "SneakMov", 8, y, 100m); BindNudUndo(nudSneakMoveSpreadR, null, isLeft);
-            nudCrouchMoveSpreadR = CreateNullableNumericRow(gb, "DuckMov", 188, y, 100m); BindNudUndo(nudCrouchMoveSpreadR, null, isLeft);
-            nudJumpSpreadR = CreateNullableNumericRow(gb, "Jump", 368, y, 100m); BindNudUndo(nudJumpSpreadR, null, isLeft);
+            nudCrouchSpreadR = CreateNullableNumericRow(gb, "Duck", 8, iY, 100m); BindNudUndo(nudCrouchSpreadR, null, bIsLeft);
+            nudProneSpreadR = CreateNullableNumericRow(gb, "Prone", 188, iY, 100m); BindNudUndo(nudProneSpreadR, null, bIsLeft);
+            nudStandMoveSpreadR = CreateNullableNumericRow(gb, "Move", 368, iY, 100m); BindNudUndo(nudStandMoveSpreadR, null, bIsLeft);
+            iY += 26;
+            nudSneakMoveSpreadR = CreateNullableNumericRow(gb, "SneakMov", 8, iY, 100m); BindNudUndo(nudSneakMoveSpreadR, null, bIsLeft);
+            nudCrouchMoveSpreadR = CreateNullableNumericRow(gb, "DuckMov", 188, iY, 100m); BindNudUndo(nudCrouchMoveSpreadR, null, bIsLeft);
+            nudJumpSpreadR = CreateNullableNumericRow(gb, "Jump", 368, iY, 100m); BindNudUndo(nudJumpSpreadR, null, bIsLeft);
         }
         this.Controls.Add(gb);
     }
@@ -210,50 +210,50 @@ public partial class Form1
     #endregion
     #region 其它属性
 
-    private void CreateOtherStatsGroup(int x, bool isLeft)
+    private void CreateOtherStatsGroup(int iX, bool bIsLeft)
     {
-        var gb = new GroupBox { Text = "Other Stats", Location = new Point(x, 533), Size = new Size(520, 180) };
-        int y = 20;
-        if (isLeft)
+        var gb = new GroupBox { Text = "Other Stats", Location = new Point(iX, 533), Size = new Size(520, 180) };
+        int iY = 20;
+        if (bIsLeft)
         {
-            nudExtraBulletChamberL = CreateNullableIntNumericRow(gb, "Chamber", 8, y, 1000m); BindNudUndo(nudExtraBulletChamberL, null, isLeft);
-            nudBulletsPerShotL = CreateNullableIntNumericRow(gb, "Pellets", 188, y, 100m);
+            nudExtraBulletChamberL = CreateNullableIntNumericRow(gb, "Chamber", 8, iY, 1000m); BindNudUndo(nudExtraBulletChamberL, null, bIsLeft);
+            nudBulletsPerShotL = CreateNullableIntNumericRow(gb, "Pellets", 188, iY, 100m);
             nudBulletsPerShotL.ValueChanged += (s, e) => { ScheduleUndo(); UpdateAllDamage(); LogService.DebugDebounce("nud_Pellets_L", $"Pellets L: {nudBulletsPerShotL.Value}", 500); };
             nudBulletsPerShotL.MouseUp += (_, _) => PushUndoNow();
-            nudIronsightSpeedScaleL = CreateNullableNumericRow(gb, "ADS Spd", 368, y, 10m); BindNudUndo(nudIronsightSpeedScaleL, null, isLeft);
-            y += 26;
-            nudWeightL = CreateNullableNumericRow(gb, "Weight", 8, y, 100m); BindNudUndo(nudWeightL, null, isLeft);
-            nudZMBuyPriceL = CreateNullableIntNumericRow(gb, "ZM Price", 188, y, 1000000m); BindNudUndo(nudZMBuyPriceL, null, isLeft);
-            nudZMWeightL = CreateNullableIntNumericRow(gb, "ZM Block", 368, y, 100m); BindNudUndo(nudZMWeightL, null, isLeft);
-            y += 26;
-            nudMetalPenL = CreateNullableNumericRow(gb, "MetalPen", 8, y, 10000m); BindNudUndo(nudMetalPenL, null, isLeft);
-            nudGlassPenL = CreateNullableNumericRow(gb, "GlassPen", 188, y, 10000m); BindNudUndo(nudGlassPenL, null, isLeft);
-            nudConcretePenL = CreateNullableNumericRow(gb, "ConcrPen", 368, y, 10000m); BindNudUndo(nudConcretePenL, null, isLeft);
-            y += 26;
-            nudWoodPenL = CreateNullableNumericRow(gb, "WoodPen", 8, y, 10000m); BindNudUndo(nudWoodPenL, null, isLeft);
-            nudOtherPenL = CreateNullableNumericRow(gb, "OtherPen", 188, y, 10000m); BindNudUndo(nudOtherPenL, null, isLeft);
-            nudConcreteDmgModL = CreateNullableNumericRow(gb, "ConcrMod", 368, y, 100m); BindNudUndo(nudConcreteDmgModL, null, isLeft);
-            y += 26;
-            nudMetalDmgModL = CreateNullableNumericRow(gb, "MetalMod", 8, y, 100m); BindNudUndo(nudMetalDmgModL, null, isLeft);
-            nudGlassDmgModL = CreateNullableNumericRow(gb, "GlassMod", 188, y, 100m); BindNudUndo(nudGlassDmgModL, null, isLeft);
-            nudWoodDmgModL = CreateNullableNumericRow(gb, "WoodMod", 368, y, 100m); BindNudUndo(nudWoodDmgModL, null, isLeft);
-            y += 26;
-            nudOtherDmgModL = CreateNullableNumericRow(gb, "OtherMod", 8, y, 100m); BindNudUndo(nudOtherDmgModL, null, isLeft);
-            nudSecondaryFireRateL = CreateNullableIntNumericRow(gb, "2ndROF", 188, y, 10000m);
+            nudIronsightSpeedScaleL = CreateNullableNumericRow(gb, "ADS Spd", 368, iY, 10m); BindNudUndo(nudIronsightSpeedScaleL, null, bIsLeft);
+            iY += 26;
+            nudWeightL = CreateNullableNumericRow(gb, "Weight", 8, iY, 100m); BindNudUndo(nudWeightL, null, bIsLeft);
+            nudZMBuyPriceL = CreateNullableIntNumericRow(gb, "ZM Price", 188, iY, 1000000m); BindNudUndo(nudZMBuyPriceL, null, bIsLeft);
+            nudZMWeightL = CreateNullableIntNumericRow(gb, "ZM Block", 368, iY, 100m); BindNudUndo(nudZMWeightL, null, bIsLeft);
+            iY += 26;
+            nudMetalPenL = CreateNullableNumericRow(gb, "MetalPen", 8, iY, 10000m); BindNudUndo(nudMetalPenL, null, bIsLeft);
+            nudGlassPenL = CreateNullableNumericRow(gb, "GlassPen", 188, iY, 10000m); BindNudUndo(nudGlassPenL, null, bIsLeft);
+            nudConcretePenL = CreateNullableNumericRow(gb, "ConcrPen", 368, iY, 10000m); BindNudUndo(nudConcretePenL, null, bIsLeft);
+            iY += 26;
+            nudWoodPenL = CreateNullableNumericRow(gb, "WoodPen", 8, iY, 10000m); BindNudUndo(nudWoodPenL, null, bIsLeft);
+            nudOtherPenL = CreateNullableNumericRow(gb, "OtherPen", 188, iY, 10000m); BindNudUndo(nudOtherPenL, null, bIsLeft);
+            nudConcreteDmgModL = CreateNullableNumericRow(gb, "ConcrMod", 368, iY, 100m); BindNudUndo(nudConcreteDmgModL, null, bIsLeft);
+            iY += 26;
+            nudMetalDmgModL = CreateNullableNumericRow(gb, "MetalMod", 8, iY, 100m); BindNudUndo(nudMetalDmgModL, null, bIsLeft);
+            nudGlassDmgModL = CreateNullableNumericRow(gb, "GlassMod", 188, iY, 100m); BindNudUndo(nudGlassDmgModL, null, bIsLeft);
+            nudWoodDmgModL = CreateNullableNumericRow(gb, "WoodMod", 368, iY, 100m); BindNudUndo(nudWoodDmgModL, null, bIsLeft);
+            iY += 26;
+            nudOtherDmgModL = CreateNullableNumericRow(gb, "OtherMod", 8, iY, 100m); BindNudUndo(nudOtherDmgModL, null, bIsLeft);
+            nudSecondaryFireRateL = CreateNullableIntNumericRow(gb, "2ndROF", 188, iY, 10000m);
             nudSecondaryFireRateL.Minimum = -1m;
             nudSecondaryFireRateL.ValueChanged += (s, e) => { ScheduleUndo(); UpdateAllDamage(); LogService.DebugDebounce("nud_2ndROF_L", $"2ndROF L: {nudSecondaryFireRateL.Value}", 500); };
             nudSecondaryFireRateL.MouseUp += (_, _) => PushUndoNow();
             nudSecondaryFireRateL.Enter += (s, e) => { UpdateAllDamage(); };
             nudSecondaryFireRateL.Leave += (s, e) => { UpdateAllDamage(); };
-            nudIronSightL = CreateNullableIntNumericRow(gb, "IronSight", 368, y, 1m);
+            nudIronSightL = CreateNullableIntNumericRow(gb, "IronSight", 368, iY, 1m);
             nudIronSightL.ValueChanged += (s, e) =>
             {
                 ScheduleUndo();
-                bool noIronsight = nudIronSightL.Value == 0;
-                nudAdsSpreadL.Enabled = !noIronsight;
-                nudAdsRecoilUpL.Enabled = !noIronsight;
-                nudAdsRecoilRightL.Enabled = !noIronsight;
-                nudIronsightSpeedScaleL.Enabled = !noIronsight;
+                bool bNoIronsight = nudIronSightL.Value == 0;
+                nudAdsSpreadL.Enabled = !bNoIronsight;
+                nudAdsRecoilUpL.Enabled = !bNoIronsight;
+                nudAdsRecoilRightL.Enabled = !bNoIronsight;
+                nudIronsightSpeedScaleL.Enabled = !bNoIronsight;
                 pnlSpread.Invalidate();
                 pnlRecoil.Invalidate();
                 LogService.DebugDebounce("nud_IronSight_L", $"IronSight L: {nudIronSightL.Value}", 500);
@@ -262,44 +262,44 @@ public partial class Form1
         }
         else
         {
-            nudExtraBulletChamberR = CreateNullableIntNumericRow(gb, "Chamber", 8, y, 1000m); BindNudUndo(nudExtraBulletChamberR, null, isLeft);
-            nudBulletsPerShotR = CreateNullableIntNumericRow(gb, "Pellets", 188, y, 100m);
+            nudExtraBulletChamberR = CreateNullableIntNumericRow(gb, "Chamber", 8, iY, 1000m); BindNudUndo(nudExtraBulletChamberR, null, bIsLeft);
+            nudBulletsPerShotR = CreateNullableIntNumericRow(gb, "Pellets", 188, iY, 100m);
             nudBulletsPerShotR.ValueChanged += (s, e) => { ScheduleUndo(); UpdateAllDamage(); LogService.DebugDebounce("nud_Pellets_R", $"Pellets R: {nudBulletsPerShotR.Value}", 500); };
             nudBulletsPerShotR.MouseUp += (_, _) => PushUndoNow();
-            nudIronsightSpeedScaleR = CreateNullableNumericRow(gb, "ADS Spd", 368, y, 10m); BindNudUndo(nudIronsightSpeedScaleR, null, isLeft);
-            y += 26;
-            nudWeightR = CreateNullableNumericRow(gb, "Weight", 8, y, 100m); BindNudUndo(nudWeightR, null, isLeft);
-            nudZMBuyPriceR = CreateNullableIntNumericRow(gb, "ZM Price", 188, y, 1000000m); BindNudUndo(nudZMBuyPriceR, null, isLeft);
-            nudZMWeightR = CreateNullableIntNumericRow(gb, "ZM Block", 368, y, 100m); BindNudUndo(nudZMWeightR, null, isLeft);
-            y += 26;
-            nudMetalPenR = CreateNullableNumericRow(gb, "MetalPen", 8, y, 10000m); BindNudUndo(nudMetalPenR, null, isLeft);
-            nudGlassPenR = CreateNullableNumericRow(gb, "GlassPen", 188, y, 10000m); BindNudUndo(nudGlassPenR, null, isLeft);
-            nudConcretePenR = CreateNullableNumericRow(gb, "ConcrPen", 368, y, 10000m); BindNudUndo(nudConcretePenR, null, isLeft);
-            y += 26;
-            nudWoodPenR = CreateNullableNumericRow(gb, "WoodPen", 8, y, 10000m); BindNudUndo(nudWoodPenR, null, isLeft);
-            nudOtherPenR = CreateNullableNumericRow(gb, "OtherPen", 188, y, 10000m); BindNudUndo(nudOtherPenR, null, isLeft);
-            nudConcreteDmgModR = CreateNullableNumericRow(gb, "ConcrMod", 368, y, 100m); BindNudUndo(nudConcreteDmgModR, null, isLeft);
-            y += 26;
-            nudMetalDmgModR = CreateNullableNumericRow(gb, "MetalMod", 8, y, 100m); BindNudUndo(nudMetalDmgModR, null, isLeft);
-            nudGlassDmgModR = CreateNullableNumericRow(gb, "GlassMod", 188, y, 100m); BindNudUndo(nudGlassDmgModR, null, isLeft);
-            nudWoodDmgModR = CreateNullableNumericRow(gb, "WoodMod", 368, y, 100m); BindNudUndo(nudWoodDmgModR, null, isLeft);
-            y += 26;
-            nudOtherDmgModR = CreateNullableNumericRow(gb, "OtherMod", 8, y, 100m); BindNudUndo(nudOtherDmgModR, null, isLeft);
-            nudSecondaryFireRateR = CreateNullableIntNumericRow(gb, "2ndROF", 188, y, 10000m);
+            nudIronsightSpeedScaleR = CreateNullableNumericRow(gb, "ADS Spd", 368, iY, 10m); BindNudUndo(nudIronsightSpeedScaleR, null, bIsLeft);
+            iY += 26;
+            nudWeightR = CreateNullableNumericRow(gb, "Weight", 8, iY, 100m); BindNudUndo(nudWeightR, null, bIsLeft);
+            nudZMBuyPriceR = CreateNullableIntNumericRow(gb, "ZM Price", 188, iY, 1000000m); BindNudUndo(nudZMBuyPriceR, null, bIsLeft);
+            nudZMWeightR = CreateNullableIntNumericRow(gb, "ZM Block", 368, iY, 100m); BindNudUndo(nudZMWeightR, null, bIsLeft);
+            iY += 26;
+            nudMetalPenR = CreateNullableNumericRow(gb, "MetalPen", 8, iY, 10000m); BindNudUndo(nudMetalPenR, null, bIsLeft);
+            nudGlassPenR = CreateNullableNumericRow(gb, "GlassPen", 188, iY, 10000m); BindNudUndo(nudGlassPenR, null, bIsLeft);
+            nudConcretePenR = CreateNullableNumericRow(gb, "ConcrPen", 368, iY, 10000m); BindNudUndo(nudConcretePenR, null, bIsLeft);
+            iY += 26;
+            nudWoodPenR = CreateNullableNumericRow(gb, "WoodPen", 8, iY, 10000m); BindNudUndo(nudWoodPenR, null, bIsLeft);
+            nudOtherPenR = CreateNullableNumericRow(gb, "OtherPen", 188, iY, 10000m); BindNudUndo(nudOtherPenR, null, bIsLeft);
+            nudConcreteDmgModR = CreateNullableNumericRow(gb, "ConcrMod", 368, iY, 100m); BindNudUndo(nudConcreteDmgModR, null, bIsLeft);
+            iY += 26;
+            nudMetalDmgModR = CreateNullableNumericRow(gb, "MetalMod", 8, iY, 100m); BindNudUndo(nudMetalDmgModR, null, bIsLeft);
+            nudGlassDmgModR = CreateNullableNumericRow(gb, "GlassMod", 188, iY, 100m); BindNudUndo(nudGlassDmgModR, null, bIsLeft);
+            nudWoodDmgModR = CreateNullableNumericRow(gb, "WoodMod", 368, iY, 100m); BindNudUndo(nudWoodDmgModR, null, bIsLeft);
+            iY += 26;
+            nudOtherDmgModR = CreateNullableNumericRow(gb, "OtherMod", 8, iY, 100m); BindNudUndo(nudOtherDmgModR, null, bIsLeft);
+            nudSecondaryFireRateR = CreateNullableIntNumericRow(gb, "2ndROF", 188, iY, 10000m);
             nudSecondaryFireRateR.Minimum = -1m;
             nudSecondaryFireRateR.ValueChanged += (s, e) => { ScheduleUndo(); UpdateAllDamage(); LogService.DebugDebounce("nud_2ndROF_R", $"2ndROF R: {nudSecondaryFireRateR.Value}", 500); };
             nudSecondaryFireRateR.MouseUp += (_, _) => PushUndoNow();
             nudSecondaryFireRateR.Enter += (s, e) => { UpdateAllDamage(); };
             nudSecondaryFireRateR.Leave += (s, e) => { UpdateAllDamage(); };
-            nudIronSightR = CreateNullableIntNumericRow(gb, "IronSight", 368, y, 1m);
+            nudIronSightR = CreateNullableIntNumericRow(gb, "IronSight", 368, iY, 1m);
             nudIronSightR.ValueChanged += (s, e) =>
             {
                 ScheduleUndo();
-                bool noIronsight = nudIronSightR.Value == 0;
-                nudAdsSpreadR.Enabled = !noIronsight;
-                nudAdsRecoilUpR.Enabled = !noIronsight;
-                nudAdsRecoilRightR.Enabled = !noIronsight;
-                nudIronsightSpeedScaleR.Enabled = !noIronsight;
+                bool bNoIronsight = nudIronSightR.Value == 0;
+                nudAdsSpreadR.Enabled = !bNoIronsight;
+                nudAdsRecoilUpR.Enabled = !bNoIronsight;
+                nudAdsRecoilRightR.Enabled = !bNoIronsight;
+                nudIronsightSpeedScaleR.Enabled = !bNoIronsight;
                 pnlSpread.Invalidate();
                 pnlRecoil.Invalidate();
                 LogService.DebugDebounce("nud_IronSight_R", $"IronSight R: {nudIronSightR.Value}", 500);
@@ -312,72 +312,72 @@ public partial class Form1
     #endregion
     #region 控件工厂
 
-    private (TrackBar, NumericUpDown, Label) CreateSliderRow(Control parent, string text, ref int y, bool isLeft)
+    private (TrackBar, NumericUpDown, Label) CreateSliderRow(Control ctrlParent, string sText, ref int iY, bool bIsLeft)
     {
-        parent.Controls.Add(new Label { Text = text, Location = new Point(8, y + 8), Size = new Size(35, 18), TextAlign = ContentAlignment.MiddleLeft });
-        var tb = new TrackBar { Location = new Point(45, y + 2), Size = new Size(270, 34), Minimum = (int)(SliderMin / SliderStep), Maximum = (int)(SliderMax / SliderStep), TickFrequency = (int)(0.5 / SliderStep), Value = (int)(1.0 / SliderStep) };
-        var nud = new NumericUpDown { Location = new Point(320, y + 7), Size = new Size(55, 22), DecimalPlaces = 2, Increment = 0.01m, Minimum = (decimal)SliderMin, Maximum = 7.5m, Value = 1.00m };
-        var lbl = new Label { Text = "= 0.0 | ∞shots | ∞ms", Location = new Point(380, y + 9), AutoSize = true, TextAlign = ContentAlignment.MiddleLeft, ForeColor = Color.DarkRed, Font = new Font("Arial", 8, FontStyle.Bold) };
-        parent.Controls.Add(tb);
-        parent.Controls.Add(nud);
-        parent.Controls.Add(lbl);
+        ctrlParent.Controls.Add(new Label { Text = sText, Location = new Point(8, iY + 8), Size = new Size(35, 18), TextAlign = ContentAlignment.MiddleLeft });
+        var tb = new TrackBar { Location = new Point(45, iY + 2), Size = new Size(270, 34), Minimum = (int)(dSliderMin / dSliderStep), Maximum = (int)(dSliderMax / dSliderStep), TickFrequency = (int)(0.5 / dSliderStep), Value = (int)(1.0 / dSliderStep) };
+        var nud = new NumericUpDown { Location = new Point(320, iY + 7), Size = new Size(55, 22), DecimalPlaces = 2, Increment = 0.01m, Minimum = (decimal)dSliderMin, Maximum = 7.5m, Value = 1.00m };
+        var lbl = new Label { Text = "= 0.0 | ∞shots | ∞ms", Location = new Point(380, iY + 9), AutoSize = true, TextAlign = ContentAlignment.MiddleLeft, ForeColor = Color.DarkRed, Font = new Font("Arial", 8, FontStyle.Bold) };
+        ctrlParent.Controls.Add(tb);
+        ctrlParent.Controls.Add(nud);
+        ctrlParent.Controls.Add(lbl);
 
         tb.Tag = nud;
         nud.Tag = tb;
-        string sideTag = isLeft ? "L" : "R";
-        string keyPrefix = $"slider_{text}_{sideTag}";
-        if (isLeft)
+        string sSideTag = bIsLeft ? "L" : "R";
+        string sKeyPrefix = $"slider_{sText}_{sSideTag}";
+        if (bIsLeft)
         {
-            tb.ValueChanged += (s, e) => { SliderChangedL(s, e); ScheduleUndo(); LogService.DebugDebounce($"{keyPrefix}_tb", $"Slider {text} L: {tb.Value}", 300); };
+            tb.ValueChanged += (s, e) => { SliderChangedL(s, e); ScheduleUndo(); LogService.DebugDebounce($"{sKeyPrefix}_tb", $"Slider {sText} L: {tb.Value}", 300); };
             tb.MouseUp += (_, _) => PushUndoNow();
-            nud.ValueChanged += (s, e) => { NumericChangedL(s, e); ScheduleUndo(); LogService.DebugDebounce($"{keyPrefix}_nud", $"NUD {text} L: {nud.Value}", 300); };
+            nud.ValueChanged += (s, e) => { NumericChangedL(s, e); ScheduleUndo(); LogService.DebugDebounce($"{sKeyPrefix}_nud", $"NUD {sText} L: {nud.Value}", 300); };
             nud.MouseUp += (_, _) => PushUndoNow();
         }
         else
         {
-            tb.ValueChanged += (s, e) => { SliderChangedR(s, e); ScheduleUndo(); LogService.DebugDebounce($"{keyPrefix}_tb", $"Slider {text} R: {tb.Value}", 300); };
+            tb.ValueChanged += (s, e) => { SliderChangedR(s, e); ScheduleUndo(); LogService.DebugDebounce($"{sKeyPrefix}_tb", $"Slider {sText} R: {tb.Value}", 300); };
             tb.MouseUp += (_, _) => PushUndoNow();
-            nud.ValueChanged += (s, e) => { NumericChangedR(s, e); ScheduleUndo(); LogService.DebugDebounce($"{keyPrefix}_nud", $"NUD {text} R: {nud.Value}", 300); };
+            nud.ValueChanged += (s, e) => { NumericChangedR(s, e); ScheduleUndo(); LogService.DebugDebounce($"{sKeyPrefix}_nud", $"NUD {sText} R: {nud.Value}", 300); };
             nud.MouseUp += (_, _) => PushUndoNow();
         }
 
-        y += 37;
+        iY += 37;
         return (tb, nud, lbl);
     }
 
     //给nud绑定ScheduleUndo和PushUndoNow统一处理
-    private void BindNudUndo(NumericUpDown nud, EventHandler? extraHandler, bool isLeft)
+    private void BindNudUndo(NumericUpDown nud, EventHandler? ehExtra, bool bIsLeft)
     {
         nud.ValueChanged += (s, e) =>
         {
             ScheduleUndo();
-            LogService.DebugDebounce($"nud_{nud.Name ?? "?"}", $"NUD changed: {nud.Name} = {nud.Value} ({(isLeft ? "L" : "R")})", 500);
-            extraHandler?.Invoke(s, e);
+            LogService.DebugDebounce($"nud_{nud.Name ?? "?"}", $"NUD changed: {nud.Name} = {nud.Value} ({(bIsLeft ? "L" : "R")})", 500);
+            ehExtra?.Invoke(s, e);
         };
         nud.MouseUp += (_, _) => PushUndoNow();
     }
 
-    private NumericUpDown CreateNullableNumericRow(Control parent, string text, int x, int y, decimal max)
+    private NumericUpDown CreateNullableNumericRow(Control ctrlParent, string sText, int iX, int iY, decimal decMax)
     {
-        parent.Controls.Add(new Label { Text = text, Location = new Point(x, y + 3), Size = new Size(70, 18), TextAlign = ContentAlignment.MiddleLeft });
-        var nud = new NumericUpDown { Location = new Point(x + 72, y + 1), Size = new Size(65, 22), DecimalPlaces = 2, Increment = 0.01m, Minimum = 0m, Maximum = max };
-        parent.Controls.Add(nud);
+        ctrlParent.Controls.Add(new Label { Text = sText, Location = new Point(iX, iY + 3), Size = new Size(70, 18), TextAlign = ContentAlignment.MiddleLeft });
+        var nud = new NumericUpDown { Location = new Point(iX + 72, iY + 1), Size = new Size(65, 22), DecimalPlaces = 2, Increment = 0.01m, Minimum = 0m, Maximum = decMax };
+        ctrlParent.Controls.Add(nud);
         return nud;
     }
 
-    private NumericUpDown CreateNullableIntNumericRow(Control parent, string text, int x, int y, decimal max)
+    private NumericUpDown CreateNullableIntNumericRow(Control ctrlParent, string sText, int iX, int iY, decimal decMax)
     {
-        parent.Controls.Add(new Label { Text = text, Location = new Point(x, y + 3), Size = new Size(70, 18), TextAlign = ContentAlignment.MiddleLeft });
-        var nud = new NumericUpDown { Location = new Point(x + 72, y + 1), Size = new Size(65, 22), DecimalPlaces = 0, Increment = 1, Minimum = 0m, Maximum = max };
-        parent.Controls.Add(nud);
+        ctrlParent.Controls.Add(new Label { Text = sText, Location = new Point(iX, iY + 3), Size = new Size(70, 18), TextAlign = ContentAlignment.MiddleLeft });
+        var nud = new NumericUpDown { Location = new Point(iX + 72, iY + 1), Size = new Size(65, 22), DecimalPlaces = 0, Increment = 1, Minimum = 0m, Maximum = decMax };
+        ctrlParent.Controls.Add(nud);
         return nud;
     }
 
-    private TextBox CreateTextBoxRow(Control parent, string text, int x, int y)
+    private TextBox CreateTextBoxRow(Control ctrlParent, string sText, int iX, int iY)
     {
-        parent.Controls.Add(new Label { Text = text, Location = new Point(x, y + 3), Size = new Size(70, 18), TextAlign = ContentAlignment.MiddleLeft });
-        var tb = new TextBox { Location = new Point(x + 72, y + 1), Size = new Size(65, 22) };
-        parent.Controls.Add(tb);
+        ctrlParent.Controls.Add(new Label { Text = sText, Location = new Point(iX, iY + 3), Size = new Size(70, 18), TextAlign = ContentAlignment.MiddleLeft });
+        var tb = new TextBox { Location = new Point(iX + 72, iY + 1), Size = new Size(65, 22) };
+        ctrlParent.Controls.Add(tb);
         return tb;
     }
     #endregion

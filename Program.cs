@@ -20,21 +20,21 @@ internal static class Program
     [DllImport("kernel32.dll")]
     static extern bool FreeConsole();
 
-    const int OK = 0;
-    const int ERR_USAGE = 1;
-    const int ERR_LOGIN = 2;
-    const int ERR_PAGE_NOT_FOUND = 3;
-    const int ERR_UNKNOWN_CMD = 4;
-    const int ERR_EXCEPTION = 5;
+    const int iOk = 0;
+    const int iErrUsage = 1;
+    const int iErrLogin = 2;
+    const int iErrPageNotFound = 3;
+    const int iErrUnknownCmd = 4;
+    const int iErrException = 5;
 
     [STAThread]
-    static int Main(string[] args)
+    static int Main(string[] rgArgs)
     {
-        string currentDir = AppContext.BaseDirectory;
-        string mutexName = @"WeaponDamageCalc_" + Convert.ToHexString(MD5.HashData(
-            Encoding.UTF8.GetBytes(currentDir.ToLowerInvariant())));
-        using var mutex = new Mutex(true, mutexName, out bool createdNew);
-        if (!createdNew)
+        string sCurrentDir = AppContext.BaseDirectory;
+        string sMutexName = @"WeaponDamageCalc_" + Convert.ToHexString(MD5.HashData(
+            Encoding.UTF8.GetBytes(sCurrentDir.ToLowerInvariant())));
+        using var hMutex = new Mutex(true, sMutexName, out bool bCreatedNew);
+        if (!bCreatedNew)
         {
             LogService.Info("Mutex locked - another instance is already running in this folder");
             MessageBox.Show("Only one instance of the same folder can be running at once time.",
@@ -43,34 +43,34 @@ internal static class Program
         }
 
         // 分离 GUI 参数和 CLI 位置参数
-        var cliArgs = new List<string>();
-        for (int i = 0; i < args.Length; i++)
+        var rgCliArgs = new List<string>();
+        for (int i = 0; i < rgArgs.Length; i++)
         {
-            if (args[i].Equals("--darkmode", StringComparison.OrdinalIgnoreCase))
-                Form1.ForceDarkMode = true;
-            else if (args[i].Equals("--lightmode", StringComparison.OrdinalIgnoreCase))
-                Form1.ForceLightMode = true;
-            else if (args[i].Equals("--log-level", StringComparison.OrdinalIgnoreCase))
+            if (rgArgs[i].Equals("--darkmode", StringComparison.OrdinalIgnoreCase))
+                Form1.bForceDarkMode = true;
+            else if (rgArgs[i].Equals("--lightmode", StringComparison.OrdinalIgnoreCase))
+                Form1.bForceLightMode = true;
+            else if (rgArgs[i].Equals("--log-level", StringComparison.OrdinalIgnoreCase))
             { i++; continue; }
-            else if (args[i].Equals("--verbose", StringComparison.OrdinalIgnoreCase))
+            else if (rgArgs[i].Equals("--verbose", StringComparison.OrdinalIgnoreCase))
                 continue;
             else
-                cliArgs.Add(args[i]);
+                rgCliArgs.Add(rgArgs[i]);
         }
 
-        var cliArgsArr = cliArgs.ToArray();
-        var logLevelArg = Opt(args, "--log-level");
+        var rgCliArgsArr = rgCliArgs.ToArray();
+        var sLogLevelArg = Opt(rgArgs, "--log-level");
 
-        if (cliArgsArr.Length > 0)
+        if (rgCliArgsArr.Length > 0)
         {
-            return RunCliMode(cliArgsArr, logLevelArg != null ? ParseLogLevel(logLevelArg) : LogService.Level.Warn);
+            return RunCliMode(rgCliArgsArr, sLogLevelArg != null ? ParseLogLevel(sLogLevelArg) : LogService.Level.Warn);
         }
 
-        var guiLogLvl = Opt(args, "--log-level");
-        if (guiLogLvl != null)
+        var sGuiLogLvl = Opt(rgArgs, "--log-level");
+        if (sGuiLogLvl != null)
         {
             LogService.Enabled = true;
-            LogService.MinLevel = guiLogLvl.ToLowerInvariant() switch
+            LogService.MinLevel = sGuiLogLvl.ToLowerInvariant() switch
             {
                 "debug" => LogService.Level.Debug,
                 "info"  => LogService.Level.Info,
@@ -86,7 +86,7 @@ internal static class Program
         return 0;
     }
 
-    static LogService.Level ParseLogLevel(string level) => level.ToLowerInvariant() switch
+    static LogService.Level ParseLogLevel(string sLevel) => sLevel.ToLowerInvariant() switch
     {
         "debug" => LogService.Level.Debug,
         "info"  => LogService.Level.Info,
@@ -95,35 +95,35 @@ internal static class Program
         _       => LogService.Level.Warn
     };
 
-    static int RunCliMode(string[] args, LogService.Level logLevel)
+    static int RunCliMode(string[] rgArgs, LogService.Level lvlLog)
     {
         LogService.Enabled = true;
-        LogService.MinLevel = logLevel;
+        LogService.MinLevel = lvlLog;
         AllocConsole();
-        LogService.Info($"CLI started: {string.Join(" ", args)} (log level: {logLevel})");
-        int code = Task.Run(() => RunCli(args)).GetAwaiter().GetResult();
+        LogService.Info($"CLI started: {string.Join(" ", rgArgs)} (log level: {lvlLog})");
+        int iCode = Task.Run(() => RunCli(rgArgs)).GetAwaiter().GetResult();
         Console.Out.Flush();
-        if (!Console.IsOutputRedirected && (args[0].Equals("--help", StringComparison.OrdinalIgnoreCase)
-                                        || args[0].Equals("-h", StringComparison.OrdinalIgnoreCase)
-                                        || args[0].Equals("/?", StringComparison.OrdinalIgnoreCase)
-                                        || args[0].Equals("--fuckyou", StringComparison.OrdinalIgnoreCase)))
+        if (!Console.IsOutputRedirected && (rgArgs[0].Equals("--help", StringComparison.OrdinalIgnoreCase)
+                                        || rgArgs[0].Equals("-h", StringComparison.OrdinalIgnoreCase)
+                                        || rgArgs[0].Equals("/?", StringComparison.OrdinalIgnoreCase)
+                                        || rgArgs[0].Equals("--fuckyou", StringComparison.OrdinalIgnoreCase)))
         {
             Console.WriteLine("\nPress any key to exit...");
             Console.ReadKey();
         }
         FreeConsole();
-        return code;
+        return iCode;
     }
 
     static void ShowHelp()
     {
-        string exeName = Path.GetFileNameWithoutExtension(Environment.ProcessPath ?? "WeaponDamageCalc.exe");
+        string sExeName = Path.GetFileNameWithoutExtension(Environment.ProcessPath ?? "WeaponDamageCalc.exe");
         Console.WriteLine($@"
 Keyvalues Mangler™ 5000 — MCV Weapon Stats Tool
 
 Usage:
-  {exeName}.exe [command] [options]
-  {exeName}.exe [--darkmode|--lightmode] [--log-level <level>]
+  {sExeName}.exe [command] [options]
+  {sExeName}.exe [--darkmode|--lightmode] [--log-level <level>]
 
   Without arguments, launches the GUI
   --darkmode   Force dark color scheme
@@ -195,352 +195,352 @@ Return codes:
   3  Page not found   4  Unknown command   5  Internal error
 
 Examples:
-  {exeName}.exe --log-level debug
-  {exeName}.exe --csv-to-scripts weapons.csv
+  {sExeName}.exe --log-level debug
+  {sExeName}.exe --csv-to-scripts weapons.csv
       ""X:\...\vietnam\scripts""
-  {exeName}.exe --wiki-dryrun ""Weapons of Vietnam""
+  {sExeName}.exe --wiki-dryrun ""Weapons of Vietnam""
       ""X:\...\vietnam\scripts"" --verbose
-  {exeName}.exe --wiki-upload ""AK-47""
+  {sExeName}.exe --wiki-upload ""AK-47""
       ""X:\...\vietnam\scripts"" --user user --pw pass
       --single
-  {exeName}.exe --batch-dryrun ""Weapons of Vietnam""
+  {sExeName}.exe --batch-dryrun ""Weapons of Vietnam""
       ""X:\...\vietnam\scripts"" --skip-cached
-  {exeName}.exe --generate ""X:\...\vietnam\scripts""
+  {sExeName}.exe --generate ""X:\...\vietnam\scripts""
       ""X:\output"" --check-wiki
-  {exeName}.exe --convert-templates
+  {sExeName}.exe --convert-templates
       ""X:\...\vietnam\scripts"" --simple
-  {exeName}.exe --scripts-to-csv
+  {sExeName}.exe --scripts-to-csv
       ""X:\...\vietnam\scripts""
 ");
     }
 
-    static bool HasFlag(string[] args, string flag) =>
-        Array.Exists(args, a => a.Equals(flag, StringComparison.OrdinalIgnoreCase));
+    static bool HasFlag(string[] rgArgs, string sFlag) =>
+        Array.Exists(rgArgs, sA => sA.Equals(sFlag, StringComparison.OrdinalIgnoreCase));
 
     //按索引取位置参数 越界返回null
-    static string? Arg(string[] args, int i) => i < args.Length ? args[i] : null;
+    static string? Arg(string[] rgArgs, int i) => i < rgArgs.Length ? rgArgs[i] : null;
 
     //取命名参数的值 如--user xxx返回xxx
-    static string? Opt(string[] args, string name) =>
-        Array.FindIndex(args, a => a.Equals(name, StringComparison.OrdinalIgnoreCase)) is int idx && idx >= 0 ? args[idx + 1] : null;
+    static string? Opt(string[] rgArgs, string sName) =>
+        Array.FindIndex(rgArgs, sA => sA.Equals(sName, StringComparison.OrdinalIgnoreCase)) is int iIdx && iIdx >= 0 ? rgArgs[iIdx + 1] : null;
 
-    static void Verbose(string msg, bool verbose)
+    static void Verbose(string sMsg, bool bVerbose)
     {
-        if (verbose) Console.WriteLine($"  [{DateTime.Now:HH:mm:ss}] {msg}");
+        if (bVerbose) Console.WriteLine($"  [{DateTime.Now:HH:mm:ss}] {sMsg}");
     }
 
-    static async Task<int> RunCli(string[] args)
+    static async Task<int> RunCli(string[] rgArgs)
     {
-        var cmd = args[0].ToLowerInvariant();
-        bool verbose = HasFlag(args, "--verbose");
-        LogService.Info($"CLI command: {cmd}, verbose={verbose}");
+        var sCmd = rgArgs[0].ToLowerInvariant();
+        bool bVerbose = HasFlag(rgArgs, "--verbose");
+        LogService.Info($"CLI command: {sCmd}, verbose={bVerbose}");
 
         try
         {
-            switch (cmd)
+            switch (sCmd)
             {
                 case "--fuckyou":
                     Console.WriteLine("FUCK YOU TOO");
-                    return OK;
+                    return iOk;
                 case "--help":
                 case "-h":
                 case "/?":
                     ShowHelp();
-                    return OK;
+                    return iOk;
 
                 case "--csv-to-scripts":
                 {
-                    var csv = Arg(args, 1) ?? "weapons.csv";
-                    var dir = Arg(args, 2) ?? ".";
-                    Console.WriteLine($"CSV -> Scripts: {csv} -> {dir}");
-                    var log = WeaponScriptService.ExportCsvToScripts(csv, dir);
-                    Console.WriteLine(log);
-                    return OK;
+                    var sCsv = Arg(rgArgs, 1) ?? "weapons.csv";
+                    var sDir = Arg(rgArgs, 2) ?? ".";
+                    Console.WriteLine($"CSV -> Scripts: {sCsv} -> {sDir}");
+                    var sLog = WeaponScriptService.ExportCsvToScripts(sCsv, sDir);
+                    Console.WriteLine(sLog);
+                    return iOk;
                 }
                 case "--scripts-to-csv":
                 {
-                    var dir = Arg(args, 1) ?? ".";
-                    var csv = Arg(args, 2) ?? "weapons.csv";
-                    Console.WriteLine($"Scripts -> CSV: {dir} -> {csv}");
-                    var log = WeaponScriptService.ImportScriptsToCsv(dir, csv);
-                    Console.WriteLine(log);
-                    return OK;
+                    var sDir = Arg(rgArgs, 1) ?? ".";
+                    var sCsv = Arg(rgArgs, 2) ?? "weapons.csv";
+                    Console.WriteLine($"Scripts -> CSV: {sDir} -> {sCsv}");
+                    var sLog = WeaponScriptService.ImportScriptsToCsv(sDir, sCsv);
+                    Console.WriteLine(sLog);
+                    return iOk;
                 }
                 case "--convert-templates":
                 {
-                    var dir = Arg(args, 1) ?? ".";
-                    var simple = HasFlag(args, "--simple");
-                    Console.WriteLine($"Convert templates: {dir} (simple={simple})");
-                    var log = ScriptToTemplateConverter.ConvertAll(dir, simple);
-                    Console.WriteLine(log);
-                    return OK;
+                    var sDir = Arg(rgArgs, 1) ?? ".";
+                    var bSimple = HasFlag(rgArgs, "--simple");
+                    Console.WriteLine($"Convert templates: {sDir} (simple={bSimple})");
+                    var sLog = ScriptToTemplateConverter.ConvertAll(sDir, bSimple);
+                    Console.WriteLine(sLog);
+                    return iOk;
                 }
                 case "--wiki-dryrun":
                 {
-                    var page = Arg(args, 1);
-                    var scripts = Arg(args, 2) ?? ".";
-                    bool single = HasFlag(args, "--single");
-                    if (page == null) { Console.WriteLine("Usage: --wiki-dryrun <page> <scripts_dir> [--single] [--verbose]"); return ERR_USAGE; }
-                    Verbose($"Fetching: {page}", verbose);
-                    var source = await WikiApiService.GetPageSourceAsync(page);
-                    if (source == null)
+                    var sPage = Arg(rgArgs, 1);
+                    var sScripts = Arg(rgArgs, 2) ?? ".";
+                    bool bSingle = HasFlag(rgArgs, "--single");
+                    if (sPage == null) { Console.WriteLine("Usage: --wiki-dryrun <page> <scripts_dir> [--single] [--verbose]"); return iErrUsage; }
+                    Verbose($"Fetching: {sPage}", bVerbose);
+                    var sSource = await WikiApiService.GetPageSourceAsync(sPage);
+                    if (sSource == null)
                     {
                         //反查脚本名
-                        var idx = await WikiService.BuildScriptIndexAsync();
-                        string? found = WikiService.ReverseLookup(page, idx);
-                        if (found != null) { page = found; source = await WikiApiService.GetPageSourceAsync(found); }
+                        var mpIdx = await WikiService.BuildScriptIndexAsync();
+                        string? sFound = WikiService.ReverseLookup(sPage, mpIdx);
+                        if (sFound != null) { sPage = sFound; sSource = await WikiApiService.GetPageSourceAsync(sFound); }
                     }
-                    if (source == null) { Console.WriteLine($"Page not found: {page}"); return ERR_PAGE_NOT_FOUND; }
-                    Verbose("Converting...", verbose);
-                    var result = single ? WikiTableConverter.Convert(source, scripts) : WikiService.ConvertWikiSource(source, scripts, null);
-                    string fn = page.Replace(" ", "_").Replace("/", "_") + ".txt";
-                    WikiService.SaveToWikiDir(fn, result);
-                    Console.WriteLine($"Saved: {WikiService.GetWikiDir()}\\{fn}  ({result.Split('\n').Length} lines)");
-                    return OK;
+                    if (sSource == null) { Console.WriteLine($"Page not found: {sPage}"); return iErrPageNotFound; }
+                    Verbose("Converting...", bVerbose);
+                    var sResult = bSingle ? WikiTableConverter.Convert(sSource, sScripts) : WikiService.ConvertWikiSource(sSource, sScripts, null);
+                    string sFn = sPage.Replace(" ", "_").Replace("/", "_") + ".txt";
+                    WikiService.SaveToWikiDir(sFn, sResult);
+                    Console.WriteLine($"Saved: {WikiService.GetWikiDir()}\\{sFn}  ({sResult.Split('\n').Length} lines)");
+                    return iOk;
                 }
                 case "--wiki-upload":
                 {
-                    var page = Arg(args, 1);
-                    var scripts = Arg(args, 2) ?? ".";
-                    var user = Opt(args, "--user");
-                    var pw = Opt(args, "--pw");
-                    bool single = HasFlag(args, "--single");
-                    if (page == null || user == null || pw == null) { Console.WriteLine("Usage: --wiki-upload <page> <scripts_dir> --user <u> --pw <p> [--single] [--verbose]"); return ERR_USAGE; }
-                    Verbose("Logging in...", verbose);
-                    if (!await WikiService.LoginAsync(user, pw)) { Console.WriteLine("Login failed"); return ERR_LOGIN; }
-                    Verbose($"Fetching: {page}", verbose);
-                    var source = await WikiApiService.GetPageSourceAsync(page);
-                    if (source == null)
+                    var sPage = Arg(rgArgs, 1);
+                    var sScripts = Arg(rgArgs, 2) ?? ".";
+                    var sUser = Opt(rgArgs, "--user");
+                    var sPw = Opt(rgArgs, "--pw");
+                    bool bSingle = HasFlag(rgArgs, "--single");
+                    if (sPage == null || sUser == null || sPw == null) { Console.WriteLine("Usage: --wiki-upload <page> <scripts_dir> --user <u> --pw <p> [--single] [--verbose]"); return iErrUsage; }
+                    Verbose("Logging in...", bVerbose);
+                    if (!await WikiService.LoginAsync(sUser, sPw)) { Console.WriteLine("Login failed"); return iErrLogin; }
+                    Verbose($"Fetching: {sPage}", bVerbose);
+                    var sSource = await WikiApiService.GetPageSourceAsync(sPage);
+                    if (sSource == null)
                     {
                         //反查
-                        var idx = await WikiService.BuildScriptIndexAsync();
-                        string? found = WikiService.ReverseLookup(page, idx);
-                        if (found != null) { page = found; source = await WikiApiService.GetPageSourceAsync(found); }
+                        var mpIdx = await WikiService.BuildScriptIndexAsync();
+                        string? sFound = WikiService.ReverseLookup(sPage, mpIdx);
+                        if (sFound != null) { sPage = sFound; sSource = await WikiApiService.GetPageSourceAsync(sFound); }
                     }
-                    if (source == null) { Console.WriteLine($"Page not found: {page}"); return ERR_PAGE_NOT_FOUND; }
-                    Verbose("Converting...", verbose);
-                    var result = single ? WikiTableConverter.Convert(source, scripts) : WikiService.ConvertWikiSource(source, scripts, null);
-                    if (await WikiApiService.IsSameContentAsync(page, result)) { Console.WriteLine("Unchanged, skip"); return OK; }
-                    Verbose("Uploading...", verbose);
-                    bool ok = await WikiApiService.SavePageAsync(page, result, "Update weapon data from scripts");
-                    Console.WriteLine(ok ? "Saved!" : "Save failed");
-                    return ok ? OK : ERR_EXCEPTION;
+                    if (sSource == null) { Console.WriteLine($"Page not found: {sPage}"); return iErrPageNotFound; }
+                    Verbose("Converting...", bVerbose);
+                    var sResult = bSingle ? WikiTableConverter.Convert(sSource, sScripts) : WikiService.ConvertWikiSource(sSource, sScripts, null);
+                    if (await WikiApiService.IsSameContentAsync(sPage, sResult)) { Console.WriteLine("Unchanged, skip"); return iOk; }
+                    Verbose("Uploading...", bVerbose);
+                    bool bOk = await WikiApiService.SavePageAsync(sPage, sResult, "Update weapon data from scripts");
+                    Console.WriteLine(bOk ? "Saved!" : "Save failed");
+                    return bOk ? iOk : iErrException;
                 }
                 case "--batch-dryrun":
                 {
-                    var page = Arg(args, 1);
-                    var scripts = Arg(args, 2) ?? ".";
-                    bool skipCached = HasFlag(args, "--skip-cached");
-                    if (page == null) { Console.WriteLine("Usage: --batch-dryrun <summary_page> <scripts_dir> [--verbose] [--skip-cached]"); return ERR_USAGE; }
-                    return await RunBatchDryrun(page, scripts, skipCached, verbose);
+                    var sPage = Arg(rgArgs, 1);
+                    var sScripts = Arg(rgArgs, 2) ?? ".";
+                    bool bSkipCached = HasFlag(rgArgs, "--skip-cached");
+                    if (sPage == null) { Console.WriteLine("Usage: --batch-dryrun <summary_page> <scripts_dir> [--verbose] [--skip-cached]"); return iErrUsage; }
+                    return await RunBatchDryrun(sPage, sScripts, bSkipCached, bVerbose);
                 }
                 case "--batch-upload":
                 {
-                    var page = Arg(args, 1);
-                    var scripts = Arg(args, 2) ?? ".";
-                    var user = Opt(args, "--user");
-                    var pw = Opt(args, "--pw");
-                    if (page == null || user == null || pw == null) { Console.WriteLine("Usage: --batch-upload <summary_page> <scripts_dir> --user <u> --pw <p> [--verbose]"); return ERR_USAGE; }
-                    Verbose("Logging in...", verbose);
-                    if (!await WikiService.LoginAsync(user, pw)) { Console.WriteLine("Login failed"); return ERR_LOGIN; }
-                    return await RunBatchUpload(page, scripts, verbose);
+                    var sPage = Arg(rgArgs, 1);
+                    var sScripts = Arg(rgArgs, 2) ?? ".";
+                    var sUser = Opt(rgArgs, "--user");
+                    var sPw = Opt(rgArgs, "--pw");
+                    if (sPage == null || sUser == null || sPw == null) { Console.WriteLine("Usage: --batch-upload <summary_page> <scripts_dir> --user <u> --pw <p> [--verbose]"); return iErrUsage; }
+                    Verbose("Logging in...", bVerbose);
+                    if (!await WikiService.LoginAsync(sUser, sPw)) { Console.WriteLine("Login failed"); return iErrLogin; }
+                    return await RunBatchUpload(sPage, sScripts, bVerbose);
                 }
                 case "--generate":
                 {
-                    var scripts = Arg(args, 1) ?? ".";
-                    var output = Arg(args, 2) ?? "generated";
-                    bool includeExisting = HasFlag(args, "--include-existing");
-                    bool checkWiki = HasFlag(args, "--check-wiki");
-                    return await RunGenerate(scripts, output, includeExisting, checkWiki, verbose);
+                    var sScripts = Arg(rgArgs, 1) ?? ".";
+                    var sOutput = Arg(rgArgs, 2) ?? "generated";
+                    bool bIncludeExisting = HasFlag(rgArgs, "--include-existing");
+                    bool bCheckWiki = HasFlag(rgArgs, "--check-wiki");
+                    return await RunGenerate(sScripts, sOutput, bIncludeExisting, bCheckWiki, bVerbose);
                 }
                 default:
-                    Console.WriteLine($"Unknown command: {cmd}");
+                    Console.WriteLine($"Unknown command: {sCmd}");
                     Console.WriteLine("Use --help for usage info.");
-                    return ERR_UNKNOWN_CMD;
+                    return iErrUnknownCmd;
             }
         }
         catch (Exception ex)
         {
-            LogService.Fatal(ex, $"RunCli: {cmd}");
+            LogService.Fatal(ex, $"RunCli: {sCmd}");
             Console.Error.WriteLine($"Error: {ex.Message}");
-            return ERR_EXCEPTION;
+            return iErrException;
         }
     }
 
-    static async Task<int> RunBatchDryrun(string summaryPage, string scriptsDir, bool skipCached, bool verbose)
+    static async Task<int> RunBatchDryrun(string sSummaryPage, string sScriptsDir, bool bSkipCached, bool bVerbose)
     {
-        Verbose($"Fetching summary: {summaryPage}", verbose);
-        var source = await WikiApiService.GetPageSourceAsync(summaryPage);
-        if (source == null) { Console.WriteLine($"Page not found: {summaryPage}"); return ERR_PAGE_NOT_FOUND; }
-        Verbose("Building script index...", verbose);
-        var index = await WikiService.BuildScriptIndexAsync();
-        var links = WikiService.ExtractWeaponLinks(source, index);
-        if (links.Count == 0) { Console.WriteLine("No weapon links found"); return OK; }
+        Verbose($"Fetching summary: {sSummaryPage}", bVerbose);
+        var sSource = await WikiApiService.GetPageSourceAsync(sSummaryPage);
+        if (sSource == null) { Console.WriteLine($"Page not found: {sSummaryPage}"); return iErrPageNotFound; }
+        Verbose("Building script index...", bVerbose);
+        var mpIndex = await WikiService.BuildScriptIndexAsync();
+        var rgLinks = WikiService.ExtractWeaponLinks(sSource, mpIndex);
+        if (rgLinks.Count == 0) { Console.WriteLine("No weapon links found"); return iOk; }
 
-        string wikiDir = WikiService.GetWikiDir();
-        Directory.CreateDirectory(wikiDir);
-        int done = 0, fail = 0, skipped = 0;
+        string sWikiDir = WikiService.GetWikiDir();
+        Directory.CreateDirectory(sWikiDir);
+        int iDone = 0, iFail = 0, iSkipped = 0;
 
-        Console.WriteLine($"Batch DryRun: {links.Count} pages{(skipCached ? " [skip cached]" : "")}");
+        Console.WriteLine($"Batch DryRun: {rgLinks.Count} pages{(bSkipCached ? " [skip cached]" : "")}");
         Console.WriteLine(new string('-', 40));
 
-        for (int i = 0; i < links.Count; i++)
+        for (int i = 0; i < rgLinks.Count; i++)
         {
-            string link = links[i];
-            Verbose($"[{i + 1}/{links.Count}] {link}", verbose);
-            string fn = link.Replace(" ", "_").Replace("/", "_") + ".txt";
-            string fp = Path.Combine(wikiDir, fn);
+            string sLink = rgLinks[i];
+            Verbose($"[{i + 1}/{rgLinks.Count}] {sLink}", bVerbose);
+            string sFn = sLink.Replace(" ", "_").Replace("/", "_") + ".txt";
+            string sFp = Path.Combine(sWikiDir, sFn);
 
-            if (skipCached && File.Exists(fp)) { skipped++; Console.WriteLine($"SKIP (cached)  {link}"); continue; }
+            if (bSkipCached && File.Exists(sFp)) { iSkipped++; Console.WriteLine($"SKIP (cached)  {sLink}"); continue; }
 
             try
             {
-                var src = await WikiApiService.GetPageSourceAsync(link);
-                if (src == null) { fail++; Console.WriteLine($"FAIL fetch: {link}"); }
+                var sSrc = await WikiApiService.GetPageSourceAsync(sLink);
+                if (sSrc == null) { iFail++; Console.WriteLine($"FAIL fetch: {sLink}"); }
                 else
                 {
                     //单个武器详情页走Convert
-                    string converted = WikiTableConverter.Convert(src, scriptsDir);
-                    File.WriteAllText(fp, converted);
-                    done++;
-                    Console.WriteLine($"OK  {link}");
+                    string sConverted = WikiTableConverter.Convert(sSrc, sScriptsDir);
+                    File.WriteAllText(sFp, sConverted);
+                    iDone++;
+                    Console.WriteLine($"OK  {sLink}");
                 }
             }
             catch (Exception ex)
             {
-                fail++;
-                Console.WriteLine($"ERR {link}: {ex.Message}");
-                LogService.Error(ex, $"RunBatchDryrun: {link}");
+                iFail++;
+                Console.WriteLine($"ERR {sLink}: {ex.Message}");
+                LogService.Error(ex, $"RunBatchDryrun: {sLink}");
             }
         }
 
         Console.WriteLine(new string('-', 40));
-        string cachedInfo = skipped > 0 ? $", {skipped} cached" : "";
-        Console.WriteLine($"Done: {done} ok, {fail} fail{cachedInfo}");
-        LogService.Info($"RunBatchDryrun done: {done} ok, {fail} fail, {skipped} cached");
-        return fail > 0 ? ERR_EXCEPTION : OK;
+        string sCachedInfo = iSkipped > 0 ? $", {iSkipped} cached" : "";
+        Console.WriteLine($"Done: {iDone} ok, {iFail} fail{sCachedInfo}");
+        LogService.Info($"RunBatchDryrun done: {iDone} ok, {iFail} fail, {iSkipped} cached");
+        return iFail > 0 ? iErrException : iOk;
     }
 
-    static async Task<int> RunBatchUpload(string summaryPage, string scriptsDir, bool verbose)
+    static async Task<int> RunBatchUpload(string sSummaryPage, string sScriptsDir, bool bVerbose)
     {
-        Verbose($"Fetching summary: {summaryPage}", verbose);
-        var source = await WikiApiService.GetPageSourceAsync(summaryPage);
-        if (source == null) { Console.WriteLine($"Page not found: {summaryPage}"); return ERR_PAGE_NOT_FOUND; }
-        Verbose("Building script index...", verbose);
-        var index = await WikiService.BuildScriptIndexAsync();
-        var links = WikiService.ExtractWeaponLinks(source, index);
-        if (links.Count == 0) { Console.WriteLine("No weapon links found"); return OK; }
+        Verbose($"Fetching summary: {sSummaryPage}", bVerbose);
+        var sSource = await WikiApiService.GetPageSourceAsync(sSummaryPage);
+        if (sSource == null) { Console.WriteLine($"Page not found: {sSummaryPage}"); return iErrPageNotFound; }
+        Verbose("Building script index...", bVerbose);
+        var mpIndex = await WikiService.BuildScriptIndexAsync();
+        var rgLinks = WikiService.ExtractWeaponLinks(sSource, mpIndex);
+        if (rgLinks.Count == 0) { Console.WriteLine("No weapon links found"); return iOk; }
 
-        string wikiDir = WikiService.GetWikiDir();
-        if (!Directory.Exists(wikiDir)) { Console.WriteLine("No wiki folder found. Run --batch-dryrun first."); return ERR_USAGE; }
+        string sWikiDir = WikiService.GetWikiDir();
+        if (!Directory.Exists(sWikiDir)) { Console.WriteLine("No wiki folder found. Run --batch-dryrun first."); return iErrUsage; }
 
-        int done = 0, fail = 0, skip = 0;
-        Console.WriteLine($"Batch Upload: {links.Count} pages");
+        int iDone = 0, iFail = 0, iSkip = 0;
+        Console.WriteLine($"Batch Upload: {rgLinks.Count} pages");
         Console.WriteLine(new string('-', 40));
 
-        for (int i = 0; i < links.Count; i++)
+        for (int i = 0; i < rgLinks.Count; i++)
         {
-            string link = links[i];
-            Verbose($"[{i + 1}/{links.Count}] {link}", verbose);
-            string fp = Path.Combine(wikiDir, link.Replace(" ", "_").Replace("/", "_") + ".txt");
+            string sLink = rgLinks[i];
+            Verbose($"[{i + 1}/{rgLinks.Count}] {sLink}", bVerbose);
+            string sFp = Path.Combine(sWikiDir, sLink.Replace(" ", "_").Replace("/", "_") + ".txt");
 
-            if (!File.Exists(fp)) { skip++; Console.WriteLine($"SKIP no file: {link}"); continue; }
-            string content = File.ReadAllText(fp);
-            if (await WikiApiService.IsSameContentAsync(link, content)) { skip++; Console.WriteLine($"SKIP unchanged: {link}"); continue; }
+            if (!File.Exists(sFp)) { iSkip++; Console.WriteLine($"SKIP no file: {sLink}"); continue; }
+            string sContent = File.ReadAllText(sFp);
+            if (await WikiApiService.IsSameContentAsync(sLink, sContent)) { iSkip++; Console.WriteLine($"SKIP unchanged: {sLink}"); continue; }
 
             try
             {
-                bool ok = await WikiApiService.SavePageAsync(link, content, "Update weapon data from scripts");
-                if (ok) { done++; Console.WriteLine($"OK  {link}"); }
-                else { fail++; Console.WriteLine($"FAIL upload: {link}"); }
+                bool bOk = await WikiApiService.SavePageAsync(sLink, sContent, "Update weapon data from scripts");
+                if (bOk) { iDone++; Console.WriteLine($"OK  {sLink}"); }
+                else { iFail++; Console.WriteLine($"FAIL upload: {sLink}"); }
             }
             catch (Exception ex)
             {
-                fail++;
-                Console.WriteLine($"ERR {link}: {ex.Message}");
-                LogService.Error(ex, $"RunBatchUpload: {link}");
+                iFail++;
+                Console.WriteLine($"ERR {sLink}: {ex.Message}");
+                LogService.Error(ex, $"RunBatchUpload: {sLink}");
             }
         }
 
         Console.WriteLine(new string('-', 40));
-        Console.WriteLine($"Done: {done} ok, {fail} fail, {skip} skip");
-        LogService.Info($"RunBatchUpload done: {done} ok, {fail} fail, {skip} skip");
-        return fail > 0 ? ERR_EXCEPTION : OK;
+        Console.WriteLine($"Done: {iDone} ok, {iFail} fail, {iSkip} skip");
+        LogService.Info($"RunBatchUpload done: {iDone} ok, {iFail} fail, {iSkip} skip");
+        return iFail > 0 ? iErrException : iOk;
     }
 
-    static async Task<int> RunGenerate(string scriptsDir, string outputDir, bool includeExisting, bool checkWiki, bool verbose)
+    static async Task<int> RunGenerate(string sScriptsDir, string sOutputDir, bool bIncludeExisting, bool bCheckWiki, bool bVerbose)
     {
-        Console.WriteLine($"Generate: {scriptsDir} -> {outputDir}");
+        Console.WriteLine($"Generate: {sScriptsDir} -> {sOutputDir}");
 
         //scripts/../resource
-        string resourceDir = LoadoutService.GetResourceDir(scriptsDir);
-        if (!Directory.Exists(resourceDir)) { Console.WriteLine($"Resource folder not found: {resourceDir}"); return ERR_USAGE; }
+        string sResourceDir = LoadoutService.GetResourceDir(sScriptsDir);
+        if (!Directory.Exists(sResourceDir)) { Console.WriteLine($"Resource folder not found: {sResourceDir}"); return iErrUsage; }
 
-        Verbose("Loading tokens...", verbose);
-        var tokens = LocalizationService.LoadTokens(Path.Combine(resourceDir, "vietnam_english.txt"));
-        Verbose($"Tokens: {tokens.Count}", verbose);
+        Verbose("Loading tokens...", bVerbose);
+        var mpTokens = LocalizationService.LoadTokens(Path.Combine(sResourceDir, "vietnam_english.txt"));
+        Verbose($"Tokens: {mpTokens.Count}", bVerbose);
 
-        Verbose("Loading loadout...", verbose);
-        var loadout = LoadoutService.LoadAll(resourceDir);
-        Verbose($"Loadout: {loadout.Count}", verbose);
+        Verbose("Loading loadout...", bVerbose);
+        var mpLoadout = LoadoutService.LoadAll(sResourceDir);
+        Verbose($"Loadout: {mpLoadout.Count}", bVerbose);
 
-        Verbose("Fetching templates...", verbose);
-        string defaultTemplate = await WikiApiService.FetchTemplateAsync(WikiPageGenerator.DefaultTemplateUrl) ?? "";
-        string lmgTemplate = await WikiApiService.FetchTemplateAsync(WikiPageGenerator.LmgTemplateUrl) ?? defaultTemplate;
-        string pistolTemplate = await WikiApiService.FetchTemplateAsync(WikiPageGenerator.PistolTemplateUrl) ?? defaultTemplate;
-        string shortTemplate = await WikiApiService.FetchTemplateAsync(WikiPageGenerator.ShortTemplateUrl) ?? "";
+        Verbose("Fetching templates...", bVerbose);
+        string sDefaultTemplate = await WikiApiService.FetchTemplateAsync(WikiPageGenerator.sDefaultTemplateUrl) ?? "";
+        string sLmgTemplate = await WikiApiService.FetchTemplateAsync(WikiPageGenerator.sLmgTemplateUrl) ?? sDefaultTemplate;
+        string sPistolTemplate = await WikiApiService.FetchTemplateAsync(WikiPageGenerator.sPistolTemplateUrl) ?? sDefaultTemplate;
+        string sShortTemplate = await WikiApiService.FetchTemplateAsync(WikiPageGenerator.sShortTemplateUrl) ?? "";
 
         //构建索引用于token查找的fallback和wiki查重
-        Verbose("Building script index...", verbose);
-        Dictionary<string, string>? index = await WikiService.BuildScriptIndexAsync();
-        Verbose("Generating pages...", verbose);
-        var generated = WikiPageGenerator.GenerateAll(scriptsDir, resourceDir, tokens, loadout,
-            defaultTemplate, lmgTemplate, pistolTemplate, shortTemplate, new HashSet<string>(), index);
-        Verbose($"Generated: {generated.Count} pages", verbose);
+        Verbose("Building script index...", bVerbose);
+        Dictionary<string, string>? mpIndex = await WikiService.BuildScriptIndexAsync();
+        Verbose("Generating pages...", bVerbose);
+        var rgGenerated = WikiPageGenerator.GenerateAll(sScriptsDir, sResourceDir, mpTokens, mpLoadout,
+            sDefaultTemplate, sLmgTemplate, sPistolTemplate, sShortTemplate, new HashSet<string>(), mpIndex);
+        Verbose($"Generated: {rgGenerated.Count} pages", bVerbose);
 
         //--check-wiki时批量查询已存在页面
-        HashSet<string> existing = new();
-        if (checkWiki)
+        HashSet<string> hsExisting = new();
+        if (bCheckWiki)
         {
-            Verbose("Checking wiki for existing pages...", verbose);
+            Verbose("Checking wiki for existing pages...", bVerbose);
             //用索引映射获取wiki真实标题 否则用生成器标题
-            var titles = generated.Select(p =>
+            var rgTitles = rgGenerated.Select(gpPage =>
             {
-                if (index != null)
+                if (mpIndex != null)
                 {
-                    var match = index.FirstOrDefault(kv => kv.Value.Equals(p.ScriptName, StringComparison.OrdinalIgnoreCase));
-                    if (!string.IsNullOrEmpty(match.Key)) return match.Key;
+                    var kvpMatch = mpIndex.FirstOrDefault(kvp => kvp.Value.Equals(gpPage.ScriptName, StringComparison.OrdinalIgnoreCase));
+                    if (!string.IsNullOrEmpty(kvpMatch.Key)) return kvpMatch.Key;
                 }
-                return p.Title;
+                return gpPage.Title;
             }).ToList();
-            existing = await WikiApiService.GetExistingTitlesAsync(titles);
-            Verbose($"Existing on wiki: {existing.Count}", verbose);
+            hsExisting = await WikiApiService.GetExistingTitlesAsync(rgTitles);
+            Verbose($"Existing on wiki: {hsExisting.Count}", bVerbose);
         }
 
-        Directory.CreateDirectory(outputDir);
-        int written = 0;
-        foreach (var p in generated)
+        Directory.CreateDirectory(sOutputDir);
+        int iWritten = 0;
+        foreach (var gpPage in rgGenerated)
         {
-            if (!includeExisting && checkWiki)
+            if (!bIncludeExisting && bCheckWiki)
             {
-                string wikiTitle = p.Title;
-                if (index != null)
+                string sWikiTitle = gpPage.Title;
+                if (mpIndex != null)
                 {
-                    var match = index.FirstOrDefault(kv => kv.Value.Equals(p.ScriptName, StringComparison.OrdinalIgnoreCase));
-                    if (!string.IsNullOrEmpty(match.Key)) wikiTitle = match.Key;
+                    var kvpMatch = mpIndex.FirstOrDefault(kvp => kvp.Value.Equals(gpPage.ScriptName, StringComparison.OrdinalIgnoreCase));
+                    if (!string.IsNullOrEmpty(kvpMatch.Key)) sWikiTitle = kvpMatch.Key;
                 }
-                if (existing.Contains(wikiTitle)) continue;
+                if (hsExisting.Contains(sWikiTitle)) continue;
             }
 
-            string fn = Path.Combine(outputDir, p.Title.Replace(" ", "_").Replace("/", "_") + ".txt");
-            File.WriteAllText(fn, p.Content);
-            written++;
-            if (verbose) Console.WriteLine($"OK  {p.ScriptName} -> {p.Title}");
+            string sFn = Path.Combine(sOutputDir, gpPage.Title.Replace(" ", "_").Replace("/", "_") + ".txt");
+            File.WriteAllText(sFn, gpPage.Content);
+            iWritten++;
+            if (bVerbose) Console.WriteLine($"OK  {gpPage.ScriptName} -> {gpPage.Title}");
         }
 
-        string status = checkWiki ? $", {existing.Count} existing" : "";
-        Console.WriteLine($"Done: {written} written{status} -> {outputDir}");
-        LogService.Info($"RunGenerate done: {written} written{status} -> {outputDir}");
-        return OK;
+        string sStatus = bCheckWiki ? $", {hsExisting.Count} existing" : "";
+        Console.WriteLine($"Done: {iWritten} written{sStatus} -> {sOutputDir}");
+        LogService.Info($"RunGenerate done: {iWritten} written{sStatus} -> {sOutputDir}");
+        return iOk;
     }
 }

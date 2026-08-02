@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Runtime.CompilerServices;
 
 namespace WeaponDamageCalc;
 
@@ -11,119 +10,119 @@ public static class LogService
     public enum Level { Debug, Info, Warn, Error, Fatal }
 
 #if DEBUG
-    private static bool _enabled = true;
+    private static bool bEnabled = true;
 #else
-    private static bool _enabled = false;//开关release日志
+    private static bool bEnabled = false;//开关release日志
 #endif
 
-    private static Level _minLevel = Level.Debug;
-    private static readonly object _lock = new();
-    private static string? _path;
-    private const long MaxFileSize = 5 * 1024 * 1024;
-    private static readonly Dictionary<string, DateTime> _debounce = new();
-    private static bool _fileOutputEnabled = true;
+    private static Level lvlMin = Level.Debug;
+    private static readonly object oLock = new();
+    private static string? sPath;
+    private const long cbMaxFile = 5 * 1024 * 1024;
+    private static readonly Dictionary<string, DateTime> mpDebounce = new();
+    private static bool bFileOutputEnabled = true;
 
     public static bool Enabled
     {
-        get => _enabled;
-        set => _enabled = value;
+        get => bEnabled;
+        set => bEnabled = value;
     }
 
     public static Level MinLevel
     {
-        get => _minLevel;
-        set => _minLevel = value;
+        get => lvlMin;
+        set => lvlMin = value;
     }
 
     public static bool FileOutputEnabled
     {
-        get => _fileOutputEnabled;
-        set => _fileOutputEnabled = value;
+        get => bFileOutputEnabled;
+        set => bFileOutputEnabled = value;
     }
 
-    private static string LogPath =>
-        _path ??= System.IO.Path.Combine(AppContext.BaseDirectory, "mangler.log");
+    private static string sLogPath =>
+        sPath ??= Path.Combine(AppContext.BaseDirectory, "mangler.log");
 
-    public static void Debug(string msg) => Write("DEBUG", Level.Debug, msg, null);
-    public static void Info(string msg)  => Write("INFO", Level.Info, msg, null);
-    public static void Warn(string msg)  => Write("WARN", Level.Warn, msg, new StackTrace(1, true));
-    public static void Error(string msg) => Write("ERROR", Level.Error, msg, new StackTrace(1, true));
-    public static void Error(Exception ex, string ctx = "")
+    public static void Debug(string sMsg) => Write("DEBUG", Level.Debug, sMsg, null);
+    public static void Info(string sMsg)  => Write("INFO", Level.Info, sMsg, null);
+    public static void Warn(string sMsg)  => Write("WARN", Level.Warn, sMsg, new StackTrace(1, true));
+    public static void Error(string sMsg) => Write("ERROR", Level.Error, sMsg, new StackTrace(1, true));
+    public static void Error(Exception ex, string sCtx = "")
     {
-        string m = string.IsNullOrEmpty(ctx) ? ex.ToString() : $"{ctx}: {ex}";
-        Write("ERROR", Level.Error, m, new StackTrace(1, true));
+        string sMsg = string.IsNullOrEmpty(sCtx) ? ex.ToString() : $"{sCtx}: {ex}";
+        Write("ERROR", Level.Error, sMsg, new StackTrace(1, true));
     }
-    public static void Fatal(string msg) => Write("FATAL", Level.Fatal, msg, new StackTrace(1, true));
-    public static void Fatal(Exception ex, string ctx = "")
+    public static void Fatal(string sMsg) => Write("FATAL", Level.Fatal, sMsg, new StackTrace(1, true));
+    public static void Fatal(Exception ex, string sCtx = "")
     {
-        string m = string.IsNullOrEmpty(ctx) ? ex.ToString() : $"{ctx}: {ex}";
-        Write("FATAL", Level.Fatal, m, new StackTrace(1, true));
+        string sMsg = string.IsNullOrEmpty(sCtx) ? ex.ToString() : $"{sCtx}: {ex}";
+        Write("FATAL", Level.Fatal, sMsg, new StackTrace(1, true));
     }
 
-    public static void DebugDebounce(string key, string msg, int cooldownMs = 1000)
+    public static void DebugDebounce(string sKey, string sMsg, int iCooldownMs = 1000)
     {
-        lock (_debounce)
+        lock (mpDebounce)
         {
-            if (_debounce.TryGetValue(key, out var last) &&
-                (DateTime.Now - last).TotalMilliseconds < cooldownMs)
+            if (mpDebounce.TryGetValue(sKey, out var dtLast) &&
+                (DateTime.Now - dtLast).TotalMilliseconds < iCooldownMs)
                 return;
-            _debounce[key] = DateTime.Now;
+            mpDebounce[sKey] = DateTime.Now;
         }
-        Write("DEBUG", Level.Debug, msg, null);
+        Write("DEBUG", Level.Debug, sMsg, null);
     }
 
-    private static void Write(string levelName, Level lvl, string msg, StackTrace? stackTrace)
+    private static void Write(string sLevelName, Level lvl, string sMsg, StackTrace? stTrace)
     {
-        if (!_enabled) return;
+        if (!bEnabled) return;
 
         //Debug.Write始终输出 不受MinLevel限制
-        string line = FormatLine(levelName, msg, stackTrace);
-        System.Diagnostics.Debug.Write(line);
+        string sLine = FormatLine(sLevelName, sMsg, stTrace);
+        System.Diagnostics.Debug.Write(sLine);
 
         //文件写入受MinLevel控制
-        if (!_fileOutputEnabled || lvl < _minLevel) return;
+        if (!bFileOutputEnabled || lvl < lvlMin) return;
 
         try
         {
-            lock (_lock)
+            lock (oLock)
             {
                 try
                 {
-                    var fi = new FileInfo(LogPath);
-                    if (fi.Exists && fi.Length > MaxFileSize)
-                        File.WriteAllText(LogPath, line);
+                    var fi = new FileInfo(sLogPath);
+                    if (fi.Exists && fi.Length > cbMaxFile)
+                        File.WriteAllText(sLogPath, sLine);
                     else
-                        File.AppendAllText(LogPath, line);
+                        File.AppendAllText(sLogPath, sLine);
                 }
                 catch
                 {
-                    File.AppendAllText(LogPath, line);
+                    File.AppendAllText(sLogPath, sLine);
                 }
             }
         }
         catch { }
     }
 
-    private static string FormatLine(string levelName, string msg, StackTrace? stackTrace)
+    private static string FormatLine(string sLevelName, string sMsg, StackTrace? stTrace)
     {
-        string baseLine = $"[{DateTime.Now:HH:mm:ss.fff}] [{levelName}] {msg}";
-        if (stackTrace != null)
+        string sLine = $"[{DateTime.Now:HH:mm:ss.fff}] [{sLevelName}] {sMsg}";
+        if (stTrace != null)
         {
-            var frame = stackTrace.GetFrame(0);
-            if (frame != null)
+            var stFrame = stTrace.GetFrame(0);
+            if (stFrame != null)
             {
-                var method = frame.GetMethod();
-                string? file = frame.GetFileName();
-                int lineNum = frame.GetFileLineNumber();
-                if (method != null)
+                var miMethod = stFrame.GetMethod();
+                string? sFile = stFrame.GetFileName();
+                int iLineNum = stFrame.GetFileLineNumber();
+                if (miMethod != null)
                 {
-                    string location = file != null
-                        ? $"  @ {method.DeclaringType?.Name}.{method.Name} ({Path.GetFileName(file)}:{lineNum})"
-                        : $"  @ {method.DeclaringType?.Name}.{method.Name}";
-                    baseLine += Environment.NewLine + location;
+                    string sLocation = sFile != null
+                        ? $"  @ {miMethod.DeclaringType?.Name}.{miMethod.Name} ({Path.GetFileName(sFile)}:{iLineNum})"
+                        : $"  @ {miMethod.DeclaringType?.Name}.{miMethod.Name}";
+                    sLine += Environment.NewLine + sLocation;
                 }
             }
         }
-        return baseLine + Environment.NewLine;
+        return sLine + Environment.NewLine;
     }
 }

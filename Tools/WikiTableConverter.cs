@@ -10,130 +10,130 @@ namespace WeaponDamageCalc.Tools;
 
 public static class WikiTableConverter
 {
-    private static readonly Regex ScriptKvRegex = new(
+    private static readonly Regex reScriptKv = new(
         @"^[ \t]*""([^""]+)""\s+""([^""]*)""", RegexOptions.Multiline | RegexOptions.Compiled);
-    private static readonly Regex ScriptNameRegex = new(
+    private static readonly Regex reScriptName = new(
         @"weapon_[^\s|]+", RegexOptions.Compiled);
 
-    private static readonly string[] DamageMultiplierKeys = {
+    private static readonly string[] rgDamageMultiplierKeys = {
         "damagegeneric", "damageheadmultiplier", "damagechestmultiplier",
         "damagestomachmultiplier", "damagelegmultiplier", "damagearmmultiplier"
     };
 
     #region 入口
 
-    public static string Convert(string wikiText, string scriptsDir)
+    public static string Convert(string sWikiText, string sScriptsDir)
     {
-        var scripts = LoadAllScripts(scriptsDir);
-        wikiText = wikiText.Replace("\r\n", "\n");
-        var tables = SplitTables(wikiText);
-        var result = new StringBuilder();
+        var mpScripts = LoadAllScripts(sScriptsDir);
+        sWikiText = sWikiText.Replace("\r\n", "\n");
+        var rgTables = SplitTables(sWikiText);
+        var sbResult = new StringBuilder();
 
-        var scriptNames = ExtractScriptNames(tables);
-        LogService.Info($"Convert: {tables.Count} tables, {scriptNames.Count} script names found");
-        foreach (var table in tables)
+        var rgScriptNames = ExtractScriptNames(rgTables);
+        LogService.Info($"Convert: {rgTables.Count} tables, {rgScriptNames.Count} script names found");
+        foreach (var segTable in rgTables)
         {
-            if (!table.IsTable) { result.Append(table.Content); continue; }
-            var rows = SplitRows(table.Content);
-            result.Append(IsIndexTable(rows) || scriptNames.Count == 0
-                ? table.Content
-                : ProcessDataTable(table.Content, scripts, scriptNames));
+            if (!segTable.IsTable) { sbResult.Append(segTable.Content); continue; }
+            var rgRows = SplitRows(segTable.Content);
+            sbResult.Append(IsIndexTable(rgRows) || rgScriptNames.Count == 0
+                ? segTable.Content
+                : ProcessDataTable(segTable.Content, mpScripts, rgScriptNames));
         }
-        return result.ToString();
+        return sbResult.ToString();
     }
 
-    public static string ConvertSummaryPage(string wikiText, string scriptsDir,
-        Dictionary<string, string> titleToScript)
+    public static string ConvertSummaryPage(string sWikiText, string sScriptsDir,
+        Dictionary<string, string> mpTitleToScript)
     {
-        var scripts = LoadAllScripts(scriptsDir);
-        wikiText = wikiText.Replace("\r\n", "\n");
-        var tables = SplitTables(wikiText);
-        var result = new StringBuilder();
+        var mpScripts = LoadAllScripts(sScriptsDir);
+        sWikiText = sWikiText.Replace("\r\n", "\n");
+        var rgTables = SplitTables(sWikiText);
+        var sbResult = new StringBuilder();
 
-        LogService.Info($"ConvertSummaryPage: {tables.Count} tables, {titleToScript.Count} title mappings");
-        foreach (var table in tables)
+        LogService.Info($"ConvertSummaryPage: {rgTables.Count} tables, {mpTitleToScript.Count} title mappings");
+        foreach (var segTable in rgTables)
         {
-            if (!table.IsTable) { result.Append(table.Content); continue; }
-            var rows = SplitRows(table.Content);
-            if (IsIndexTable(rows) || IsMetaTable(rows)) { result.Append(table.Content); continue; }
-            result.Append(ProcessSummaryTable(table.Content, scripts, titleToScript));
+            if (!segTable.IsTable) { sbResult.Append(segTable.Content); continue; }
+            var rgRows = SplitRows(segTable.Content);
+            if (IsIndexTable(rgRows) || IsMetaTable(rgRows)) { sbResult.Append(segTable.Content); continue; }
+            sbResult.Append(ProcessSummaryTable(segTable.Content, mpScripts, mpTitleToScript));
         }
-        return result.ToString();
+        return sbResult.ToString();
     }
 
-    private static bool IsMetaTable(List<string> rows)
+    private static bool IsMetaTable(List<string> rgRows)
     {
-        foreach (var row in rows)
+        foreach (var sRow in rgRows)
         {
-            if (!row.TrimStart().StartsWith("!")) continue;
-            foreach (var cell in ParseRow(row))
+            if (!sRow.TrimStart().StartsWith("!")) continue;
+            foreach (var sCell in ParseRow(sRow))
             {
-                string clean = StripWikiMarkup(cell);
-                if (clean.Contains("Script") || clean.Contains("Icon")) return false;
+                string sClean = StripWikiMarkup(sCell);
+                if (sClean.Contains("Script") || sClean.Contains("Icon")) return false;
             }
         }
         return true;
     }
 
-    private static string ProcessSummaryTable(string tableContent,
-        Dictionary<string, Dictionary<string, string>> scripts,
-        Dictionary<string, string> titleToScript)
+    private static string ProcessSummaryTable(string sTableContent,
+        Dictionary<string, Dictionary<string, string>> mpScripts,
+        Dictionary<string, string> mpTitleToScript)
     {
-        var lines = tableContent.Split('\n');
-        var result = new StringBuilder();
+        var rgLines = sTableContent.Split('\n');
+        var sbResult = new StringBuilder();
 
-        for (int i = 0; i < lines.Length; i++)
+        for (int i = 0; i < rgLines.Length; i++)
         {
-            string line = lines[i], trimmed = line.TrimStart();
-            bool isDataRow = trimmed.StartsWith("|") && !trimmed.StartsWith("|-")
-                && !trimmed.StartsWith("{|") && !trimmed.StartsWith("|}");
+            string sLine = rgLines[i], sTrimmed = sLine.TrimStart();
+            bool bIsDataRow = sTrimmed.StartsWith("|") && !sTrimmed.StartsWith("|-")
+                && !sTrimmed.StartsWith("{|") && !sTrimmed.StartsWith("|}");
 
-            if (isDataRow && TryMatchWeaponRow(line, titleToScript, scripts, out var values))
-                result.Append(RewriteDataLine(line, values));
+            if (bIsDataRow && TryMatchWeaponRow(sLine, mpTitleToScript, mpScripts, out var mpValues))
+                sbResult.Append(RewriteDataLine(sLine, mpValues));
             else
-                result.Append(line);
+                sbResult.Append(sLine);
 
-            if (i < lines.Length - 1) result.Append('\n');
+            if (i < rgLines.Length - 1) sbResult.Append('\n');
         }
-        return result.ToString();
+        return sbResult.ToString();
     }
 
-    private static bool TryMatchWeaponRow(string line,
-        Dictionary<string, string> titleToScript,
-        Dictionary<string, Dictionary<string, string>> scripts,
-        out Dictionary<string, string> values)
+    private static bool TryMatchWeaponRow(string sLine,
+        Dictionary<string, string> mpTitleToScript,
+        Dictionary<string, Dictionary<string, string>> mpScripts,
+        out Dictionary<string, string> mpValues)
     {
-        values = new Dictionary<string, string>();
-        var nameMatch = Regex.Match(line, @"<b>\[\[([^\]|]+)");
-        if (!nameMatch.Success) return false;
-        string wikiTitle = nameMatch.Groups[1].Value.Trim();
-        if (!titleToScript.TryGetValue(wikiTitle, out var sn) || sn == null) return false;
-        if (line.Contains("_riflegrenade") && scripts.TryGetValue(sn + "_riflegrenade", out var rgV))
-            sn += "_riflegrenade";
-        if (!scripts.TryGetValue(sn, out var v)) return false;
-        values = new Dictionary<string, string>(v, StringComparer.OrdinalIgnoreCase);
+        mpValues = new Dictionary<string, string>();
+        var mNameMatch = Regex.Match(sLine, @"<b>\[\[([^\]|]+)");
+        if (!mNameMatch.Success) return false;
+        string sWikiTitle = mNameMatch.Groups[1].Value.Trim();
+        if (!mpTitleToScript.TryGetValue(sWikiTitle, out var sSn) || sSn == null) return false;
+        if (sLine.Contains("_riflegrenade") && mpScripts.TryGetValue(sSn + "_riflegrenade", out var mpRgV))
+            sSn += "_riflegrenade";
+        if (!mpScripts.TryGetValue(sSn, out var mpV)) return false;
+        mpValues = new Dictionary<string, string>(mpV, StringComparer.OrdinalIgnoreCase);
 
-        PrecomputeDamageValues(values);
+        PrecomputeDamageValues(mpValues);
         return true;
     }
 
-    private static List<string> ExtractScriptNames(List<TableSegment> tables)
+    private static List<string> ExtractScriptNames(List<TableSegment> rgTables)
     {
-        foreach (var table in tables)
+        foreach (var segTable in rgTables)
         {
-            if (!table.IsTable) continue;
-            var rows = SplitRows(table.Content);
-            if (!IsIndexTable(rows)) continue;
-            var names = new List<string>();
-            foreach (var row in rows)
+            if (!segTable.IsTable) continue;
+            var rgRows = SplitRows(segTable.Content);
+            if (!IsIndexTable(rgRows)) continue;
+            var rgNames = new List<string>();
+            foreach (var sRow in rgRows)
             {
-                if (row.TrimStart().StartsWith("!")) continue;
-                var cells = ParseRow(row);
-                if (cells.Count == 0) continue;
-                var m = ScriptNameRegex.Match(StripWikiMarkup(cells[cells.Count - 1]));
-                if (m.Success) names.Add(m.Value);
+                if (sRow.TrimStart().StartsWith("!")) continue;
+                var rgCells = ParseRow(sRow);
+                if (rgCells.Count == 0) continue;
+                var mScriptName = reScriptName.Match(StripWikiMarkup(rgCells[rgCells.Count - 1]));
+                if (mScriptName.Success) rgNames.Add(mScriptName.Value);
             }
-            return names;
+            return rgNames;
         }
         return new List<string>();
     }
@@ -143,409 +143,409 @@ public static class WikiTableConverter
 
     private struct TableSegment { public bool IsTable; public string Content; }
 
-    private static List<TableSegment> SplitTables(string text)
+    private static List<TableSegment> SplitTables(string sText)
     {
-        var segs = new List<TableSegment>();
+        var rgSegs = new List<TableSegment>();
         int i = 0;
-        while (i < text.Length)
+        while (i < sText.Length)
         {
-            int start = text.IndexOf("{|", i, StringComparison.Ordinal);
-            if (start < 0) { if (i < text.Length) segs.Add(new TableSegment { IsTable = false, Content = text[i..] }); break; }
-            if (start > i) segs.Add(new TableSegment { IsTable = false, Content = text[i..start] });
-            int end = FindTableEnd(text, start);
-            if (end < 0) end = text.Length;
-            segs.Add(new TableSegment { IsTable = true, Content = text[start..end] });
-            i = end;
+            int iStart = sText.IndexOf("{|", i, StringComparison.Ordinal);
+            if (iStart < 0) { if (i < sText.Length) rgSegs.Add(new TableSegment { IsTable = false, Content = sText[i..] }); break; }
+            if (iStart > i) rgSegs.Add(new TableSegment { IsTable = false, Content = sText[i..iStart] });
+            int iEnd = FindTableEnd(sText, iStart);
+            if (iEnd < 0) iEnd = sText.Length;
+            rgSegs.Add(new TableSegment { IsTable = true, Content = sText[iStart..iEnd] });
+            i = iEnd;
         }
-        return segs;
+        return rgSegs;
     }
 
     //匹配嵌套表格的{| |}对
-    private static int FindTableEnd(string text, int start)
+    private static int FindTableEnd(string sText, int iStart)
     {
-        int depth = 0;
-        for (int j = start; j < text.Length - 1; j++)
+        int iDepth = 0;
+        for (int j = iStart; j < sText.Length - 1; j++)
         {
-            if (text[j] == '{' && text[j + 1] == '|') { depth++; j++; }
-            else if (text[j] == '|' && text[j + 1] == '}') { depth--; j++; if (depth == 0) return j + 1; }
+            if (sText[j] == '{' && sText[j + 1] == '|') { iDepth++; j++; }
+            else if (sText[j] == '|' && sText[j + 1] == '}') { iDepth--; j++; if (iDepth == 0) return j + 1; }
         }
         return -1;
     }
 
-    private static bool IsIndexTable(List<string> rows)
+    private static bool IsIndexTable(List<string> rgRows)
     {
-        foreach (var row in rows)
-            if (row.TrimStart().StartsWith("!") && ParseRow(row) is var cells
-                && cells.Count > 0 && StripWikiMarkup(cells[cells.Count - 1]).Contains("Script"))
+        foreach (var sRow in rgRows)
+            if (sRow.TrimStart().StartsWith("!") && ParseRow(sRow) is var rgCells
+                && rgCells.Count > 0 && StripWikiMarkup(rgCells[rgCells.Count - 1]).Contains("Script"))
                 return true;
         return false;
     }
 
-    private static string ProcessDataTable(string content,
-        Dictionary<string, Dictionary<string, string>> scripts, List<string> scriptNames)
+    private static string ProcessDataTable(string sContent,
+        Dictionary<string, Dictionary<string, string>> mpScripts, List<string> rgScriptNames)
     {
-        var lines = content.Split('\n');
+        var rgLines = sContent.Split('\n');
         var sb = new StringBuilder();
-        int rowIdx = 0;
-        for (int i = 0; i < lines.Length; i++)
+        int iRowIdx = 0;
+        for (int i = 0; i < rgLines.Length; i++)
         {
-            string line = lines[i], trimmed = line.TrimStart();
-            bool isData = trimmed.StartsWith("|") && !trimmed.StartsWith("|-")
-                && !trimmed.StartsWith("{|") && !trimmed.StartsWith("|}");
-            if (isData && rowIdx < scriptNames.Count && scripts.TryGetValue(scriptNames[rowIdx], out var v))
-                sb.Append(RewriteDataLine(line, v));
-            else sb.Append(line);
-            if (isData) rowIdx++;
-            if (i < lines.Length - 1) sb.Append('\n');
+            string sLine = rgLines[i], sTrimmed = sLine.TrimStart();
+            bool bIsData = sTrimmed.StartsWith("|") && !sTrimmed.StartsWith("|-")
+                && !sTrimmed.StartsWith("{|") && !sTrimmed.StartsWith("|}");
+            if (bIsData && iRowIdx < rgScriptNames.Count && mpScripts.TryGetValue(rgScriptNames[iRowIdx], out var mpV))
+                sb.Append(RewriteDataLine(sLine, mpV));
+            else sb.Append(sLine);
+            if (bIsData) iRowIdx++;
+            if (i < rgLines.Length - 1) sb.Append('\n');
         }
         return sb.ToString();
     }
 
-    private static string RewriteDataLine(string line, Dictionary<string, string> values)
+    private static string RewriteDataLine(string sLine, Dictionary<string, string> mpValues)
     {
-        var parts = SplitByDelim(line, "||");
-        for (int i = 0; i < parts.Count; i++)
-            parts[i] = UpdateCell(parts[i], values, i);
-        return string.Join("||", parts);
+        var rgParts = SplitByDelim(sLine, "||");
+        for (int i = 0; i < rgParts.Count; i++)
+            rgParts[i] = UpdateCell(rgParts[i], mpValues, i);
+        return string.Join("||", rgParts);
     }
 
     #endregion
     #region 行解析
 
-    private static List<string> SplitRows(string content)
+    private static List<string> SplitRows(string sContent)
     {
-        var rows = new List<string>();
+        var rgRows = new List<string>();
         var sb = new StringBuilder();
-        foreach (var line in content.Split('\n'))
+        foreach (var sLine in sContent.Split('\n'))
         {
-            string t = line.TrimStart();
-            if (t.StartsWith("{|") || t.StartsWith("|}") || t.StartsWith("|-"))
-            { if (sb.Length > 0) { rows.Add(sb.ToString().TrimEnd()); sb.Clear(); } continue; }
+            string sT = sLine.TrimStart();
+            if (sT.StartsWith("{|") || sT.StartsWith("|}") || sT.StartsWith("|-"))
+            { if (sb.Length > 0) { rgRows.Add(sb.ToString().TrimEnd()); sb.Clear(); } continue; }
             if (sb.Length > 0) sb.Append('\n');
-            sb.Append(line);
+            sb.Append(sLine);
         }
-        if (sb.Length > 0) rows.Add(sb.ToString().TrimEnd());
-        return rows;
+        if (sb.Length > 0) rgRows.Add(sb.ToString().TrimEnd());
+        return rgRows;
     }
 
-    private static List<string> ParseRow(string row)
+    private static List<string> ParseRow(string sRow)
     {
-        string s = row.TrimStart();
-        while (s.StartsWith("!") || s.StartsWith("|")) s = s[1..].TrimStart();
-        var cells = SplitByDelim(s, "!!");
-        return cells.Count > 0 ? cells : SplitByDelim(s, "||");
+        string sRowContent = sRow.TrimStart();
+        while (sRowContent.StartsWith("!") || sRowContent.StartsWith("|")) sRowContent = sRowContent[1..].TrimStart();
+        var rgCells = SplitByDelim(sRowContent, "!!");
+        return rgCells.Count > 0 ? rgCells : SplitByDelim(sRowContent, "||");
     }
 
     //跳过[[链接]]内的分隔符防止误切
-    private static List<string> SplitByDelim(string text, string delim)
+    private static List<string> SplitByDelim(string sText, string sDelim)
     {
-        var parts = new List<string>();
-        int last = 0;
-        bool inLink = false;
-        for (int i = 0; i < text.Length; i++)
+        var rgParts = new List<string>();
+        int iLast = 0;
+        bool bInLink = false;
+        for (int i = 0; i < sText.Length; i++)
         {
-            if (text[i] == '[' && i + 1 < text.Length && text[i + 1] == '[') inLink = true;
-            if (text[i] == ']' && i + 1 < text.Length && text[i + 1] == ']') inLink = false;
-            if (!inLink && i + 1 < text.Length && text[i..(i + 2)] == delim)
-            { parts.Add(text[last..i]); last = i + 2; i++; }
+            if (sText[i] == '[' && i + 1 < sText.Length && sText[i + 1] == '[') bInLink = true;
+            if (sText[i] == ']' && i + 1 < sText.Length && sText[i + 1] == ']') bInLink = false;
+            if (!bInLink && i + 1 < sText.Length && sText[i..(i + 2)] == sDelim)
+            { rgParts.Add(sText[iLast..i]); iLast = i + 2; i++; }
         }
-        if (last < text.Length) parts.Add(text[last..]);
-        return parts;
+        if (iLast < sText.Length) rgParts.Add(sText[iLast..]);
+        return rgParts;
     }
 
     #endregion
     #region 单元格更新
 
-    private static string UpdateCell(string cell, Dictionary<string, string> v, int col)
+    private static string UpdateCell(string sCell, Dictionary<string, string> mpV, int iCol)
     {
-        string clean = StripWikiMarkup(cell).Trim();
-        if (clean.StartsWith("|") && !clean.StartsWith("||")) clean = clean[1..].TrimStart();
+        string sClean = StripWikiMarkup(sCell).Trim();
+        if (sClean.StartsWith("|") && !sClean.StartsWith("||")) sClean = sClean[1..].TrimStart();
 
         //提取已有的zmstats橙字 计算完新值后重新拼接
-        bool hasZombie = false;
-        string zombieSuffix = "";
-        var zMatch = Regex.Match(cell, @"<br>\s*<span style=""color:#ff6905;"">([^<]*)</span>");
-        if (zMatch.Success) { hasZombie = true; zombieSuffix = zMatch.Value; cell = cell.Replace(zombieSuffix, ""); }
+        bool bHasZombie = false;
+        string sZombieSuffix = "";
+        var mZMatch = Regex.Match(sCell, @"<br>\s*<span style=""color:#ff6905;"">([^<]*)</span>");
+        if (mZMatch.Success) { bHasZombie = true; sZombieSuffix = mZMatch.Value; sCell = sCell.Replace(sZombieSuffix, ""); }
 
         //多弹药武器保留原始格式不转换 如下挂榴弹用<br>分隔
-        if (cell.Contains("<br>"))
-            return hasZombie ? cell + zombieSuffix : cell;
+        if (sCell.Contains("<br>"))
+            return bHasZombie ? sCell + sZombieSuffix : sCell;
 
-        double pellets = Math.Max(GetDouble(v, "bullets_per_shot"), 1.0);
-        if (pellets > 1 && col == 0)
+        double dPellets = Math.Max(GetDouble(mpV, "bullets_per_shot"), 1.0);
+        if (dPellets > 1 && iCol == 0)
         {
-            double dgVal = GetDouble(v, "damagegeneric");
-            if (dgVal > 0)
+            double dDgVal = GetDouble(mpV, "damagegeneric");
+            if (dDgVal > 0)
             {
-                return Regex.Replace(cell, @"\d+\.?\d*[Xx]?\d*\.?\d*",
-                    $"{FormatDouble(dgVal)}x{FormatDouble(pellets)}");
+                return Regex.Replace(sCell, @"\d+\.?\d*[Xx]?\d*\.?\d*",
+                    $"{FormatDouble(dDgVal)}x{FormatDouble(dPellets)}");
             }
         }
-        else if (pellets > 1 && col == 5 && Regex.IsMatch(clean, @"^\d+\.?\d*[Xx]\d+\.?\d*$"))
+        else if (dPellets > 1 && iCol == 5 && Regex.IsMatch(sClean, @"^\d+\.?\d*[Xx]\d+\.?\d*$"))
         {
-            double dgVal = GetDouble(v, "damagegeneric");
-            if (dgVal > 0)
+            double dDgVal = GetDouble(mpV, "damagegeneric");
+            if (dDgVal > 0)
             {
-                return Regex.Replace(cell, @"\d+\.?\d*[Xx]\d+\.?\d*",
-                    $"{FormatDouble(dgVal)}x{FormatDouble(pellets)}");
+                return Regex.Replace(sCell, @"\d+\.?\d*[Xx]\d+\.?\d*",
+                    $"{FormatDouble(dDgVal)}x{FormatDouble(dPellets)}");
             }
         }
-        else if (col == 0)
+        else if (iCol == 0)
         {
-            double dgVal = GetDouble(v, "damagegeneric");
-            if (dgVal > 0 && Regex.IsMatch(clean, @"^[1-9]\d*\.?\d*$")
-                && Math.Abs(double.Parse(clean, CultureInfo.InvariantCulture) - dgVal) < 100)
+            double dDgVal = GetDouble(mpV, "damagegeneric");
+            if (dDgVal > 0 && Regex.IsMatch(sClean, @"^[1-9]\d*\.?\d*$")
+                && Math.Abs(double.Parse(sClean, CultureInfo.InvariantCulture) - dDgVal) < 100)
             {
-                return Regex.Replace(cell, @"\d+\.?\d*", FormatDouble(dgVal));
+                return Regex.Replace(sCell, @"\d+\.?\d*", FormatDouble(dDgVal));
             }
         }
 
-        bool isExplosive = GetDouble(v, "explosiondamage") > 0;
+        bool bIsExplosive = GetDouble(mpV, "explosiondamage") > 0;
 
-        var dmgMatch = Regex.Match(clean, @"^[x×](\d+\.?\d*)\s*=\s*(\d+\.?\d*)$");
-        if (dmgMatch.Success)
+        var mDmg = Regex.Match(sClean, @"^[x×](\d+\.?\d*)\s*=\s*(\d+\.?\d*)$");
+        if (mDmg.Success)
         {
-            double mult = double.Parse(dmgMatch.Groups[1].Value, CultureInfo.InvariantCulture);
-            if (col < DamageMultiplierKeys.Length && GetDouble(v, DamageMultiplierKeys[col]) is double sm && sm > 0) mult = sm;
-            if (GetDouble(v, "damagegeneric") is double bd && bd > 0)
+            double dMult = double.Parse(mDmg.Groups[1].Value, CultureInfo.InvariantCulture);
+            if (iCol < rgDamageMultiplierKeys.Length && GetDouble(mpV, rgDamageMultiplierKeys[iCol]) is double dSm && dSm > 0) dMult = dSm;
+            if (GetDouble(mpV, "damagegeneric") is double dBd && dBd > 0)
             {
-                double totalDmg = Math.Round(bd * mult, 2);
-                return Regex.Replace(cell, @"[x×]\d+\.?\d*\s*=\s*\d+\.?\d*",
-                    $"x{FormatDouble(mult)} = {FormatDouble(totalDmg)}")
-                    + MakeZombie(v, hasZombie, "<br><span style=\"color:#ff6905;\">x{0} = {1}</span>",
-                        FormatDouble(GetDouble(v, "zombie_" + DamageMultiplierKeys[Math.Min(col, DamageMultiplierKeys.Length - 1)])),
+                double dTotalDmg = Math.Round(dBd * dMult, 2);
+                return Regex.Replace(sCell, @"[x×]\d+\.?\d*\s*=\s*\d+\.?\d*",
+                    $"x{FormatDouble(dMult)} = {FormatDouble(dTotalDmg)}")
+                    + MakeZombie(mpV, bHasZombie, "<br><span style=\"color:#ff6905;\">x{0} = {1}</span>",
+                        FormatDouble(GetDouble(mpV, "zombie_" + rgDamageMultiplierKeys[Math.Min(iCol, rgDamageMultiplierKeys.Length - 1)])),
                         FormatDouble(Math.Round(
-                            Math.Max(GetDouble(v, "zombie_damagegeneric"), 0)
-                            * Math.Max(GetDouble(v, "zombie_" + DamageMultiplierKeys[Math.Min(col, DamageMultiplierKeys.Length - 1)]), mult), 2)));
+                            Math.Max(GetDouble(mpV, "zombie_damagegeneric"), 0)
+                            * Math.Max(GetDouble(mpV, "zombie_" + rgDamageMultiplierKeys[Math.Min(iCol, rgDamageMultiplierKeys.Length - 1)]), dMult), 2)));
             }
-            return cell + (hasZombie ? zombieSuffix : "");
+            return sCell + (bHasZombie ? sZombieSuffix : "");
         }
 
-        var spreadMatch = Regex.Match(clean, @"^(\d+\.?\d*)\s*/\s*(\d+\.?\d*)\s*(ADS|\[\[ADS\]\])$");
-        if (spreadMatch.Success && GetDouble(v, "bulletspreaddegrees") is double h && GetDouble(v, "bulletspreaddegreesironsighted") is double a && (h > 0 || a > 0))
-            return Regex.Replace(cell, @"\d+\.?\d*\s*/\s*\d+\.?\d*\s*\[\[ADS\]\]", $"{FormatDouble(h)} / {FormatDouble(a)} [[ADS]]")
-                + MakeZombie(v, hasZombie, "<br><span style=\"color:#ff6905;\">{0} / {1} [[ADS]]</span>",
-                    FormatDouble(GetDouble(v, "zombie_bulletspreaddegrees")),
-                    FormatDouble(GetDouble(v, "zombie_bulletspreaddegreesironsighted")));
+        var mSpread = Regex.Match(sClean, @"^(\d+\.?\d*)\s*/\s*(\d+\.?\d*)\s*(ADS|\[\[ADS\]\])$");
+        if (mSpread.Success && GetDouble(mpV, "bulletspreaddegrees") is double dHip && GetDouble(mpV, "bulletspreaddegreesironsighted") is double dAds && (dHip > 0 || dAds > 0))
+            return Regex.Replace(sCell, @"\d+\.?\d*\s*/\s*\d+\.?\d*\s*\[\[ADS\]\]", $"{FormatDouble(dHip)} / {FormatDouble(dAds)} [[ADS]]")
+                + MakeZombie(mpV, bHasZombie, "<br><span style=\"color:#ff6905;\">{0} / {1} [[ADS]]</span>",
+                    FormatDouble(GetDouble(mpV, "zombie_bulletspreaddegrees")),
+                    FormatDouble(GetDouble(mpV, "zombie_bulletspreaddegreesironsighted")));
 
-        var bipodMatch = Regex.Match(clean, @"^(\d+\.?\d*)°?\s*&\s*(\d+\.?\d*)°?\s*\[\[ADS\]\]$");
-        if (bipodMatch.Success)
+        var mBipod = Regex.Match(sClean, @"^(\d+\.?\d*)°?\s*&\s*(\d+\.?\d*)°?\s*\[\[ADS\]\]$");
+        if (mBipod.Success)
         {
-            double v1 = double.Parse(bipodMatch.Groups[1].Value, CultureInfo.InvariantCulture);
-            double hip = GetDouble(v, "bulletspreaddegrees");
-            double ads = GetDouble(v, "bulletspreaddegreesironsighted");
+            double dV1 = double.Parse(mBipod.Groups[1].Value, CultureInfo.InvariantCulture);
+            double dHipSpread = GetDouble(mpV, "bulletspreaddegrees");
+            double dAdsSpread = GetDouble(mpV, "bulletspreaddegreesironsighted");
             //用第一个数值更接近hip还是ads来判断行类型
-            if (Math.Abs(v1 - hip) <= Math.Abs(v1 - ads) && hip > 0)
+            if (Math.Abs(dV1 - dHipSpread) <= Math.Abs(dV1 - dAdsSpread) && dHipSpread > 0)
             {
-                double bipod = GetDouble(v, "bulletspreaddegreesbipod");
-                return Regex.Replace(cell, @"\d+\.?\d*°?\s*&\s*\d+\.?\d*°?\s*\[\[ADS\]\]",
-                    $"{FormatDouble(hip)}° & {FormatDouble(bipod)}° [[ADS]]");
+                double dBipod = GetDouble(mpV, "bulletspreaddegreesbipod");
+                return Regex.Replace(sCell, @"\d+\.?\d*°?\s*&\s*\d+\.?\d*°?\s*\[\[ADS\]\]",
+                    $"{FormatDouble(dHipSpread)}° & {FormatDouble(dBipod)}° [[ADS]]");
             }
-            else if (ads > 0)
+            else if (dAdsSpread > 0)
             {
-                double bipodAds = GetDouble(v, "bulletspreaddegreesbipodironsighted");
-                return Regex.Replace(cell, @"\d+\.?\d*°?\s*&\s*\d+\.?\d*°?\s*\[\[ADS\]\]",
-                    $"{FormatDouble(ads)}° & {FormatDouble(bipodAds)}° [[ADS]]");
+                double dBipodAds = GetDouble(mpV, "bulletspreaddegreesbipodironsighted");
+                return Regex.Replace(sCell, @"\d+\.?\d*°?\s*&\s*\d+\.?\d*°?\s*\[\[ADS\]\]",
+                    $"{FormatDouble(dAdsSpread)}° & {FormatDouble(dBipodAds)}° [[ADS]]");
             }
         }
 
-        if (Regex.IsMatch(clean, @"^0\.\d+$") && GetDouble(v, "rangemodifier") is double rm && rm > 0)
-            return Regex.Replace(cell, @"0\.\d+", FormatDouble(rm))
-                + MakeZombie(v, hasZombie, "<br><span style=\"color:#ff6905;\">{0}</span>", FormatDouble(GetDouble(v, "zombie_rangemodifier")));
+        if (Regex.IsMatch(sClean, @"^0\.\d+$") && GetDouble(mpV, "rangemodifier") is double dRm && dRm > 0)
+            return Regex.Replace(sCell, @"0\.\d+", FormatDouble(dRm))
+                + MakeZombie(mpV, bHasZombie, "<br><span style=\"color:#ff6905;\">{0}</span>", FormatDouble(GetDouble(mpV, "zombie_rangemodifier")));
 
-        var rpmMatch = Regex.Match(clean, @"^(\d+)\s*RPM$");
-        if (rpmMatch.Success && v.TryGetValue("firerate", out var fr) && int.TryParse(fr, out int ir) && ir > 0)
-            return Regex.Replace(cell, @"\d+\s*RPM", $"{ir} RPM")
-                + MakeZombie(v, hasZombie, "<br><span style=\"color:#ff6905;\">{0} RPM</span>", v.TryGetValue("zombie_firerate", out var zfr) ? zfr : "");
+        var mRpm = Regex.Match(sClean, @"^(\d+)\s*RPM$");
+        if (mRpm.Success && mpV.TryGetValue("firerate", out var sFr) && int.TryParse(sFr, out int iIr) && iIr > 0)
+            return Regex.Replace(sCell, @"\d+\s*RPM", $"{iIr} RPM")
+                + MakeZombie(mpV, bHasZombie, "<br><span style=\"color:#ff6905;\">{0} RPM</span>", mpV.TryGetValue("zombie_firerate", out var sZfr) ? sZfr : "");
 
-        var wlm = Regex.Match(clean, @"^(\d+\.?\d*)\s*kg\s*\((\d+\.?\d*)\s*lbs\)$");
-        if (wlm.Success && GetDouble(v, "weight") is double wk && wk > 0)
-            return Regex.Replace(cell, @"\d+\.?\d*\s*kg\s*\(\d+\.?\d*\s*lbs\)",
-                $"{FormatDouble(wk)} kg ({FormatDouble(Math.Round(wk * 2.20462, 2))} lbs)")
-                + MakeZombie(v, hasZombie, "<br><span style=\"color:#ff6905;\">{0} kg ({1} lbs)</span>",
-                    FormatDouble(GetDouble(v, "zombie_weight")),
-                    FormatDouble(Math.Round(GetDouble(v, "zombie_weight") * 2.20462, 2)));
+        var mWlm = Regex.Match(sClean, @"^(\d+\.?\d*)\s*kg\s*\((\d+\.?\d*)\s*lbs\)$");
+        if (mWlm.Success && GetDouble(mpV, "weight") is double dWk && dWk > 0)
+            return Regex.Replace(sCell, @"\d+\.?\d*\s*kg\s*\(\d+\.?\d*\s*lbs\)",
+                $"{FormatDouble(dWk)} kg ({FormatDouble(Math.Round(dWk * 2.20462, 2))} lbs)")
+                + MakeZombie(mpV, bHasZombie, "<br><span style=\"color:#ff6905;\">{0} kg ({1} lbs)</span>",
+                    FormatDouble(GetDouble(mpV, "zombie_weight")),
+                    FormatDouble(Math.Round(GetDouble(mpV, "zombie_weight") * 2.20462, 2)));
 
-        var wm = Regex.Match(clean, @"^(\d+\.?\d*)\s*kg$");
-        if (wm.Success && GetDouble(v, "weight") is double w && w > 0)
-            return Regex.Replace(cell, @"\d+\.?\d*\s*kg", $"{FormatDouble(w)} kg")
-                + MakeZombie(v, hasZombie, "<br><span style=\"color:#ff6905;\">{0} kg</span>", FormatDouble(GetDouble(v, "zombie_weight")));
+        var mWm = Regex.Match(sClean, @"^(\d+\.?\d*)\s*kg$");
+        if (mWm.Success && GetDouble(mpV, "weight") is double dW && dW > 0)
+            return Regex.Replace(sCell, @"\d+\.?\d*\s*kg", $"{FormatDouble(dW)} kg")
+                + MakeZombie(mpV, bHasZombie, "<br><span style=\"color:#ff6905;\">{0} kg</span>", FormatDouble(GetDouble(mpV, "zombie_weight")));
 
-        var bwm = Regex.Match(clean, @"^(\d+\.?\d*)\s*g\s*\((\d+\.?\d*)\s*gr\)$");
-        if (bwm.Success && GetDouble(v, "bullet_weight") is double bwk && bwk > 0)
-            return Regex.Replace(cell, @"\d+\.?\d*\s*g\s*\(\d+\.?\d*\s*gr\)",
-                $"{FormatDouble(Math.Round(bwk * 1000, 1))} g ({FormatDouble(Math.Round(bwk * 15432.36, 2))} gr)")
-                + MakeZombie(v, hasZombie, "<br><span style=\"color:#ff6905;\">{0} g ({1} gr)</span>",
-                    FormatDouble(Math.Round(GetDouble(v, "zombie_bullet_weight") * 1000, 1)),
-                    FormatDouble(Math.Round(GetDouble(v, "zombie_bullet_weight") * 15432.36, 2)));
+        var mBwm = Regex.Match(sClean, @"^(\d+\.?\d*)\s*g\s*\((\d+\.?\d*)\s*gr\)$");
+        if (mBwm.Success && GetDouble(mpV, "bullet_weight") is double dBwk && dBwk > 0)
+            return Regex.Replace(sCell, @"\d+\.?\d*\s*g\s*\(\d+\.?\d*\s*gr\)",
+                $"{FormatDouble(Math.Round(dBwk * 1000, 1))} g ({FormatDouble(Math.Round(dBwk * 15432.36, 2))} gr)")
+                + MakeZombie(mpV, bHasZombie, "<br><span style=\"color:#ff6905;\">{0} g ({1} gr)</span>",
+                    FormatDouble(Math.Round(GetDouble(mpV, "zombie_bullet_weight") * 1000, 1)),
+                    FormatDouble(Math.Round(GetDouble(mpV, "zombie_bullet_weight") * 15432.36, 2)));
 
-        var fireModeMatch = Regex.Match(clean, @"^[A-Za-z]+(\+[A-Za-z]+)*$");
-        if (fireModeMatch.Success && v.TryGetValue("SupportedFireModes", out var fm) && !string.IsNullOrEmpty(fm))
+        var mFireMode = Regex.Match(sClean, @"^[A-Za-z]+(\+[A-Za-z]+)*$");
+        if (mFireMode.Success && mpV.TryGetValue("SupportedFireModes", out var sFm) && !string.IsNullOrEmpty(sFm))
         {
-            if (clean != fm)
-                return Regex.Replace(cell, @"[A-Za-z]+(\+[A-Za-z]+)*", fm);
+            if (sClean != sFm)
+                return Regex.Replace(sCell, @"[A-Za-z]+(\+[A-Za-z]+)*", sFm);
         }
 
-        if (!isExplosive)
+        if (!bIsExplosive)
         {
-            var clipMatch = Regex.Match(clean, @"^(\d+).*?/\s*(\d+)$");
-            if (clipMatch.Success && v.TryGetValue("clip_size", out var clip) && !string.IsNullOrEmpty(clip) && clip != "-1" && clip != "0/0" && !clip.StartsWith("-1/") && clip.Contains('/'))
+            var mClip = Regex.Match(sClean, @"^(\d+).*?/\s*(\d+)$");
+            if (mClip.Success && mpV.TryGetValue("clip_size", out var sClip) && !string.IsNullOrEmpty(sClip) && sClip != "-1" && sClip != "0/0" && !sClip.StartsWith("-1/") && sClip.Contains('/'))
             {
-                var parts = clip.Split('/');
-                if (parts.Length == 2)
+                var rgClipParts = sClip.Split('/');
+                if (rgClipParts.Length == 2)
                 {
-                    string extra = v.TryGetValue("extrabulletchamber", out var exc) && exc == "1" ? "[[+1]]" : "";
-                    return Regex.Replace(cell, @"\d+\[\[.*?\]\]?\s*/\s*\d+|\d+\s*/\s*\d+", $"{parts[0].Trim()}{extra} / {parts[1].Trim()}")
-                        + MakeZombieClip(v, hasZombie);
+                    string sExtra = mpV.TryGetValue("extrabulletchamber", out var sExc) && sExc == "1" ? "[[+1]]" : "";
+                    return Regex.Replace(sCell, @"\d+\[\[.*?\]\]?\s*/\s*\d+|\d+\s*/\s*\d+", $"{rgClipParts[0].Trim()}{sExtra} / {rgClipParts[1].Trim()}")
+                        + MakeZombieClip(mpV, bHasZombie);
                 }
             }
         }
 
-        bool isStandardGun = GetDouble(v, "damagegeneric") > 0 && GetDouble(v, "damageheadmultiplier") > 0;
-        bool isDamageColumn = col == 5 || col == 6;
-        if (isDamageColumn && (isExplosive || isStandardGun) && Regex.IsMatch(clean, @"^[1-9]\d*\.?\d*$"))
+        bool bIsStandardGun = GetDouble(mpV, "damagegeneric") > 0 && GetDouble(mpV, "damageheadmultiplier") > 0;
+        bool bIsDamageColumn = iCol == 5 || iCol == 6;
+        if (bIsDamageColumn && (bIsExplosive || bIsStandardGun) && Regex.IsMatch(sClean, @"^[1-9]\d*\.?\d*$"))
         {
             //容差<100防止替换弹药数量等非伤害数字
-            string key = (col == 6 && v.ContainsKey("__head_dmg")) ? "__head_dmg" : "__chest_dmg";
-            if (v.TryGetValue(key, out var dmgStr) && double.TryParse(dmgStr, NumberStyles.Float, CultureInfo.InvariantCulture, out double dmgVal)
-                && Math.Abs(double.Parse(clean, CultureInfo.InvariantCulture) - dmgVal) < 100)
-                return Regex.Replace(cell, @"\d+\.?\d*", dmgStr)
-                    + MakeZombiePure(v, hasZombie, key);
+            string sKey = (iCol == 6 && mpV.ContainsKey("__head_dmg")) ? "__head_dmg" : "__chest_dmg";
+            if (mpV.TryGetValue(sKey, out var sDmgStr) && double.TryParse(sDmgStr, NumberStyles.Float, CultureInfo.InvariantCulture, out double dDmgVal)
+                && Math.Abs(double.Parse(sClean, CultureInfo.InvariantCulture) - dDmgVal) < 100)
+                return Regex.Replace(sCell, @"\d+\.?\d*", sDmgStr)
+                    + MakeZombiePure(mpV, bHasZombie, sKey);
         }
 
-        return hasZombie ? cell + zombieSuffix : cell;
+        return bHasZombie ? sCell + sZombieSuffix : sCell;
     }
 
     #endregion
     #region 僵尸橙字辅助
 
-    private static string MakeZombie(Dictionary<string, string> v, bool hasZombie, string fmt, params string[] vals)
+    private static string MakeZombie(Dictionary<string, string> mpV, bool bHasZombie, string sFmt, params string[] rgVals)
     {
-        if (!hasZombie) return "";
-        if (vals.All(x => string.IsNullOrEmpty(x) || x == "0" || x == "-1")) return "";
-        return string.Format(fmt, vals.Select(x => (object)x).ToArray());
+        if (!bHasZombie) return "";
+        if (rgVals.All(sX => string.IsNullOrEmpty(sX) || sX == "0" || sX == "-1")) return "";
+        return string.Format(sFmt, rgVals.Select(sX => (object)sX).ToArray());
     }
 
-    private static string MakeZombieClip(Dictionary<string, string> v, bool hasZombie)
+    private static string MakeZombieClip(Dictionary<string, string> mpV, bool bHasZombie)
     {
-        if (!hasZombie || !v.TryGetValue("zombie_clip_size", out var zc) || string.IsNullOrEmpty(zc) || zc == "-1" || !zc.Contains('/'))
+        if (!bHasZombie || !mpV.TryGetValue("zombie_clip_size", out var sZc) || string.IsNullOrEmpty(sZc) || sZc == "-1" || !sZc.Contains('/'))
             return "";
-        var parts = zc.Split('/');
-        if (parts.Length != 2) return "";
-        string extra = v.TryGetValue("extrabulletchamber", out var exc) && exc == "1" ? "[[+1]]" : "";
-        return $"<br><span style=\"color:#ff6905;\">{parts[0].Trim()}{extra} / {parts[1].Trim()}</span>";
+        var rgParts = sZc.Split('/');
+        if (rgParts.Length != 2) return "";
+        string sExtra = mpV.TryGetValue("extrabulletchamber", out var sExc) && sExc == "1" ? "[[+1]]" : "";
+        return $"<br><span style=\"color:#ff6905;\">{rgParts[0].Trim()}{sExtra} / {rgParts[1].Trim()}</span>";
     }
 
     //使用预计算的__z_chest_dmg/__z_head_dmg值
-    private static string MakeZombiePure(Dictionary<string, string> v, bool hasZombie, string key)
+    private static string MakeZombiePure(Dictionary<string, string> mpV, bool bHasZombie, string sKey)
     {
-        if (!hasZombie) return "";
-        string zKey = key == "__chest_dmg" ? "__z_chest_dmg" : "__z_head_dmg";
-        if (v.TryGetValue(zKey, out var zv) && !string.IsNullOrEmpty(zv) && zv != "0")
-            return $"<br><span style=\"color:#ff6905;\">{zv}</span>";
+        if (!bHasZombie) return "";
+        string sZKey = sKey == "__chest_dmg" ? "__z_chest_dmg" : "__z_head_dmg";
+        if (mpV.TryGetValue(sZKey, out var sZv) && !string.IsNullOrEmpty(sZv) && sZv != "0")
+            return $"<br><span style=\"color:#ff6905;\">{sZv}</span>";
         return "";
     }
 
     #endregion
     #region 脚本加载
 
-    private static Dictionary<string, Dictionary<string, string>> LoadAllScripts(string scriptsDir)
+    private static Dictionary<string, Dictionary<string, string>> LoadAllScripts(string sScriptsDir)
     {
-        var result = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
-        if (!Directory.Exists(scriptsDir))
+        var mpResult = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+        if (!Directory.Exists(sScriptsDir))
         {
-            LogService.Warn($"LoadAllScripts: scripts directory not found: {scriptsDir}");
-            return result;
+            LogService.Warn($"LoadAllScripts: scripts directory not found: {sScriptsDir}");
+            return mpResult;
         }
 
-        var files = Directory.GetFiles(scriptsDir, "weapon_*.txt");
-        LogService.Info($"LoadAllScripts: loading {files.Length} weapon scripts...");
-        foreach (var path in Directory.GetFiles(scriptsDir, "weapon_*.txt"))
+        var rgFiles = Directory.GetFiles(sScriptsDir, "weapon_*.txt");
+        LogService.Info($"LoadAllScripts: loading {rgFiles.Length} weapon scripts...");
+        foreach (var sPath in Directory.GetFiles(sScriptsDir, "weapon_*.txt"))
         {
             try
             {
-                var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                string content = WeaponScriptService.ReadScriptFile(path).Replace("\r\n", "\n");
-                int wd = content.IndexOf("WeaponData", StringComparison.Ordinal);
-                if (wd < 0) continue;
-                int bs = content.IndexOf('{', wd);
-                if (bs < 0) continue;
-                int be = WeaponScriptService.FindMatchingBrace(content, bs);
-                if (be < 0) continue;
-                string block = content.Substring(bs + 1, be - bs - 1);
-                foreach (Match m in ScriptKvRegex.Matches(block))
+                var mpValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                string sContent = WeaponScriptService.ReadScriptFile(sPath).Replace("\r\n", "\n");
+                int iWd = sContent.IndexOf("WeaponData", StringComparison.Ordinal);
+                if (iWd < 0) continue;
+                int iBs = sContent.IndexOf('{', iWd);
+                if (iBs < 0) continue;
+                int iBe = WeaponScriptService.FindMatchingBrace(sContent, iBs);
+                if (iBe < 0) continue;
+                string sBlock = sContent.Substring(iBs + 1, iBe - iBs - 1);
+                foreach (Match m in reScriptKv.Matches(sBlock))
                 {
                     //只收集顶层键值对 通过大括号计数跳过嵌套块内的同名键
-                    string before = block.Substring(0, m.Index);
-                    int ob = 0, cb = 0;
-                    for (int j = 0; j < before.Length; j++)
-                    { if (before[j] == '{') ob++; else if (before[j] == '}') cb++; }
-                    if (ob == cb) values[m.Groups[1].Value] = m.Groups[2].Value;
+                    string sBefore = sBlock.Substring(0, m.Index);
+                    int iOb = 0, iCb = 0;
+                    for (int j = 0; j < sBefore.Length; j++)
+                    { if (sBefore[j] == '{') iOb++; else if (sBefore[j] == '}') iCb++; }
+                    if (iOb == iCb) mpValues[m.Groups[1].Value] = m.Groups[2].Value;
                 }
-                int zi = content.IndexOf("zombie_stats", be, StringComparison.Ordinal);
-                if (zi >= 0) { LoadSubBlock(values, content, zi, "zombie_"); }
+                int iZi = sContent.IndexOf("zombie_stats", iBe, StringComparison.Ordinal);
+                if (iZi >= 0) { LoadSubBlock(mpValues, sContent, iZi, "zombie_"); }
 
-                if (values.Count > 0)
+                if (mpValues.Count > 0)
                 {
-                    PrecomputeDamageValues(values);
-                    result[Path.GetFileNameWithoutExtension(path)] = values;
+                    PrecomputeDamageValues(mpValues);
+                    mpResult[Path.GetFileNameWithoutExtension(sPath)] = mpValues;
                 }
             }
             catch (Exception ex)
             {
-                LogService.Error(ex, $"WikiTableConverter.LoadAllScripts: {Path.GetFileName(path)}");
+                LogService.Error(ex, $"WikiTableConverter.LoadAllScripts: {Path.GetFileName(sPath)}");
             }
         }
-        LogService.Info($"LoadAllScripts: {result.Count} scripts loaded");
-        return result;
+        LogService.Info($"LoadAllScripts: {mpResult.Count} scripts loaded");
+        return mpResult;
     }
 
-    private static void PrecomputeDamageValues(Dictionary<string, string> values)
+    private static void PrecomputeDamageValues(Dictionary<string, string> mpValues)
     {
-        double dg = GetDouble(values, "damagegeneric");
-        double ed = GetDouble(values, "explosiondamage");
-        if (ed > 0)
+        double dDg = GetDouble(mpValues, "damagegeneric");
+        double dEd = GetDouble(mpValues, "explosiondamage");
+        if (dEd > 0)
         {
-            values["__chest_dmg"] = FormatDouble(ed);
-            values["__head_dmg"] = FormatDouble(GetDouble(values, "explosionradius"));
-            double zed = GetDouble(values, "zombie_explosiondamage");
-            if (zed > 0)
+            mpValues["__chest_dmg"] = FormatDouble(dEd);
+            mpValues["__head_dmg"] = FormatDouble(GetDouble(mpValues, "explosionradius"));
+            double dZed = GetDouble(mpValues, "zombie_explosiondamage");
+            if (dZed > 0)
             {
-                values["__z_chest_dmg"] = FormatDouble(zed);
-                values["__z_head_dmg"] = FormatDouble(GetDouble(values, "zombie_explosionradius"));
+                mpValues["__z_chest_dmg"] = FormatDouble(dZed);
+                mpValues["__z_head_dmg"] = FormatDouble(GetDouble(mpValues, "zombie_explosionradius"));
             }
         }
-        else if (dg > 0)
+        else if (dDg > 0)
         {
-            double cm = Math.Max(GetDouble(values, "damagechestmultiplier"), 1.0);
-            double hm = Math.Max(GetDouble(values, "damageheadmultiplier"), 1.0);
-            double pellets = Math.Max(GetDouble(values, "bullets_per_shot"), 1.0);
-            values["__chest_dmg"] = FormatDouble(Math.Round(dg * cm * pellets, 2));
-            values["__head_dmg"] = FormatDouble(Math.Round(dg * hm * pellets, 2));
-            double zdg = GetDouble(values, "zombie_damagegeneric");
-            if (zdg > 0)
+            double dCm = Math.Max(GetDouble(mpValues, "damagechestmultiplier"), 1.0);
+            double dHm = Math.Max(GetDouble(mpValues, "damageheadmultiplier"), 1.0);
+            double dPellets = Math.Max(GetDouble(mpValues, "bullets_per_shot"), 1.0);
+            mpValues["__chest_dmg"] = FormatDouble(Math.Round(dDg * dCm * dPellets, 2));
+            mpValues["__head_dmg"] = FormatDouble(Math.Round(dDg * dHm * dPellets, 2));
+            double dZdg = GetDouble(mpValues, "zombie_damagegeneric");
+            if (dZdg > 0)
             {
-                double zcm = Math.Max(GetDouble(values, "zombie_damagechestmultiplier"), cm);
-                double zhm = Math.Max(GetDouble(values, "zombie_damageheadmultiplier"), hm);
-                double zpellets = Math.Max(GetDouble(values, "zombie_bullets_per_shot"), pellets);
-                values["__z_chest_dmg"] = FormatDouble(Math.Round(zdg * zcm * zpellets, 2));
-                values["__z_head_dmg"] = FormatDouble(Math.Round(zdg * zhm * zpellets, 2));
+                double dZcm = Math.Max(GetDouble(mpValues, "zombie_damagechestmultiplier"), dCm);
+                double dZhm = Math.Max(GetDouble(mpValues, "zombie_damageheadmultiplier"), dHm);
+                double dZpellets = Math.Max(GetDouble(mpValues, "zombie_bullets_per_shot"), dPellets);
+                mpValues["__z_chest_dmg"] = FormatDouble(Math.Round(dZdg * dZcm * dZpellets, 2));
+                mpValues["__z_head_dmg"] = FormatDouble(Math.Round(dZdg * dZhm * dZpellets, 2));
             }
         }
     }
 
-    private static void LoadSubBlock(Dictionary<string, string> values, string content, int blockIdx, string prefix)
+    private static void LoadSubBlock(Dictionary<string, string> mpValues, string sContent, int iBlockIdx, string sPrefix)
     {
-        int bs = content.IndexOf('{', blockIdx);
-        if (bs < 0) return;
-        int be = WeaponScriptService.FindMatchingBrace(content, bs);
-        if (be < 0) return;
-        foreach (Match m in ScriptKvRegex.Matches(content.Substring(bs + 1, be - bs - 1)))
-            values[prefix + m.Groups[1].Value] = m.Groups[2].Value;
+        int iBs = sContent.IndexOf('{', iBlockIdx);
+        if (iBs < 0) return;
+        int iBe = WeaponScriptService.FindMatchingBrace(sContent, iBs);
+        if (iBe < 0) return;
+        foreach (Match m in reScriptKv.Matches(sContent.Substring(iBs + 1, iBe - iBs - 1)))
+            mpValues[sPrefix + m.Groups[1].Value] = m.Groups[2].Value;
     }
 
-    private static double GetDouble(Dictionary<string, string> v, string key) =>
-        WeaponScriptService.GetDoubleVal(v, key);
+    private static double GetDouble(Dictionary<string, string> mpV, string sKey) =>
+        WeaponScriptService.GetDoubleVal(mpV, sKey);
 
     private static string FormatDouble(double d) =>
         WeaponScriptService.FormatDouble(d);
@@ -553,11 +553,11 @@ public static class WikiTableConverter
     #endregion
     #region 辅助
 
-    private static string StripWikiMarkup(string cell)
+    private static string StripWikiMarkup(string sCell)
     {
-        string s = Regex.Replace(cell, @"\[\[[^\]|]+\|([^\]]+)\]\]", "$1");
-        s = Regex.Replace(s, @"\[\[([^\]]+)\]\]", "$1");
-        return Regex.Replace(s, @"<[^>]+>", "");
+        string sResult = Regex.Replace(sCell, @"\[\[[^\]|]+\|([^\]]+)\]\]", "$1");
+        sResult = Regex.Replace(sResult, @"\[\[([^\]]+)\]\]", "$1");
+        return Regex.Replace(sResult, @"<[^>]+>", "");
     }
 
     #endregion

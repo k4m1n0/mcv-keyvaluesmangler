@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Net.Http;
-using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -11,57 +9,57 @@ namespace WeaponDamageCalc.Services;
 
 public static class WikiApiService
 {
-    private static readonly HttpClient Client = new()
+    private static readonly HttpClient hcClient = new()
     {
         BaseAddress = new Uri("https://wiki.militaryconflictvietnam.com"),
         Timeout = TimeSpan.FromSeconds(30)
     };
 
-    private static string? _csrfToken;
+    private static string? sCsrfToken;
 
-    public static bool IsLoggedIn => _csrfToken != null;
+    public static bool IsLoggedIn => sCsrfToken != null;
 
-    public static async Task<bool> LoginAsync(string username, string password)
+    public static async Task<bool> LoginAsync(string sUsername, string sPassword)
     {
-        _csrfToken = null;
+        sCsrfToken = null;
         LogService.Info("Wiki login attempt");
 
         try
         {
-            using var loginTokenResp = await Client.GetAsync(
+            using var respLoginToken = await hcClient.GetAsync(
                 "/api.php?action=query&meta=tokens&type=login&format=json");
-            var loginTokenJson = await loginTokenResp.Content.ReadAsStringAsync();
-            string? loginToken;
-            using (var doc = JsonDocument.Parse(loginTokenJson))
-                loginToken = doc.RootElement.GetProperty("query").GetProperty("tokens")
+            var sLoginTokenJson = await respLoginToken.Content.ReadAsStringAsync();
+            string? sLoginToken;
+            using (var jdocLogin = JsonDocument.Parse(sLoginTokenJson))
+                sLoginToken = jdocLogin.RootElement.GetProperty("query").GetProperty("tokens")
                     .GetProperty("logintoken").GetString();
 
-            if (loginToken == null)
+            if (sLoginToken == null)
             {
                 LogService.Error("Wiki login failed: could not get login token");
                 return false;
             }
 
-        var loginContent = new FormUrlEncodedContent(new Dictionary<string, string>
-        {
-            ["action"] = "login", ["lgname"] = username, ["lgpassword"] = password,
-            ["lgtoken"] = loginToken, ["format"] = "json"
-        });
-        using var loginResp = await Client.PostAsync("/api.php", loginContent);
-        var loginResult = await loginResp.Content.ReadAsStringAsync();
-        using var loginDoc = JsonDocument.Parse(loginResult);
-        if (loginDoc.RootElement.GetProperty("login").GetProperty("result").GetString() != "Success")
-        {
-            LogService.Error("Wiki login failed: invalid credentials");
-            return false;
-        }
+            var contentLogin = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["action"] = "login", ["lgname"] = sUsername, ["lgpassword"] = sPassword,
+                ["lgtoken"] = sLoginToken, ["format"] = "json"
+            });
+            using var respLogin = await hcClient.PostAsync("/api.php", contentLogin);
+            var sLoginResult = await respLogin.Content.ReadAsStringAsync();
+            using var jdocLoginResult = JsonDocument.Parse(sLoginResult);
+            if (jdocLoginResult.RootElement.GetProperty("login").GetProperty("result").GetString() != "Success")
+            {
+                LogService.Error("Wiki login failed: invalid credentials");
+                return false;
+            }
 
-        using var csrfResp = await Client.GetAsync(
-            "/api.php?action=query&meta=tokens&type=csrf&format=json");
-        var csrfJson = await csrfResp.Content.ReadAsStringAsync();
-        using var csrfDoc = JsonDocument.Parse(csrfJson);
-        _csrfToken = csrfDoc.RootElement.GetProperty("query").GetProperty("tokens")
-            .GetProperty("csrftoken").GetString();
+            using var respCsrf = await hcClient.GetAsync(
+                "/api.php?action=query&meta=tokens&type=csrf&format=json");
+            var sCsrfJson = await respCsrf.Content.ReadAsStringAsync();
+            using var jdocCsrf = JsonDocument.Parse(sCsrfJson);
+            sCsrfToken = jdocCsrf.RootElement.GetProperty("query").GetProperty("tokens")
+                .GetProperty("csrftoken").GetString();
 
             LogService.Info("Wiki login successful");
             return true;
@@ -73,61 +71,61 @@ public static class WikiApiService
         }
     }
 
-    public static void Logout() => _csrfToken = null;
+    public static void Logout() => sCsrfToken = null;
 
-    public static async Task<string?> GetPageSourceAsync(string pageTitle)
+    public static async Task<string?> GetPageSourceAsync(string sPageTitle)
     {
-        return await GetPageSourceInternalAsync(pageTitle, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+        return await GetPageSourceInternalAsync(sPageTitle, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
     }
 
-    private static async Task<string?> GetPageSourceInternalAsync(string pageTitle, HashSet<string> visited)
+    private static async Task<string?> GetPageSourceInternalAsync(string sPageTitle, HashSet<string> hsVisited)
     {
-        if (!visited.Add(pageTitle)) return null;
+        if (!hsVisited.Add(sPageTitle)) return null;
 
         try
         {
-            using var resp = await Client.GetAsync(
-                $"/api.php?action=parse&page={Uri.EscapeDataString(pageTitle)}&prop=wikitext&redirects=1&format=json");
-            var json = await resp.Content.ReadAsStringAsync();
-            using var doc = JsonDocument.Parse(json);
+            using var resp = await hcClient.GetAsync(
+                $"/api.php?action=parse&page={Uri.EscapeDataString(sPageTitle)}&prop=wikitext&redirects=1&format=json");
+            var sJson = await resp.Content.ReadAsStringAsync();
+            using var jdoc = JsonDocument.Parse(sJson);
 
-            if (doc.RootElement.TryGetProperty("error", out _))
+            if (jdoc.RootElement.TryGetProperty("error", out _))
             {
-                string? raw = await GetRawPageContentAsync(pageTitle);
-                if (raw == null) return null;
-                if (raw.TrimStart().StartsWith("#REDIRECT", StringComparison.OrdinalIgnoreCase))
+                string? sRaw = await GetRawPageContentAsync(sPageTitle);
+                if (sRaw == null) return null;
+                if (sRaw.TrimStart().StartsWith("#REDIRECT", StringComparison.OrdinalIgnoreCase))
                 {
-                    var redirectMatch = Regex.Match(raw, @"#REDIRECT\s*\[\[([^\]|]+)");
-                    if (redirectMatch.Success)
+                    var mRedirect = Regex.Match(sRaw, @"#REDIRECT\s*\[\[([^\]|]+)");
+                    if (mRedirect.Success)
                     {
-                        string redirectTarget = redirectMatch.Groups[1].Value.Trim();
-                        LogService.Info($"Wiki page redirect: {pageTitle} -> {redirectTarget}");
-                        return await GetPageSourceInternalAsync(redirectTarget, visited);
+                        string sRedirectTarget = mRedirect.Groups[1].Value.Trim();
+                        LogService.Info($"Wiki page redirect: {sPageTitle} -> {sRedirectTarget}");
+                        return await GetPageSourceInternalAsync(sRedirectTarget, hsVisited);
                     }
                 }
-                return raw;
+                return sRaw;
             }
 
-            return doc.RootElement.GetProperty("parse").GetProperty("wikitext").GetProperty("*").GetString();
+            return jdoc.RootElement.GetProperty("parse").GetProperty("wikitext").GetProperty("*").GetString();
         }
         catch (Exception ex)
         {
-            LogService.Error(ex, $"WikiApiService.GetPageSourceInternalAsync: {pageTitle}");
+            LogService.Error(ex, $"WikiApiService.GetPageSourceInternalAsync: {sPageTitle}");
             return null;
         }
     }
 
-    private static async Task<string?> GetRawPageContentAsync(string pageTitle)
+    private static async Task<string?> GetRawPageContentAsync(string sPageTitle)
     {
-        using var resp = await Client.GetAsync(
-            $"/index.php?title={Uri.EscapeDataString(pageTitle)}&action=raw");
+        using var resp = await hcClient.GetAsync(
+            $"/index.php?title={Uri.EscapeDataString(sPageTitle)}&action=raw");
         if (!resp.IsSuccessStatusCode) return null;
         return await resp.Content.ReadAsStringAsync();
     }
 
-    public static async Task<bool> SavePageAsync(string pageTitle, string wikitext, string summary)
+    public static async Task<bool> SavePageAsync(string sPageTitle, string sWikitext, string sSummary)
     {
-        if (_csrfToken == null)
+        if (sCsrfToken == null)
         {
             LogService.Error("WikiApiService.SavePageAsync: not logged in");
             return false;
@@ -137,91 +135,91 @@ public static class WikiApiService
         {
             var content = new FormUrlEncodedContent(new Dictionary<string, string>
             {
-                ["action"] = "edit", ["title"] = pageTitle, ["text"] = wikitext,
-                ["summary"] = summary, ["token"] = _csrfToken, ["format"] = "json", ["bot"] = "1"
+                ["action"] = "edit", ["title"] = sPageTitle, ["text"] = sWikitext,
+                ["summary"] = sSummary, ["token"] = sCsrfToken, ["format"] = "json", ["bot"] = "1"
             });
 
-            using var resp = await Client.PostAsync("/api.php", content);
-            var json = await resp.Content.ReadAsStringAsync();
-            using var doc = JsonDocument.Parse(json);
-            bool success = doc.RootElement.TryGetProperty("edit", out var edit)
-                && edit.TryGetProperty("result", out var result)
-                && result.GetString() == "Success";
+            using var resp = await hcClient.PostAsync("/api.php", content);
+            var sJson = await resp.Content.ReadAsStringAsync();
+            using var jdoc = JsonDocument.Parse(sJson);
+            bool bSuccess = jdoc.RootElement.TryGetProperty("edit", out var jelEdit)
+                && jelEdit.TryGetProperty("result", out var jelResult)
+                && jelResult.GetString() == "Success";
 
-            if (success)
-                LogService.Info($"Wiki page saved: {pageTitle}");
+            if (bSuccess)
+                LogService.Info($"Wiki page saved: {sPageTitle}");
             else
-                LogService.Error($"Wiki page save failed: {pageTitle}");
+                LogService.Error($"Wiki page save failed: {sPageTitle}");
 
-            return success;
+            return bSuccess;
         }
         catch (Exception ex)
         {
-            LogService.Error(ex, $"WikiApiService.SavePageAsync: {pageTitle}");
+            LogService.Error(ex, $"WikiApiService.SavePageAsync: {sPageTitle}");
             return false;
         }
     }
 
-    public static async Task<bool> IsSameContentAsync(string pageTitle, string localContent)
+    public static async Task<bool> IsSameContentAsync(string sPageTitle, string sLocalContent)
     {
-        var source = await GetPageSourceAsync(pageTitle);
-        if (source == null) return true;
-        return source.Replace("\r\n", "\n").Trim() == localContent.Replace("\r\n", "\n").Trim();
+        var sSource = await GetPageSourceAsync(sPageTitle);
+        if (sSource == null) return true;
+        return sSource.Replace("\r\n", "\n").Trim() == sLocalContent.Replace("\r\n", "\n").Trim();
     }
 
-    public static async Task<string?> FetchTemplateAsync(string url)
+    public static async Task<string?> FetchTemplateAsync(string sUrl)
     {
         try
         {
-            LogService.Info($"Fetching template: {url}");
-            var resp = await Client.GetAsync(url);
+            LogService.Info($"Fetching template: {sUrl}");
+            var resp = await hcClient.GetAsync(sUrl);
             if (!resp.IsSuccessStatusCode)
             {
-                LogService.Warn($"FetchTemplateAsync failed: HTTP {(int)resp.StatusCode} - {url}");
+                LogService.Warn($"FetchTemplateAsync failed: HTTP {(int)resp.StatusCode} - {sUrl}");
                 return null;
             }
             return await resp.Content.ReadAsStringAsync();
         }
         catch (Exception ex)
         {
-            LogService.Error(ex, $"WikiApiService.FetchTemplateAsync: {url}");
+            LogService.Error(ex, $"WikiApiService.FetchTemplateAsync: {sUrl}");
             return null;
         }
     }
 
-    public static async Task<HashSet<string>> GetExistingTitlesAsync(IEnumerable<string> titles)
+    public static async Task<HashSet<string>> GetExistingTitlesAsync(IEnumerable<string> rgTitles)
     {
-        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var list = titles.ToList();
-        LogService.Info($"Checking {list.Count} titles on wiki...");
-        using var semaphore = new SemaphoreSlim(3);
+        var hsExisting = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var rgList = rgTitles.ToList();
+        LogService.Info($"Checking {rgList.Count} titles on wiki...");
+        using var semSlim = new SemaphoreSlim(3);
 
-        async Task ProcessBatch(IEnumerable<string> batch)
+        async Task ProcessBatch(IEnumerable<string> rgBatch)
         {
-            await semaphore.WaitAsync();
+            await semSlim.WaitAsync();
             try
             {
-                string apiUrl = $"/api.php?action=query&titles={Uri.EscapeDataString(string.Join("|", batch))}&format=json&formatversion=2&redirects=1";
+                string sApiUrl = $"/api.php?action=query&titles={Uri.EscapeDataString(string.Join("|", rgBatch))}&format=json&formatversion=2&redirects=1";
 
-                for (int retry = 0; retry < 3; retry++)
+                for (int iRetry = 0; iRetry < 3; iRetry++)
                 {
                     try
                     {
-                        var json = await (await Client.GetAsync(apiUrl)).Content.ReadAsStringAsync();
-                        using var doc = JsonDocument.Parse(json);
-                        if (doc.RootElement.TryGetProperty("query", out var q) && q.TryGetProperty("pages", out var pages))
-                            lock (existing)
-                                foreach (var page in pages.EnumerateArray())
-                                    if (!page.TryGetProperty("missing", out _))
+                        var sJson = await (await hcClient.GetAsync(sApiUrl)).Content.ReadAsStringAsync();
+                        using var jdoc = JsonDocument.Parse(sJson);
+                        if (jdoc.RootElement.TryGetProperty("query", out var jelQ) && jelQ.TryGetProperty("pages", out var jelPages))
+                            lock (hsExisting)
+                                foreach (var jelPage in jelPages.EnumerateArray())
+                                    if (!jelPage.TryGetProperty("missing", out _))
                                     {
-                                        var t = page.GetProperty("title").GetString()!;
-                                        existing.Add(t); existing.Add(t.Replace("_", " "));
+                                        var sTitle = jelPage.GetProperty("title").GetString()!;
+                                        hsExisting.Add(sTitle); hsExisting.Add(sTitle.Replace("_", " "));
                                     }
                         break;
                     }
-                    catch (Exception ex) when (retry < 2)
+                    catch (Exception ex) when (iRetry < 2)
                     {
-                        LogService.Warn($"GetExistingTitlesAsync retry {retry + 1}/3: {ex.Message}");
+                        LogService.Warn($"GetExistingTitlesAsync retry {iRetry + 1}/3: {ex.Message}");
                         await Task.Delay(3000);
                     }
                 }
@@ -230,11 +228,11 @@ public static class WikiApiService
             {
                 LogService.Error(ex, "WikiApiService.GetExistingTitlesAsync batch");
             }
-            finally { semaphore.Release(); }
+            finally { semSlim.Release(); }
         }
 
-        await Task.WhenAll(list.Chunk(20).Select(ProcessBatch));
-        LogService.Info($"Existing titles found: {existing.Count}");
-        return existing;
+        await Task.WhenAll(rgList.Chunk(20).Select(ProcessBatch));
+        LogService.Info($"Existing titles found: {hsExisting.Count}");
+        return hsExisting;
     }
 }

@@ -15,83 +15,83 @@ public partial class Form1
     {
         try
         {
-            if (initializing)
+            if (bInitializing)
             {
-                if (cmbWeaponsL.SelectedItem is WeaponData initW)
+                if (cmbWeaponsL.SelectedItem is WeaponData wInit)
                 {
-                    currentWeaponLeft = initW;
-                    LoadWeaponToControls(initW, true);
+                    wCurrentLeft = wInit;
+                    LoadWeaponToControls(wInit, true);
                     StoreSnapshot();
                 }
                 return;
                 //初始化阶段直接加载不检查
             }
 
-            bool isRapid = _rapidStartLeft != null && (DateTime.Now - _rapidDeadlineL).TotalMilliseconds < RapidSettleMs;
-            if (!isRapid)
+            bool bIsRapid = sRapidStartLeft != null && (DateTime.Now - dtRapidDeadlineL).TotalMilliseconds < iRapidSettleMs;
+            if (!bIsRapid)
             {
-                bool wasRapid = _rapidStartLeft != null;
-                if (showingAltStats)
+                bool bWasRapid = sRapidStartLeft != null;
+                if (bShowingAltStats)
                 {
-                    bool focusLeft = lastFocusLeft;
-                    if (focusLeft && currentWeaponLeft != null && WeaponHasAltStats(currentWeaponLeft, currentAltStatMode))
-                        SyncAltStatFields(currentWeaponLeft, currentAltStatMode);
-                    else if (!focusLeft && currentWeaponRight != null && WeaponHasAltStats(currentWeaponRight, currentAltStatMode))
-                        SyncAltStatFields(currentWeaponRight, currentAltStatMode);
+                    bool bFocusLeft = bLastFocusLeft;
+                    if (bFocusLeft && wCurrentLeft != null && WeaponHasAltStats(wCurrentLeft, amCurrentAltStat))
+                        SyncAltStatFields(wCurrentLeft, amCurrentAltStat);
+                    else if (!bFocusLeft && wCurrentRight != null && WeaponHasAltStats(wCurrentRight, amCurrentAltStat))
+                        SyncAltStatFields(wCurrentRight, amCurrentAltStat);
                 }
-                else if (currentWeaponLeft != null && HasUnsavedChanges(true))
+                else if (wCurrentLeft != null && HasUnsavedChanges(true))
                 {
-                    var result = MessageBox.Show("Unsaved changes to left weapon. Discard?",
+                    var drResult = MessageBox.Show("Unsaved changes to left weapon. Discard?",
                         "Unsaved Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-                    if (result != DialogResult.Yes)
+                    if (drResult != DialogResult.Yes)
                     {
                         cmbWeaponsL.SelectedIndexChanged -= WeaponSelectedL;
-                        cmbWeaponsL.SelectedItem = currentWeaponLeft;
+                        cmbWeaponsL.SelectedItem = wCurrentLeft;
                         cmbWeaponsL.SelectedIndexChanged += WeaponSelectedL;
                         return;
                     }
                 }
                 PushUndo();
-                _rapidStartLeft = wasRapid ? null : currentWeaponLeft?.ScriptName;
+                sRapidStartLeft = bWasRapid ? null : wCurrentLeft?.ScriptName;
             }
             //rapid中跳过弹窗和入栈 只更新截止时间
-            _rapidDeadlineL = DateTime.Now.AddMilliseconds(RapidSettleMs);
+            dtRapidDeadlineL = DateTime.Now.AddMilliseconds(iRapidSettleMs);
 
             if (cmbWeaponsL.SelectedItem is WeaponData w)
             {
-                currentWeaponLeft = w;
+                wCurrentLeft = w;
                 LoadWeaponToControls(w, true);
                 UpdateAllDamage();
                 pnlSpread.Invalidate();
                 pnlRecoil.Invalidate();
-                if (!isRapid)
+                if (!bIsRapid)
                     LogService.Debug($"Weapon selected L: {w.ScriptName}");
                 else
                     LogService.DebugDebounce("rapid_weapon_L", $"Rapid weapon L: {w.ScriptName}", 300);
-                if (showingAltStats && WeaponHasAltStats(w, currentAltStatMode))
+                if (bShowingAltStats && WeaponHasAltStats(w, amCurrentAltStat))
                 {
-                    updatingControls = true;
-                    LoadAltStatsToControls(true, currentAltStatMode);
-                    SetAltStatReadonly(true, currentAltStatMode);
-                    updatingControls = false;
-                    HighlightAltStatButton(currentAltStatMode);
+                    bUpdatingControls = true;
+                    LoadAltStatsToControls(true, amCurrentAltStat);
+                    SetAltStatReadonly(true, amCurrentAltStat);
+                    bUpdatingControls = false;
+                    HighlightAltStatButton(amCurrentAltStat);
                     UpdateAllDamage();
                     pnlSpread.Invalidate();
                     pnlRecoil.Invalidate();
-                    StoreSnapshot(leftOnly: true);
+                    StoreSnapshot(bLeftOnly: true);
                 }
-                if (showingAltStats && !WeaponHasAltStats(w, currentAltStatMode))
+                if (bShowingAltStats && !WeaponHasAltStats(w, amCurrentAltStat))
                 {
                     RestoreAllNudEnabled(true);
                     LoadWeaponToControls(w, true);
-                    HighlightAltStatButton(currentAltStatMode);
+                    HighlightAltStatButton(amCurrentAltStat);
                     UpdateAllDamage();
                     pnlSpread.Invalidate();
                     pnlRecoil.Invalidate();
-                    StoreSnapshot(leftOnly: true);
+                    StoreSnapshot(bLeftOnly: true);
                 }
-                if (!showingAltStats)
-                    StoreSnapshot(leftOnly: true);
+                if (!bShowingAltStats)
+                    StoreSnapshot(bLeftOnly: true);
             }
         }
         catch (Exception ex)
@@ -104,81 +104,81 @@ public partial class Form1
     {
         try
         {
-        if (initializing)
+        if (bInitializing)
             {
-                if (cmbWeaponsR.SelectedItem is WeaponData initW)
+                if (cmbWeaponsR.SelectedItem is WeaponData wInit)
                 {
-                    currentWeaponRight = initW;
-                    LoadWeaponToControls(initW, false);
+                    wCurrentRight = wInit;
+                    LoadWeaponToControls(wInit, false);
                     StoreSnapshot();
                 }
                 return;
             }
 
-            bool isRapid = _rapidStartRight != null && (DateTime.Now - _rapidDeadlineR).TotalMilliseconds < RapidSettleMs;
-            if (!isRapid)
+            bool bIsRapid = sRapidStartRight != null && (DateTime.Now - dtRapidDeadlineR).TotalMilliseconds < iRapidSettleMs;
+            if (!bIsRapid)
             {
-                bool wasRapid = _rapidStartRight != null;
-                if (showingAltStats)
+                bool bWasRapid = sRapidStartRight != null;
+                if (bShowingAltStats)
                 {
-                    bool focusLeft = lastFocusLeft;
-                    if (focusLeft && currentWeaponLeft != null && WeaponHasAltStats(currentWeaponLeft, currentAltStatMode))
-                        SyncAltStatFields(currentWeaponLeft, currentAltStatMode);
-                    else if (!focusLeft && currentWeaponRight != null && WeaponHasAltStats(currentWeaponRight, currentAltStatMode))
-                        SyncAltStatFields(currentWeaponRight, currentAltStatMode);
+                    bool bFocusLeft = bLastFocusLeft;
+                    if (bFocusLeft && wCurrentLeft != null && WeaponHasAltStats(wCurrentLeft, amCurrentAltStat))
+                        SyncAltStatFields(wCurrentLeft, amCurrentAltStat);
+                    else if (!bFocusLeft && wCurrentRight != null && WeaponHasAltStats(wCurrentRight, amCurrentAltStat))
+                        SyncAltStatFields(wCurrentRight, amCurrentAltStat);
                 }
-                else if (currentWeaponRight != null && HasUnsavedChanges(false))
+                else if (wCurrentRight != null && HasUnsavedChanges(false))
                 {
-                    var result = MessageBox.Show("Unsaved changes to right weapon. Discard?",
+                    var drResult = MessageBox.Show("Unsaved changes to right weapon. Discard?",
                         "Unsaved Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-                    if (result != DialogResult.Yes)
+                    if (drResult != DialogResult.Yes)
                     {
                         cmbWeaponsR.SelectedIndexChanged -= WeaponSelectedR;
-                        cmbWeaponsR.SelectedItem = currentWeaponRight;
+                        cmbWeaponsR.SelectedItem = wCurrentRight;
                         cmbWeaponsR.SelectedIndexChanged += WeaponSelectedR;
                         return;
                     }
                 }
                 PushUndo();
-                _rapidStartRight = wasRapid ? null : currentWeaponRight?.ScriptName;
+                sRapidStartRight = bWasRapid ? null : wCurrentRight?.ScriptName;
             }
-            _rapidDeadlineR = DateTime.Now.AddMilliseconds(RapidSettleMs);
+            dtRapidDeadlineR = DateTime.Now.AddMilliseconds(iRapidSettleMs);
 
             if (cmbWeaponsR.SelectedItem is WeaponData w)
             {
-                currentWeaponRight = w;
+                wCurrentRight = w;
                 LoadWeaponToControls(w, false);
                 UpdateAllDamage();
                 pnlSpread.Invalidate();
                 pnlRecoil.Invalidate();
-                if (!isRapid)
+                if (!bIsRapid)
                     LogService.Debug($"Weapon selected R: {w.ScriptName}");
                 else
                     LogService.DebugDebounce("rapid_weapon_R", $"Rapid weapon R: {w.ScriptName}", 300);
-                if (showingAltStats && WeaponHasAltStats(w, currentAltStatMode))
+                if (bShowingAltStats && WeaponHasAltStats(w, amCurrentAltStat))
                 {
-                    updatingControls = true;
-                    LoadAltStatsToControls(false, currentAltStatMode);
-                    SetAltStatReadonly(false, currentAltStatMode);
-                    updatingControls = false;
-                    HighlightAltStatButton(currentAltStatMode);
+                    bUpdatingControls = true;
+                    LoadAltStatsToControls(false, amCurrentAltStat);
+                    SetAltStatReadonly(false, amCurrentAltStat);
+                    bUpdatingControls = false;
+                    HighlightAltStatButton(amCurrentAltStat);
                     UpdateAllDamage();
                     pnlSpread.Invalidate();
                     pnlRecoil.Invalidate();
-                    StoreSnapshot(leftOnly: false);
+                    StoreSnapshot(bLeftOnly: false);
                 }
-                if (showingAltStats && !WeaponHasAltStats(w, currentAltStatMode))
+                if (bShowingAltStats && !WeaponHasAltStats(w, amCurrentAltStat))
                 {
                     RestoreAllNudEnabled(false);
                     LoadWeaponToControls(w, false);
-                    HighlightAltStatButton(currentAltStatMode);
+                    HighlightAltStatButton(amCurrentAltStat);
                     UpdateAllDamage();
                     pnlSpread.Invalidate();
                     pnlRecoil.Invalidate();
-                    StoreSnapshot(leftOnly: false);
+                    StoreSnapshot(bLeftOnly: false);
                 }
-                if (!showingAltStats)
-                    StoreSnapshot(leftOnly: false);
+                if (!bShowingAltStats)
+                    StoreSnapshot(bLeftOnly: false);
             }
         }
         catch (Exception ex)
@@ -187,101 +187,101 @@ public partial class Form1
         }
     }
 
-    private bool HasUnsavedChanges(bool isLeft, bool checkBothSides = false)
+    private bool HasUnsavedChanges(bool bIsLeft, bool bCheckBothSides = false)
     {
-        var snap = isLeft ? _snapshotLeft : _snapshotRight;
-        if (snap == null)
+        var wSnap = bIsLeft ? wSnapshotLeft : wSnapshotRight;
+        if (wSnap == null)
         {
-            LogService.Debug($"HasUnsavedChanges({(isLeft ? "L" : "R")}): snap is null -> false");
+            LogService.Debug($"HasUnsavedChanges({(bIsLeft ? "L" : "R")}): snap is null -> false");
             return false;
         }
         //同一武器时任意一侧有修改都算 不区分焦点
-        if (currentWeaponLeft != null && currentWeaponRight != null
-            && ReferenceEquals(currentWeaponLeft, currentWeaponRight))
+        if (wCurrentLeft != null && wCurrentRight != null
+            && ReferenceEquals(wCurrentLeft, wCurrentRight))
         {
-            if (!checkBothSides)
+            if (!bCheckBothSides)
             {
-                var temp = new WeaponData();
-                SaveControlsToWeapon(temp, isLeft);
-                bool diff = !WeaponDataEquals(temp, snap);
-                LogService.Debug($"HasUnsavedChanges(sameWeapon, {(isLeft ? "L" : "R")} only): diff={diff}");
-                return diff;
+                var wTemp = new WeaponData();
+                SaveControlsToWeapon(wTemp, bIsLeft);
+                bool bDiff = !WeaponDataEquals(wTemp, wSnap);
+                LogService.Debug($"HasUnsavedChanges(sameWeapon, {(bIsLeft ? "L" : "R")} only): diff={bDiff}");
+                return bDiff;
             }
-            var tempL = new WeaponData(); SaveControlsToWeapon(tempL, true);
-            var tempR = new WeaponData(); SaveControlsToWeapon(tempR, false);
-            bool leftDiff = !WeaponDataEquals(tempL, _snapshotLeft);
-            bool rightDiff = !WeaponDataEquals(tempR, _snapshotRight);
-            bool result = leftDiff || rightDiff;
-            LogService.Debug($"HasUnsavedChanges(sameWeapon, both): L={leftDiff}, R={rightDiff} -> {result}");
-            return result;
+            var wTempL = new WeaponData(); SaveControlsToWeapon(wTempL, true);
+            var wTempR = new WeaponData(); SaveControlsToWeapon(wTempR, false);
+            bool bLeftDiff = !WeaponDataEquals(wTempL, wSnapshotLeft);
+            bool bRightDiff = !WeaponDataEquals(wTempR, wSnapshotRight);
+            bool bResult = bLeftDiff || bRightDiff;
+            LogService.Debug($"HasUnsavedChanges(sameWeapon, both): L={bLeftDiff}, R={bRightDiff} -> {bResult}");
+            return bResult;
         }
-        var temp2 = new WeaponData();
-        SaveControlsToWeapon(temp2, isLeft);
-        bool diff2 = !WeaponDataEquals(temp2, snap);
-        LogService.Debug($"HasUnsavedChanges({(isLeft ? "L" : "R")}): diff={diff2}");
-        return diff2;
+        var wTemp2 = new WeaponData();
+        SaveControlsToWeapon(wTemp2, bIsLeft);
+        bool bDiff2 = !WeaponDataEquals(wTemp2, wSnap);
+        LogService.Debug($"HasUnsavedChanges({(bIsLeft ? "L" : "R")}): diff={bDiff2}");
+        return bDiff2;
         //控件值写入临时对象与保存点快照比对
     }
 
-    private static bool WeaponDataEquals(WeaponData a, WeaponData b)//双浮点比对容忍0.0001误差 防止SaveControlsToWeapon的SliderStep浮点往返造成假阳性
+    private static bool WeaponDataEquals(WeaponData wA, WeaponData wB)//双浮点比对容忍0.0001误差 防止SaveControlsToWeapon的SliderStep浮点往返造成假阳性
     {
-        return NullableEquals(a.DamageHeadMultiplier, b.DamageHeadMultiplier)
-            && NullableEquals(a.DamageChestMultiplier, b.DamageChestMultiplier)
-            && NullableEquals(a.DamageStomachMultiplier, b.DamageStomachMultiplier)
-            && NullableEquals(a.DamageLegMultiplier, b.DamageLegMultiplier)
-            && NullableEquals(a.DamageArmMultiplier, b.DamageArmMultiplier)
-            && NullableEquals(a.BulletSpread, b.BulletSpread)
-            && NullableEquals(a.BulletSpreadDegreesIronsighted, b.BulletSpreadDegreesIronsighted)
-            && NullableEquals(a.BulletSpreadDegreesBipod, b.BulletSpreadDegreesBipod)
-            && NullableEquals(a.BulletSpreadDegreesBipodIronsighted, b.BulletSpreadDegreesBipodIronsighted)
-            && NullableEquals(a.ViewSlideRecoilUp, b.ViewSlideRecoilUp)
-            && NullableEquals(a.ViewSlideRecoilRight, b.ViewSlideRecoilRight)
-            && NullableEquals(a.ViewSlideRecoilIronsightUp, b.ViewSlideRecoilIronsightUp)
-            && NullableEquals(a.ViewSlideRecoilIronsightRight, b.ViewSlideRecoilIronsightRight)
-            && string.Equals(a.FireModes, b.FireModes)
-            && IntNullableEquals(a.FireRate, b.FireRate)
-            && IntNullableEquals(a.SecondaryFireRate, b.SecondaryFireRate)
-            && NullableEquals(a.RangeModifier, b.RangeModifier)
-            && string.Equals(a.ClipSize, b.ClipSize)
-            && IntNullableEquals(a.ExtraBulletChamber, b.ExtraBulletChamber)
-            && IntNullableEquals(a.BulletsPerShot, b.BulletsPerShot)
-            && NullableEquals(a.IronsightSpeedScale, b.IronsightSpeedScale)
-            && IntNullableEquals(a.IronSight, b.IronSight)
-            && NullableEquals(a.Weight, b.Weight)
-            && IntNullableEquals(a.ZMBuyPrice, b.ZMBuyPrice)
-            && IntNullableEquals(a.ZMWeight, b.ZMWeight)
-            && NullableEquals(a.MetalPenetrationDepth, b.MetalPenetrationDepth)
-            && NullableEquals(a.GlassPenetrationDepth, b.GlassPenetrationDepth)
-            && NullableEquals(a.ConcretePenetrationDepth, b.ConcretePenetrationDepth)
-            && NullableEquals(a.WoodPenetrationDepth, b.WoodPenetrationDepth)
-            && NullableEquals(a.OtherPenetrationDepth, b.OtherPenetrationDepth)
-            && NullableEquals(a.MetalDamageModifier, b.MetalDamageModifier)
-            && NullableEquals(a.GlassDamageModifier, b.GlassDamageModifier)
-            && NullableEquals(a.ConcreteDamageModifier, b.ConcreteDamageModifier)
-            && NullableEquals(a.WoodDamageModifier, b.WoodDamageModifier)
-            && NullableEquals(a.OtherDamageModifier, b.OtherDamageModifier)
-            && NullableEquals(a.CrouchSpreadMultiplier, b.CrouchSpreadMultiplier)
-            && NullableEquals(a.ProneSpreadMultiplier, b.ProneSpreadMultiplier)
-            && NullableEquals(a.StandMoveSpreadMultiplier, b.StandMoveSpreadMultiplier)
-            && NullableEquals(a.SneakMoveSpreadMultiplier, b.SneakMoveSpreadMultiplier)
-            && NullableEquals(a.CrouchMoveSpreadMultiplier, b.CrouchMoveSpreadMultiplier)
-            && NullableEquals(a.JumpSpreadMultiplier, b.JumpSpreadMultiplier)
-            && NullableEquals(a.DamageGeneric, b.DamageGeneric);
+        return NullableEquals(wA.DamageHeadMultiplier, wB.DamageHeadMultiplier)
+            && NullableEquals(wA.DamageChestMultiplier, wB.DamageChestMultiplier)
+            && NullableEquals(wA.DamageStomachMultiplier, wB.DamageStomachMultiplier)
+            && NullableEquals(wA.DamageLegMultiplier, wB.DamageLegMultiplier)
+            && NullableEquals(wA.DamageArmMultiplier, wB.DamageArmMultiplier)
+            && NullableEquals(wA.BulletSpread, wB.BulletSpread)
+            && NullableEquals(wA.BulletSpreadDegreesIronsighted, wB.BulletSpreadDegreesIronsighted)
+            && NullableEquals(wA.BulletSpreadDegreesBipod, wB.BulletSpreadDegreesBipod)
+            && NullableEquals(wA.BulletSpreadDegreesBipodIronsighted, wB.BulletSpreadDegreesBipodIronsighted)
+            && NullableEquals(wA.ViewSlideRecoilUp, wB.ViewSlideRecoilUp)
+            && NullableEquals(wA.ViewSlideRecoilRight, wB.ViewSlideRecoilRight)
+            && NullableEquals(wA.ViewSlideRecoilIronsightUp, wB.ViewSlideRecoilIronsightUp)
+            && NullableEquals(wA.ViewSlideRecoilIronsightRight, wB.ViewSlideRecoilIronsightRight)
+            && string.Equals(wA.FireModes, wB.FireModes)
+            && IntNullableEquals(wA.FireRate, wB.FireRate)
+            && IntNullableEquals(wA.SecondaryFireRate, wB.SecondaryFireRate)
+            && NullableEquals(wA.RangeModifier, wB.RangeModifier)
+            && string.Equals(wA.ClipSize, wB.ClipSize)
+            && IntNullableEquals(wA.ExtraBulletChamber, wB.ExtraBulletChamber)
+            && IntNullableEquals(wA.BulletsPerShot, wB.BulletsPerShot)
+            && NullableEquals(wA.IronsightSpeedScale, wB.IronsightSpeedScale)
+            && IntNullableEquals(wA.IronSight, wB.IronSight)
+            && NullableEquals(wA.Weight, wB.Weight)
+            && IntNullableEquals(wA.ZMBuyPrice, wB.ZMBuyPrice)
+            && IntNullableEquals(wA.ZMWeight, wB.ZMWeight)
+            && NullableEquals(wA.MetalPenetrationDepth, wB.MetalPenetrationDepth)
+            && NullableEquals(wA.GlassPenetrationDepth, wB.GlassPenetrationDepth)
+            && NullableEquals(wA.ConcretePenetrationDepth, wB.ConcretePenetrationDepth)
+            && NullableEquals(wA.WoodPenetrationDepth, wB.WoodPenetrationDepth)
+            && NullableEquals(wA.OtherPenetrationDepth, wB.OtherPenetrationDepth)
+            && NullableEquals(wA.MetalDamageModifier, wB.MetalDamageModifier)
+            && NullableEquals(wA.GlassDamageModifier, wB.GlassDamageModifier)
+            && NullableEquals(wA.ConcreteDamageModifier, wB.ConcreteDamageModifier)
+            && NullableEquals(wA.WoodDamageModifier, wB.WoodDamageModifier)
+            && NullableEquals(wA.OtherDamageModifier, wB.OtherDamageModifier)
+            && NullableEquals(wA.CrouchSpreadMultiplier, wB.CrouchSpreadMultiplier)
+            && NullableEquals(wA.ProneSpreadMultiplier, wB.ProneSpreadMultiplier)
+            && NullableEquals(wA.StandMoveSpreadMultiplier, wB.StandMoveSpreadMultiplier)
+            && NullableEquals(wA.SneakMoveSpreadMultiplier, wB.SneakMoveSpreadMultiplier)
+            && NullableEquals(wA.CrouchMoveSpreadMultiplier, wB.CrouchMoveSpreadMultiplier)
+            && NullableEquals(wA.JumpSpreadMultiplier, wB.JumpSpreadMultiplier)
+            && NullableEquals(wA.DamageGeneric, wB.DamageGeneric);
     }
 
-    private static bool NullableEquals(double? a, double? b)
+    private static bool NullableEquals(double? fA, double? fB)
     {
-        double va = a ?? 0.0;
-        double vb = b ?? 0.0;
-        return Math.Abs(va - vb) < 0.001;
+        double dVa = fA ?? 0.0;
+        double dVb = fB ?? 0.0;
+        return Math.Abs(dVa - dVb) < 0.001;
         //容差比较 防止掉精度导致误判为未保存
     }
 
-    private static bool IntNullableEquals(int? a, int? b)
+    private static bool IntNullableEquals(int? nA, int? nB)
     {
-        if (!a.HasValue && !b.HasValue) return true;
-        if (!a.HasValue || !b.HasValue) return false;
-        return a.Value == b.Value;
+        if (!nA.HasValue && !nB.HasValue) return true;
+        if (!nA.HasValue || !nB.HasValue) return false;
+        return nA.Value == nB.Value;
     }
 
     #endregion
@@ -289,51 +289,51 @@ public partial class Form1
 
     private void SliderChangedL(object? sender, EventArgs e)
     {
-        if (updatingControls) return;
-        updatingControls = true;//都是防止滑块和数字框互相触发死循环
+        if (bUpdatingControls) return;
+        bUpdatingControls = true;//都是防止滑块和数字框互相触发死循环
         if (sender is TrackBar tb && tb.Tag is NumericUpDown nud)
-            nud.Value = Math.Round((decimal)(tb.Value * SliderStep), 2);
-        updatingControls = false;
+            nud.Value = Math.Round((decimal)(tb.Value * dSliderStep), 2);
+        bUpdatingControls = false;
         UpdateAllDamage();
     }
 
     private void SliderChangedR(object? sender, EventArgs e)
     {
-        if (updatingControls) return;
-        updatingControls = true;
+        if (bUpdatingControls) return;
+        bUpdatingControls = true;
         if (sender is TrackBar tb && tb.Tag is NumericUpDown nud)
-            nud.Value = Math.Round((decimal)(tb.Value * SliderStep), 2);
-        updatingControls = false;
+            nud.Value = Math.Round((decimal)(tb.Value * dSliderStep), 2);
+        bUpdatingControls = false;
         UpdateAllDamage();
     }
 
     private void NumericChangedL(object? sender, EventArgs e)
     {
-        if (updatingControls) return;
-        updatingControls = true;
+        if (bUpdatingControls) return;
+        bUpdatingControls = true;
         if (sender is NumericUpDown nud && nud.Tag is TrackBar tb)
         {
-            int iv = (int)Math.Round((double)nud.Value / SliderStep);
-            iv = Math.Max(tb.Minimum, Math.Min(tb.Maximum, iv));
-            tb.Value = iv;
+            int iIv = (int)Math.Round((double)nud.Value / dSliderStep);
+            iIv = Math.Max(tb.Minimum, Math.Min(tb.Maximum, iIv));
+            tb.Value = iIv;
             nud.Value = Math.Round(nud.Value, 2);
         }
-        updatingControls = false;
+        bUpdatingControls = false;
         UpdateAllDamage();
     }
 
     private void NumericChangedR(object? sender, EventArgs e)
     {
-        if (updatingControls) return;
-        updatingControls = true;
+        if (bUpdatingControls) return;
+        bUpdatingControls = true;
         if (sender is NumericUpDown nud && nud.Tag is TrackBar tb)
         {
-            int iv = (int)Math.Round((double)nud.Value / SliderStep);
-            iv = Math.Max(tb.Minimum, Math.Min(tb.Maximum, iv));
-            tb.Value = iv;
+            int iIv = (int)Math.Round((double)nud.Value / dSliderStep);
+            iIv = Math.Max(tb.Minimum, Math.Min(tb.Maximum, iIv));
+            tb.Value = iIv;
             nud.Value = Math.Round(nud.Value, 2);
         }
-        updatingControls = false;
+        bUpdatingControls = false;
         UpdateAllDamage();
     }
 
@@ -357,104 +357,104 @@ public partial class Form1
 
     private async void BtnSave_Click(object? sender, EventArgs e)
     {
-        if (System.Threading.Interlocked.Exchange(ref saveLock, 1) != 0) return;
+        if (System.Threading.Interlocked.Exchange(ref iSaveLock, 1) != 0) return;
         try
         {
             LogService.Info("BtnSave: saving weapons...");
             //强制提交活跃控件的待定输入 防止NUD焦点未移走导致值未更新
-            var active = this.ActiveControl;
-            if (active != null) { this.ActiveControl = null; active.Focus(); }
-            bool sameWeapon = currentWeaponLeft != null && currentWeaponRight != null
-                && ReferenceEquals(currentWeaponLeft, currentWeaponRight);
-            if (sameWeapon)
+            var ctrlActive = this.ActiveControl;
+            if (ctrlActive != null) { this.ActiveControl = null; ctrlActive.Focus(); }
+            bool bSameWeapon = wCurrentLeft != null && wCurrentRight != null
+                && ReferenceEquals(wCurrentLeft, wCurrentRight);
+            if (bSameWeapon)
             {
                 //同一武器时只保存焦点所在侧 防止后保存的一侧覆盖前一侧
-                bool focusLeft = IsControlOnLeft(active);
-                if (focusLeft)
+                bool bFocusLeft = IsControlOnLeft(ctrlActive);
+                if (bFocusLeft)
                 {
-                    if (showingAltStats)
+                    if (bShowingAltStats)
                     {
-                        SyncAltStatFields(currentWeaponLeft!, currentAltStatMode);
-                        var oldClone = CloneTopLevelFields(currentWeaponLeft!);
-                        SyncAltStatsToMatchTopLevel(oldClone, currentWeaponLeft!);
-                        LoadAltStatsToControls(false, currentAltStatMode);
+                        SyncAltStatFields(wCurrentLeft!, amCurrentAltStat);
+                        var wOldClone = CloneTopLevelFields(wCurrentLeft!);
+                        SyncAltStatsToMatchTopLevel(wOldClone, wCurrentLeft!);
+                        LoadAltStatsToControls(false, amCurrentAltStat);
                     }
                     else
                     {
-                        var oldW = CloneTopLevelFields(currentWeaponLeft!);
-                        SaveControlsToWeapon(currentWeaponLeft!, true);
-                        SyncAltStatsToMatchTopLevel(oldW, currentWeaponLeft!);
-                        LoadWeaponToControls(currentWeaponLeft!, false);
+                        var wOld = CloneTopLevelFields(wCurrentLeft!);
+                        SaveControlsToWeapon(wCurrentLeft!, true);
+                        SyncAltStatsToMatchTopLevel(wOld, wCurrentLeft!);
+                        LoadWeaponToControls(wCurrentLeft!, false);
                     }
                 }
                 else
                 {
-                    if (showingAltStats)
+                    if (bShowingAltStats)
                     {
-                        SyncAltStatFields(currentWeaponRight!, currentAltStatMode);
-                        var oldClone = CloneTopLevelFields(currentWeaponRight!);
-                        SyncAltStatsToMatchTopLevel(oldClone, currentWeaponRight!);
-                        LoadAltStatsToControls(true, currentAltStatMode);
+                        SyncAltStatFields(wCurrentRight!, amCurrentAltStat);
+                        var wOldClone = CloneTopLevelFields(wCurrentRight!);
+                        SyncAltStatsToMatchTopLevel(wOldClone, wCurrentRight!);
+                        LoadAltStatsToControls(true, amCurrentAltStat);
                     }
                     else
                     {
-                        var oldW = CloneTopLevelFields(currentWeaponRight!);
-                        SaveControlsToWeapon(currentWeaponRight!, false);
-                        SyncAltStatsToMatchTopLevel(oldW, currentWeaponRight!);
-                        LoadWeaponToControls(currentWeaponRight!, true);
+                        var wOld = CloneTopLevelFields(wCurrentRight!);
+                        SaveControlsToWeapon(wCurrentRight!, false);
+                        SyncAltStatsToMatchTopLevel(wOld, wCurrentRight!);
+                        LoadWeaponToControls(wCurrentRight!, true);
                     }
                 }
                 UpdateAllDamage(); pnlSpread.Invalidate(); pnlRecoil.Invalidate();
             }
-            else if (!showingAltStats)
+            else if (!bShowingAltStats)
             {
-                if (currentWeaponLeft != null)
+                if (wCurrentLeft != null)
                 {
-                    var oldL = CloneTopLevelFields(currentWeaponLeft);
-                    SaveControlsToWeapon(currentWeaponLeft, true);
-                    SyncAltStatsToMatchTopLevel(oldL, currentWeaponLeft);
+                    var wOldL = CloneTopLevelFields(wCurrentLeft);
+                    SaveControlsToWeapon(wCurrentLeft, true);
+                    SyncAltStatsToMatchTopLevel(wOldL, wCurrentLeft);
                 }
-                if (currentWeaponRight != null)
+                if (wCurrentRight != null)
                 {
-                    var oldR = CloneTopLevelFields(currentWeaponRight);
-                    SaveControlsToWeapon(currentWeaponRight, false);
-                    SyncAltStatsToMatchTopLevel(oldR, currentWeaponRight);
+                    var wOldR = CloneTopLevelFields(wCurrentRight);
+                    SaveControlsToWeapon(wCurrentRight, false);
+                    SyncAltStatsToMatchTopLevel(wOldR, wCurrentRight);
                 }
             }
-            if (showingAltStats && !sameWeapon)
+            if (bShowingAltStats && !bSameWeapon)
             {
-                if (currentWeaponLeft != null)
+                if (wCurrentLeft != null)
                 {
-                    SyncAltStatFields(currentWeaponLeft, currentAltStatMode);
-                    var oldCloneL = CloneTopLevelFields(currentWeaponLeft);
-                    SyncAltStatsToMatchTopLevel(oldCloneL, currentWeaponLeft);
+                    SyncAltStatFields(wCurrentLeft, amCurrentAltStat);
+                    var wOldCloneL = CloneTopLevelFields(wCurrentLeft);
+                    SyncAltStatsToMatchTopLevel(wOldCloneL, wCurrentLeft);
                 }
-                if (currentWeaponRight != null && !ReferenceEquals(currentWeaponLeft, currentWeaponRight))
+                if (wCurrentRight != null && !ReferenceEquals(wCurrentLeft, wCurrentRight))
                 {
-                    SyncAltStatFields(currentWeaponRight, currentAltStatMode);
-                    var oldCloneR = CloneTopLevelFields(currentWeaponRight);
-                    SyncAltStatsToMatchTopLevel(oldCloneR, currentWeaponRight);
+                    SyncAltStatFields(wCurrentRight, amCurrentAltStat);
+                    var wOldCloneR = CloneTopLevelFields(wCurrentRight);
+                    SyncAltStatsToMatchTopLevel(wOldCloneR, wCurrentRight);
                 }
             }
             //栈顶已是当前状态则不入栈 避免连续保存产生重复条目
-            bool sameAsTop = _undoStack.Count > 0;
-            if (sameAsTop)
+            bool bSameAsTop = llUndoStack.Count > 0;
+            if (bSameAsTop)
             {
-                var last = _undoStack.Last!.Value;
-                var tempL = new WeaponData(); SaveControlsToWeapon(tempL, true);
-                var tempR = new WeaponData(); SaveControlsToWeapon(tempR, false);
-                sameAsTop = WeaponDataEquals(tempL, last.LeftData) && WeaponDataEquals(tempR, last.RightData);
+                var ueLast = llUndoStack.Last!.Value;
+                var wTempL = new WeaponData(); SaveControlsToWeapon(wTempL, true);
+                var wTempR = new WeaponData(); SaveControlsToWeapon(wTempR, false);
+                bSameAsTop = WeaponDataEquals(wTempL, ueLast.LeftData) && WeaponDataEquals(wTempR, ueLast.RightData);
             }
-            if (!sameAsTop) PushUndo();
+            if (!bSameAsTop) PushUndo();
             ClearRedo();
             StoreSnapshot();
-            if (showingAltStats)
-                HighlightAltStatButton(currentAltStatMode);
-            var savedTitle = this.Text;
+            if (bShowingAltStats)
+                HighlightAltStatButton(amCurrentAltStat);
+            var sSavedTitle = this.Text;
             this.Text = "Saved!";
             try
             {
-                CsvService.SaveWeapons(Path.Combine(AppContext.BaseDirectory, "weapons.csv"), weapons);
+                CsvService.SaveWeapons(Path.Combine(AppContext.BaseDirectory, "weapons.csv"), rgWeapons);
                 await Task.Delay(1145);
             }
             catch (Exception ex)
@@ -462,31 +462,31 @@ public partial class Form1
                 LogService.Error(ex, "BtnSave");
                 MessageBox.Show($"Save failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
-            finally { this.Text = savedTitle; }
+            finally { this.Text = sSavedTitle; }
         }
         catch (Exception ex)
         {
             LogService.Error(ex, "BtnSave outer");
         }
-        finally { System.Threading.Interlocked.Exchange(ref saveLock, 0); }
+        finally { System.Threading.Interlocked.Exchange(ref iSaveLock, 0); }
     }
 
     private void BtnCsvToScripts_Click(object? sender, EventArgs e)
     {
-        string initialDir = string.IsNullOrEmpty(lastScriptsDir) ? AppContext.BaseDirectory : lastScriptsDir;
-        using var dlg = new FolderBrowserDialog { Description = "Select the folder containing weapon scripts (will be overwritten)", UseDescriptionForTitle = true, InitialDirectory = initialDir };
+        string sInitialDir = string.IsNullOrEmpty(sLastScriptsDir) ? AppContext.BaseDirectory : sLastScriptsDir;
+        using var dlg = new FolderBrowserDialog { Description = "Select the folder containing weapon scripts (will be overwritten)", UseDescriptionForTitle = true, InitialDirectory = sInitialDir };
         if (dlg.ShowDialog() != DialogResult.OK) return;
-        lastScriptsDir = dlg.SelectedPath;
-        string dir = dlg.SelectedPath;
-        if (MessageBox.Show($"Overwrite all scripts in the folder below with CSV data?\n\n{dir}", "Confirm Overwrite", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
-        string csv = Path.Combine(AppContext.BaseDirectory, "weapons.csv");
-        LogService.Info($"BtnCsvToScripts: exporting to {dir}");
+        sLastScriptsDir = dlg.SelectedPath;
+        string sDir = dlg.SelectedPath;
+        if (MessageBox.Show($"Overwrite all scripts in the folder below with CSV data?\n\n{sDir}", "Confirm Overwrite", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        string sCsv = Path.Combine(AppContext.BaseDirectory, "weapons.csv");
+        LogService.Info($"BtnCsvToScripts: exporting to {sDir}");
         Task.Run(() =>
         {
             try
             {
-                string log = WeaponScriptService.ExportCsvToScripts(csv, dir);
-                this.Invoke(() => { using var lf = new LogForm("Export Complete", log, _darkMode); lf.ShowDialog(this); });
+                string sLog = WeaponScriptService.ExportCsvToScripts(sCsv, sDir);
+                this.Invoke(() => { using var lf = new LogForm("Export Complete", sLog, bDarkMode); lf.ShowDialog(this); });
             }
             catch (Exception ex)
             {
@@ -498,14 +498,14 @@ public partial class Form1
 
     private async void BtnQuickExport_Click(object? sender, EventArgs e)
     {
-        if (System.Threading.Interlocked.Exchange(ref saveLock, 1) != 0) return;
+        if (System.Threading.Interlocked.Exchange(ref iSaveLock, 1) != 0) return;
         try
         {
-            if (string.IsNullOrEmpty(lastScriptsDir))
+            if (string.IsNullOrEmpty(sLastScriptsDir))
             {
                 using var dlg = new FolderBrowserDialog { Description = "Select the folder containing weapon scripts (will be overwritten)", UseDescriptionForTitle = true, InitialDirectory = AppContext.BaseDirectory };
                 if (dlg.ShowDialog() != DialogResult.OK) return;
-                lastScriptsDir = dlg.SelectedPath;
+                sLastScriptsDir = dlg.SelectedPath;
             }
 
             var btn = sender as Button;
@@ -514,95 +514,95 @@ public partial class Form1
                 btn.Text = "confirm"; btn.Tag = true; return;
             }
 
-            LogService.Info($"BtnQuickExport: exporting to {lastScriptsDir}, altStats={showingAltStats}");
+            LogService.Info($"BtnQuickExport: exporting to {sLastScriptsDir}, altStats={bShowingAltStats}");
             //强制提交活跃控件输入
-            var active = this.ActiveControl;
-            if (active != null) { this.ActiveControl = null; active.Focus(); }
-            bool sameWeapon = currentWeaponLeft != null && currentWeaponRight != null
-                && ReferenceEquals(currentWeaponLeft, currentWeaponRight);
-            if (sameWeapon)
+            var ctrlActive = this.ActiveControl;
+            if (ctrlActive != null) { this.ActiveControl = null; ctrlActive.Focus(); }
+            bool bSameWeapon = wCurrentLeft != null && wCurrentRight != null
+                && ReferenceEquals(wCurrentLeft, wCurrentRight);
+            if (bSameWeapon)
             {
-                bool focusLeft = IsControlOnLeft(active);
-                if (focusLeft)
+                bool bFocusLeft = IsControlOnLeft(ctrlActive);
+                if (bFocusLeft)
                 {
-                    if (showingAltStats)
+                    if (bShowingAltStats)
                     {
-                        SyncAltStatFields(currentWeaponLeft!, currentAltStatMode);
-                        var oldClone = CloneTopLevelFields(currentWeaponLeft!);
-                        SyncAltStatsToMatchTopLevel(oldClone, currentWeaponLeft!);
-                        LoadAltStatsToControls(false, currentAltStatMode);
+                        SyncAltStatFields(wCurrentLeft!, amCurrentAltStat);
+                        var wOldClone = CloneTopLevelFields(wCurrentLeft!);
+                        SyncAltStatsToMatchTopLevel(wOldClone, wCurrentLeft!);
+                        LoadAltStatsToControls(false, amCurrentAltStat);
                     }
                     else
                     {
-                        var oldW = CloneTopLevelFields(currentWeaponLeft!);
-                        SaveControlsToWeapon(currentWeaponLeft!, true);
-                        SyncAltStatsToMatchTopLevel(oldW, currentWeaponLeft!);
-                        LoadWeaponToControls(currentWeaponLeft!, false);
+                        var wOld = CloneTopLevelFields(wCurrentLeft!);
+                        SaveControlsToWeapon(wCurrentLeft!, true);
+                        SyncAltStatsToMatchTopLevel(wOld, wCurrentLeft!);
+                        LoadWeaponToControls(wCurrentLeft!, false);
                     }
                 }
                 else
                 {
-                    if (showingAltStats)
+                    if (bShowingAltStats)
                     {
-                        SyncAltStatFields(currentWeaponRight!, currentAltStatMode);
-                        var oldClone = CloneTopLevelFields(currentWeaponRight!);
-                        SyncAltStatsToMatchTopLevel(oldClone, currentWeaponRight!);
-                        LoadAltStatsToControls(true, currentAltStatMode);
+                        SyncAltStatFields(wCurrentRight!, amCurrentAltStat);
+                        var wOldClone = CloneTopLevelFields(wCurrentRight!);
+                        SyncAltStatsToMatchTopLevel(wOldClone, wCurrentRight!);
+                        LoadAltStatsToControls(true, amCurrentAltStat);
                     }
                     else
                     {
-                        var oldW = CloneTopLevelFields(currentWeaponRight!);
-                        SaveControlsToWeapon(currentWeaponRight!, false);
-                        SyncAltStatsToMatchTopLevel(oldW, currentWeaponRight!);
-                        LoadWeaponToControls(currentWeaponRight!, true);
+                        var wOld = CloneTopLevelFields(wCurrentRight!);
+                        SaveControlsToWeapon(wCurrentRight!, false);
+                        SyncAltStatsToMatchTopLevel(wOld, wCurrentRight!);
+                        LoadWeaponToControls(wCurrentRight!, true);
                     }
                 }
                 UpdateAllDamage(); pnlSpread.Invalidate(); pnlRecoil.Invalidate();
             }
-            else if (!showingAltStats)
+            else if (!bShowingAltStats)
             {
-                if (currentWeaponLeft != null)
+                if (wCurrentLeft != null)
                 {
-                    var oldL = CloneTopLevelFields(currentWeaponLeft);
-                    SaveControlsToWeapon(currentWeaponLeft, true);
-                    SyncAltStatsToMatchTopLevel(oldL, currentWeaponLeft);
+                    var wOldL = CloneTopLevelFields(wCurrentLeft);
+                    SaveControlsToWeapon(wCurrentLeft, true);
+                    SyncAltStatsToMatchTopLevel(wOldL, wCurrentLeft);
                 }
-                if (currentWeaponRight != null)
+                if (wCurrentRight != null)
                 {
-                    var oldR = CloneTopLevelFields(currentWeaponRight);
-                    SaveControlsToWeapon(currentWeaponRight, false);
-                    SyncAltStatsToMatchTopLevel(oldR, currentWeaponRight);
+                    var wOldR = CloneTopLevelFields(wCurrentRight);
+                    SaveControlsToWeapon(wCurrentRight, false);
+                    SyncAltStatsToMatchTopLevel(wOldR, wCurrentRight);
                 }
             }
             else
             {
-                if (currentWeaponLeft != null)
+                if (wCurrentLeft != null)
                 {
-                    SyncAltStatFields(currentWeaponLeft, currentAltStatMode);
-                    var oldCloneL = CloneTopLevelFields(currentWeaponLeft);
-                    SyncAltStatsToMatchTopLevel(oldCloneL, currentWeaponLeft);
+                    SyncAltStatFields(wCurrentLeft, amCurrentAltStat);
+                    var wOldCloneL = CloneTopLevelFields(wCurrentLeft);
+                    SyncAltStatsToMatchTopLevel(wOldCloneL, wCurrentLeft);
                 }
-                if (currentWeaponRight != null && !ReferenceEquals(currentWeaponLeft, currentWeaponRight))
+                if (wCurrentRight != null && !ReferenceEquals(wCurrentLeft, wCurrentRight))
                 {
-                    SyncAltStatFields(currentWeaponRight, currentAltStatMode);
-                    var oldCloneR = CloneTopLevelFields(currentWeaponRight);
-                    SyncAltStatsToMatchTopLevel(oldCloneR, currentWeaponRight);
+                    SyncAltStatFields(wCurrentRight, amCurrentAltStat);
+                    var wOldCloneR = CloneTopLevelFields(wCurrentRight);
+                    SyncAltStatsToMatchTopLevel(wOldCloneR, wCurrentRight);
                 }
             }
             ClearRedo();
             StoreSnapshot();
-            if (showingAltStats)
-                HighlightAltStatButton(currentAltStatMode);
-            var originalTitle = this.Text;
+            if (bShowingAltStats)
+                HighlightAltStatButton(amCurrentAltStat);
+            var sOriginalTitle = this.Text;
             try
             {
-                CsvService.SaveWeapons(Path.Combine(AppContext.BaseDirectory, "weapons.csv"), weapons);
-                string csv = Path.Combine(AppContext.BaseDirectory, "weapons.csv");
+                CsvService.SaveWeapons(Path.Combine(AppContext.BaseDirectory, "weapons.csv"), rgWeapons);
+                string sCsv = Path.Combine(AppContext.BaseDirectory, "weapons.csv");
                 await Task.Run(() =>
                 {
-                    WeaponScriptService.ExportCsvToScripts(csv, lastScriptsDir);
-                    WeaponScriptService.ExportAltStatsToScripts(csv, lastScriptsDir, WeaponScriptService.AltStatMode.Dov);
-                    WeaponScriptService.ExportAltStatsToScripts(csv, lastScriptsDir, WeaponScriptService.AltStatMode.Zombie);
+                    WeaponScriptService.ExportCsvToScripts(sCsv, sLastScriptsDir);
+                    WeaponScriptService.ExportAltStatsToScripts(sCsv, sLastScriptsDir, WeaponScriptService.AltStatMode.Dov);
+                    WeaponScriptService.ExportAltStatsToScripts(sCsv, sLastScriptsDir, WeaponScriptService.AltStatMode.Zombie);
                 });
                 if (btn != null) { btn.Text = "wpn_reload_script all"; btn.Tag = false; }
                 this.Text = "Exported!"; await Task.Delay(1145);
@@ -613,30 +613,30 @@ public partial class Form1
                 if (btn != null) { btn.Text = "wpn_reload_script all"; btn.Tag = false; }
                 MessageBox.Show($"Quick export failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
-            finally { this.Text = originalTitle; }
+            finally { this.Text = sOriginalTitle; }
         }
         catch (Exception ex)
         {
             LogService.Error(ex, "BtnQuickExport outer");
         }
-        finally { System.Threading.Interlocked.Exchange(ref saveLock, 0); }
+        finally { System.Threading.Interlocked.Exchange(ref iSaveLock, 0); }
     }
 
     private void BtnScriptsToCsv_Click(object? sender, EventArgs e)
     {
-        string initialDir = string.IsNullOrEmpty(lastScriptsDir) ? AppContext.BaseDirectory : lastScriptsDir;
-        using var dlg = new FolderBrowserDialog { Description = "Select folder containing weapon scripts", UseDescriptionForTitle = true, InitialDirectory = initialDir };
+        string sInitialDir = string.IsNullOrEmpty(sLastScriptsDir) ? AppContext.BaseDirectory : sLastScriptsDir;
+        using var dlg = new FolderBrowserDialog { Description = "Select folder containing weapon scripts", UseDescriptionForTitle = true, InitialDirectory = sInitialDir };
         if (dlg.ShowDialog() != DialogResult.OK) return;
-        lastScriptsDir = dlg.SelectedPath;
-        string dir = dlg.SelectedPath;
-        string csv = Path.Combine(AppContext.BaseDirectory, "weapons.csv");
-        LogService.Info($"BtnScriptsToCsv: importing from {dir}");
+        sLastScriptsDir = dlg.SelectedPath;
+        string sDir = dlg.SelectedPath;
+        string sCsv = Path.Combine(AppContext.BaseDirectory, "weapons.csv");
+        LogService.Info($"BtnScriptsToCsv: importing from {sDir}");
         Task.Run(() =>
         {
             try
             {
-                string log = WeaponScriptService.ImportScriptsToCsv(dir, csv);
-                this.Invoke(() => { RefreshWeaponList(); ClearUndoHistory(); using var lf = new LogForm("Import Complete", log, _darkMode); lf.ShowDialog(this); });
+                string sLog = WeaponScriptService.ImportScriptsToCsv(sDir, sCsv);
+                this.Invoke(() => { RefreshWeaponList(); ClearUndoHistory(); using var lf = new LogForm("Import Complete", sLog, bDarkMode); lf.ShowDialog(this); });
             }
             catch (Exception ex)
             {
@@ -648,21 +648,21 @@ public partial class Form1
 
     private void BtnConvertToTemplate_Click(object? sender, EventArgs e)
     {
-        string initialDir = string.IsNullOrEmpty(lastScriptsDir) ? AppContext.BaseDirectory : lastScriptsDir;
-        using var dlg = new FolderBrowserDialog { Description = "Select folder containing weapon scripts to convert", UseDescriptionForTitle = true, InitialDirectory = initialDir };
+        string sInitialDir = string.IsNullOrEmpty(sLastScriptsDir) ? AppContext.BaseDirectory : sLastScriptsDir;
+        using var dlg = new FolderBrowserDialog { Description = "Select folder containing weapon scripts to convert", UseDescriptionForTitle = true, InitialDirectory = sInitialDir };
         if (dlg.ShowDialog() != DialogResult.OK) return;
-        string dir = dlg.SelectedPath;
-        var result = MessageBox.Show("Select conversion mode:\n\nYes = Full (keep empty keys)\nNo = Simple (remove empty keys)\nCancel = Abort",
+        string sDir = dlg.SelectedPath;
+        var drResult = MessageBox.Show("Select conversion mode:\n\nYes = Full (keep empty keys)\nNo = Simple (remove empty keys)\nCancel = Abort",
             "Template Convert Mode", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
-        if (result == DialogResult.Cancel) return;
-        bool simpleMode = (result == DialogResult.No);
-        LogService.Info($"BtnConvertToTemplate: dir={dir}, simpleMode={simpleMode}");
+        if (drResult == DialogResult.Cancel) return;
+        bool bSimpleMode = (drResult == DialogResult.No);
+        LogService.Info($"BtnConvertToTemplate: dir={sDir}, simpleMode={bSimpleMode}");
         Task.Run(() =>
         {
             try
             {
-                string log = Tools.ScriptToTemplateConverter.ConvertAll(dir, simpleMode);
-                this.Invoke(() => { RefreshWeaponList(); using var lf = new LogForm("Template Convert", log, _darkMode); lf.ShowDialog(this); });
+                string sLog = Tools.ScriptToTemplateConverter.ConvertAll(sDir, bSimpleMode);
+                this.Invoke(() => { RefreshWeaponList(); using var lf = new LogForm("Template Convert", sLog, bDarkMode); lf.ShowDialog(this); });
             }
             catch (Exception ex)
             {
@@ -680,17 +680,17 @@ public partial class Form1
 
     private async void RefreshWeaponList()
     {
-        if (refreshing) return;
-        refreshing = true;
-        string leftName = currentWeaponLeft?.ScriptName ?? "";
-        string rightName = currentWeaponRight?.ScriptName ?? "";
-        LogService.Info($"RefreshWeaponList: from CSV, restoring {leftName} / {rightName}");
+        if (bRefreshing) return;
+        bRefreshing = true;
+        string sLeftName = wCurrentLeft?.ScriptName ?? "";
+        string sRightName = wCurrentRight?.ScriptName ?? "";
+        LogService.Info($"RefreshWeaponList: from CSV, restoring {sLeftName} / {sRightName}");
         try
         {
             await Task.Run(() =>
             {
-                string csv = Path.Combine(AppContext.BaseDirectory, "weapons.csv");
-                weapons = CsvService.LoadWeapons(csv);
+                string sCsv = Path.Combine(AppContext.BaseDirectory, "weapons.csv");
+                rgWeapons = CsvService.LoadWeapons(sCsv);
                 this.Invoke(() =>
                 {
                     try
@@ -699,27 +699,27 @@ public partial class Form1
                     cmbWeaponsL.SelectedIndexChanged -= WeaponSelectedL;
                     cmbWeaponsR.SelectedIndexChanged -= WeaponSelectedR;
                     //DataSource设为null再赋值新列表 触发重新绑定
-                    cmbWeaponsL.DataSource = null; cmbWeaponsL.DataSource = new List<WeaponData>(weapons); cmbWeaponsL.DisplayMember = "PrintName";
-                    cmbWeaponsR.DataSource = null; cmbWeaponsR.DataSource = new List<WeaponData>(weapons); cmbWeaponsR.DisplayMember = "PrintName";
-                    if (weapons.Count > 0)
+                    cmbWeaponsL.DataSource = null; cmbWeaponsL.DataSource = new List<WeaponData>(rgWeapons); cmbWeaponsL.DisplayMember = "PrintName";
+                    cmbWeaponsR.DataSource = null; cmbWeaponsR.DataSource = new List<WeaponData>(rgWeapons); cmbWeaponsR.DisplayMember = "PrintName";
+                    if (rgWeapons.Count > 0)
                     {
-                        RestoreComboSelection(cmbWeaponsR, rightName);
+                        RestoreComboSelection(cmbWeaponsR, sRightName);
                         cmbWeaponsL.SelectedIndexChanged += WeaponSelectedL; cmbWeaponsR.SelectedIndexChanged += WeaponSelectedR;
-                        RestoreComboSelection(cmbWeaponsL, leftName);
-                        if (currentWeaponLeft != null) { LoadWeaponToControls(currentWeaponLeft, true); }
-                        else if (cmbWeaponsL.SelectedItem is WeaponData wL) { currentWeaponLeft = wL; LoadWeaponToControls(wL, true); }
-                        if (currentWeaponRight != null) { LoadWeaponToControls(currentWeaponRight, false); }
-                        else if (cmbWeaponsR.SelectedItem is WeaponData wR) { currentWeaponRight = wR; LoadWeaponToControls(wR, false); }
-                        if (showingAltStats)
+                        RestoreComboSelection(cmbWeaponsL, sLeftName);
+                        if (wCurrentLeft != null) { LoadWeaponToControls(wCurrentLeft, true); }
+                        else if (cmbWeaponsL.SelectedItem is WeaponData wL) { wCurrentLeft = wL; LoadWeaponToControls(wL, true); }
+                        if (wCurrentRight != null) { LoadWeaponToControls(wCurrentRight, false); }
+                        else if (cmbWeaponsR.SelectedItem is WeaponData wR) { wCurrentRight = wR; LoadWeaponToControls(wR, false); }
+                        if (bShowingAltStats)
                         {
-                            if (currentWeaponLeft != null && WeaponHasAltStats(currentWeaponLeft, currentAltStatMode))
-                                LoadAltStatsToControls(true, currentAltStatMode);
-                            if (currentWeaponRight != null && WeaponHasAltStats(currentWeaponRight, currentAltStatMode))
-                                LoadAltStatsToControls(false, currentAltStatMode);
+                            if (wCurrentLeft != null && WeaponHasAltStats(wCurrentLeft, amCurrentAltStat))
+                                LoadAltStatsToControls(true, amCurrentAltStat);
+                            if (wCurrentRight != null && WeaponHasAltStats(wCurrentRight, amCurrentAltStat))
+                                LoadAltStatsToControls(false, amCurrentAltStat);
                         }
                         StoreSnapshot();
-                        if (showingAltStats)
-                            HighlightAltStatButton(currentAltStatMode);
+                        if (bShowingAltStats)
+                            HighlightAltStatButton(amCurrentAltStat);
                         UpdateAllDamage();
                         pnlSpread.Invalidate();
                         pnlRecoil.Invalidate();
@@ -728,25 +728,25 @@ public partial class Form1
                     {
                         cmbWeaponsL.SelectedIndexChanged += WeaponSelectedL;
                         cmbWeaponsR.SelectedIndexChanged += WeaponSelectedR;
-                        if (showingAltStats)
+                        if (bShowingAltStats)
                         {
-                            showingAltStats = false;
+                            bShowingAltStats = false;
                             RestoreAllNudEnabled(true);
                             RestoreAllNudEnabled(false);
                             ResetAltStatButtons();
                         }
-                        currentWeaponLeft = null;
-                        currentWeaponRight = null;
-                        var empty = new WeaponData();
-                        LoadWeaponToControls(empty, true);
-                        LoadWeaponToControls(empty, false);
-                        _snapshotLeft = null;
-                        _snapshotRight = null;
+                        wCurrentLeft = null;
+                        wCurrentRight = null;
+                        var wEmpty = new WeaponData();
+                        LoadWeaponToControls(wEmpty, true);
+                        LoadWeaponToControls(wEmpty, false);
+                        wSnapshotLeft = null;
+                        wSnapshotRight = null;
                         UpdateAllDamage();
                         pnlSpread.Invalidate();
                         pnlRecoil.Invalidate();
                     }
-                    UpdateC64Labels(weapons.Count > 0);
+                    UpdateC64Labels(rgWeapons.Count > 0);
                     }
                     catch (Exception ex)
                     {
@@ -760,14 +760,14 @@ public partial class Form1
             LogService.Error(ex, "RefreshWeaponList");
             this.Invoke(() => MessageBox.Show($"Refresh failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error));
         }
-        finally { refreshing = false; }
+        finally { bRefreshing = false; }
     }
 
-    private static void RestoreComboSelection(ComboBox cmb, string scriptName)
+    private static void RestoreComboSelection(ComboBox cmb, string sScriptName)
     {
-        if (string.IsNullOrEmpty(scriptName)) { cmb.SelectedIndex = 0; return; }
+        if (string.IsNullOrEmpty(sScriptName)) { cmb.SelectedIndex = 0; return; }
         foreach (WeaponData w in cmb.Items)
-            if (string.Equals(w.ScriptName, scriptName, StringComparison.OrdinalIgnoreCase)) { cmb.SelectedItem = w; return; }
+            if (string.Equals(w.ScriptName, sScriptName, StringComparison.OrdinalIgnoreCase)) { cmb.SelectedItem = w; return; }
         cmb.SelectedIndex = 0;
     }
 

@@ -12,17 +12,17 @@ namespace WeaponDamageCalc.Tools;
 
 public static class WikiPageGenerator
 {
-    public const string DefaultTemplateUrl = "https://wiki.militaryconflictvietnam.com/index.php?title=Template:Weapon_New&action=raw";
-    public const string LmgTemplateUrl = "https://wiki.militaryconflictvietnam.com/index.php?title=Template:Weapon_LMG&action=raw";
-    public const string PistolTemplateUrl = "https://wiki.militaryconflictvietnam.com/index.php?title=Template:Pistol&action=raw";
-    public const string ShortTemplateUrl = "https://wiki.militaryconflictvietnam.com/index.php?title=Template:WeaponShort&action=raw";
+    public const string sDefaultTemplateUrl = "https://wiki.militaryconflictvietnam.com/index.php?title=Template:Weapon_New&action=raw";
+    public const string sLmgTemplateUrl = "https://wiki.militaryconflictvietnam.com/index.php?title=Template:Weapon_LMG&action=raw";
+    public const string sPistolTemplateUrl = "https://wiki.militaryconflictvietnam.com/index.php?title=Template:Pistol&action=raw";
+    public const string sShortTemplateUrl = "https://wiki.militaryconflictvietnam.com/index.php?title=Template:WeaponShort&action=raw";
 
-    public static int GetTemplateIndex(Dictionary<string, string> vals)
+    public static int GetTemplateIndex(Dictionary<string, string> mpVals)
     {
-        string wt = vals.TryGetValue("WeaponType", out var t) ? t : "";
-        if (wt.Equals("Machinegun", StringComparison.OrdinalIgnoreCase)) return 1;
-        string bucket = vals.TryGetValue("bucket", out var b) ? b : "";
-        if (bucket == "1") return 2;
+        string sWt = mpVals.TryGetValue("WeaponType", out var sT) ? sT : "";
+        if (sWt.Equals("Machinegun", StringComparison.OrdinalIgnoreCase)) return 1;
+        string sBucket = mpVals.TryGetValue("bucket", out var sB) ? sB : "";
+        if (sBucket == "1") return 2;
         return 0;
     }
 
@@ -35,218 +35,218 @@ public static class WikiPageGenerator
     }
 
     //从脚本目录批量生成所有武器页面
-    public static List<GeneratedPage> GenerateAll(string scriptsDir, string resourceDir,
-        Dictionary<string, string> tokens, Dictionary<string, LoadoutInfo> loadout,
-        string defaultTemplate, string lmgTemplate, string pistolTemplate, string shortTemplate,
-        HashSet<string> existingTitles, Dictionary<string, string>? titleToScript = null)
+    public static List<GeneratedPage> GenerateAll(string sScriptsDir, string sResourceDir,
+        Dictionary<string, string> mpTokens, Dictionary<string, LoadoutInfo> mpLoadout,
+        string sDefaultTemplate, string sLmgTemplate, string sPistolTemplate, string sShortTemplate,
+        HashSet<string> hsExistingTitles, Dictionary<string, string>? mpTitleToScript = null)
     {
-        var pages = new List<GeneratedPage>();
-        var files = Directory.GetFiles(scriptsDir, "weapon_*.txt");
-        LogService.Info($"GenerateAll: {files.Length} weapon scripts found, {existingTitles.Count} existing titles");
-        int skipped = 0;
+        var rgPages = new List<GeneratedPage>();
+        var rgFiles = Directory.GetFiles(sScriptsDir, "weapon_*.txt");
+        LogService.Info($"GenerateAll: {rgFiles.Length} weapon scripts found, {hsExistingTitles.Count} existing titles");
+        int iSkipped = 0;
 
-        foreach (string path in files)
+        foreach (string sPath in rgFiles)
         {
-            string scriptName = Path.GetFileNameWithoutExtension(path);
-            if (scriptName.Contains("_zombie") || scriptName.Contains("_cubemap") || scriptName.Contains("_riflegrenade"))
+            string sScriptName = Path.GetFileNameWithoutExtension(sPath);
+            if (sScriptName.Contains("_zombie") || sScriptName.Contains("_cubemap") || sScriptName.Contains("_riflegrenade"))
             {
-                skipped++;
+                iSkipped++;
                 continue;
             }
-            var page = GenerateSingle(path, scriptName, resourceDir, tokens, loadout,
-                defaultTemplate, lmgTemplate, pistolTemplate, shortTemplate, titleToScript);
-            if (page != null && !existingTitles.Contains(page.Title))
-                pages.Add(page);
+            var gpPage = GenerateSingle(sPath, sScriptName, sResourceDir, mpTokens, mpLoadout,
+                sDefaultTemplate, sLmgTemplate, sPistolTemplate, sShortTemplate, mpTitleToScript);
+            if (gpPage != null && !hsExistingTitles.Contains(gpPage.Title))
+                rgPages.Add(gpPage);
         }
 
-        LogService.Info($"GenerateAll: {pages.Count} pages generated, {skipped} skipped");
-        return pages;
+        LogService.Info($"GenerateAll: {rgPages.Count} pages generated, {iSkipped} skipped");
+        return rgPages;
     }
 
-    public static GeneratedPage? GenerateSingle(string scriptPath, string scriptName,
-        string resourceDir, Dictionary<string, string> tokens,
-        Dictionary<string, LoadoutInfo> loadout,
-        string defaultTemplate, string lmgTemplate, string pistolTemplate, string shortTemplate,
-        Dictionary<string, string>? titleToScript = null)
+    public static GeneratedPage? GenerateSingle(string sScriptPath, string sScriptName,
+        string sResourceDir, Dictionary<string, string> mpTokens,
+        Dictionary<string, LoadoutInfo> mpLoadout,
+        string sDefaultTemplate, string sLmgTemplate, string sPistolTemplate, string sShortTemplate,
+        Dictionary<string, string>? mpTitleToScript = null)
     {
-        string content = WeaponScriptService.ReadScriptFile(scriptPath);
-        var vals = WeaponScriptService.ParseWeaponDataPairs(content);
-        if (vals.Count == 0)
+        string sContent = WeaponScriptService.ReadScriptFile(sScriptPath);
+        var mpVals = WeaponScriptService.ParseWeaponDataPairs(sContent);
+        if (mpVals.Count == 0)
         {
-            LogService.Warn($"GenerateSingle: no WeaponData KV pairs in {scriptName}");
+            LogService.Warn($"GenerateSingle: no WeaponData KV pairs in {sScriptName}");
             return null;
         }
 
-        var info = loadout.TryGetValue(scriptName, out var li) ? li : new LoadoutInfo();
-        string printName = vals.TryGetValue("printname", out var pn) ? pn : scriptName;
+        var liInfo = mpLoadout.TryGetValue(sScriptName, out var liExisting) ? liExisting : new LoadoutInfo();
+        string sPrintName = mpVals.TryGetValue("printname", out var sPn) ? sPn : sScriptName;
         //token查找>脚本名索引>跳过无翻译的武器
 
-        string title = LocalizationService.Lookup(tokens, printName, "");
-        if (string.IsNullOrEmpty(title) && titleToScript != null)
+        string sTitle = LocalizationService.Lookup(mpTokens, sPrintName, "");
+        if (string.IsNullOrEmpty(sTitle) && mpTitleToScript != null)
         {
-            var match = titleToScript.FirstOrDefault(kv => kv.Value.Equals(scriptName, StringComparison.OrdinalIgnoreCase));
-            if (!string.IsNullOrEmpty(match.Key)) title = match.Key;
+            var kvpMatch = mpTitleToScript.FirstOrDefault(kvp => kvp.Value.Equals(sScriptName, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrEmpty(kvpMatch.Key)) sTitle = kvpMatch.Key;
         }
-        if (string.IsNullOrEmpty(title))
+        if (string.IsNullOrEmpty(sTitle))
         {
-            LogService.Warn($"GenerateSingle: no title found for {scriptName} (printname: {printName})");
+            LogService.Warn($"GenerateSingle: no title found for {sScriptName} (printname: {sPrintName})");
             return null;
         }
 
-        string ammoDisplay = LocalizationService.Lookup(tokens, vals.GetValueOrDefault("ammo_id_display", ""));
-        string originRaw = vals.GetValueOrDefault("origin", "");
-        string origin = LocalizationService.Lookup(tokens, originRaw, originRaw);
-        string weaponType = LoadoutService.GetWeaponType(vals, info);
-        int templateIdx = GetTemplateIndex(vals);
-        string detailTemplate = templateIdx == 1 ? lmgTemplate : templateIdx == 2 ? pistolTemplate : defaultTemplate;
+        string sAmmoDisplay = LocalizationService.Lookup(mpTokens, mpVals.GetValueOrDefault("ammo_id_display", ""));
+        string sOriginRaw = mpVals.GetValueOrDefault("origin", "");
+        string sOrigin = LocalizationService.Lookup(mpTokens, sOriginRaw, sOriginRaw);
+        string sWeaponType = LoadoutService.GetWeaponType(mpVals, liInfo);
+        int iTemplateIdx = GetTemplateIndex(mpVals);
+        string sDetailTemplate = iTemplateIdx == 1 ? sLmgTemplate : iTemplateIdx == 2 ? sPistolTemplate : sDefaultTemplate;
 
-        var page = new GeneratedPage { ScriptName = scriptName, Title = title };
-        page.Content = FillDetailTemplate(detailTemplate, scriptName, title, vals, info, ammoDisplay, origin, weaponType);
-        page.ShortContent = FillShortTemplate(shortTemplate, scriptName, title, vals, info, ammoDisplay, weaponType);
-        return page;
+        var gpPage = new GeneratedPage { ScriptName = sScriptName, Title = sTitle };
+        gpPage.Content = FillDetailTemplate(sDetailTemplate, sScriptName, sTitle, mpVals, liInfo, sAmmoDisplay, sOrigin, sWeaponType);
+        gpPage.ShortContent = FillShortTemplate(sShortTemplate, sScriptName, sTitle, mpVals, liInfo, sAmmoDisplay, sWeaponType);
+        return gpPage;
     }
 
-    private static string FillDetailTemplate(string tmpl, string scriptName, string title,
-        Dictionary<string, string> vals, LoadoutInfo info,
-        string ammo, string origin, string weaponType)
+    private static string FillDetailTemplate(string sTmpl, string sScriptName, string sTitle,
+        Dictionary<string, string> mpVals, LoadoutInfo liInfo,
+        string sAmmo, string sOrigin, string sWeaponType)
     {
-        string result = tmpl;
-        bool isLmg = result.Contains("[[Bipod]]");
-        bool isPistol = !result.Contains("[[Bayonet]]");
+        string sResult = sTmpl;
+        bool bIsLmg = sResult.Contains("[[Bipod]]");
+        bool bIsPistol = !sResult.Contains("[[Bayonet]]");
 
-        double dg = WeaponScriptService.GetDoubleVal(vals, "damagegeneric");
-        string[] dmgKeys = { "damageheadmultiplier", "damagechestmultiplier", "damagestomachmultiplier", "damagelegmultiplier", "damagearmmultiplier" };
-        double[] mults = dmgKeys.Select(k => Math.Max(WeaponScriptService.GetDoubleVal(vals, k), 1.0)).ToArray();
+        double dDg = WeaponScriptService.GetDoubleVal(mpVals, "damagegeneric");
+        string[] rgDmgKeys = { "damageheadmultiplier", "damagechestmultiplier", "damagestomachmultiplier", "damagelegmultiplier", "damagearmmultiplier" };
+        double[] rgMults = rgDmgKeys.Select(sK => Math.Max(WeaponScriptService.GetDoubleVal(mpVals, sK), 1.0)).ToArray();
 
-        string fireRate = vals.TryGetValue("firerate", out var fr) && fr != "-1" && fr != "0" ? fr : "N/A";
-        string spread = vals.TryGetValue("bulletspreaddegrees", out var h) ? fmt(h) : "?";
-        string spreadAds = vals.TryGetValue("bulletspreaddegreesironsighted", out var a) ? fmt(a) : "?";
-        string spreadBipod = vals.TryGetValue("bulletspreaddegreesbipod", out var bh) ? fmt(bh) : "?";
-        string spreadBipodAds = vals.TryGetValue("bulletspreaddegreesbipodironsighted", out var ba) ? fmt(ba) : "?";
-        string rangeMod = vals.TryGetValue("rangemodifier", out var rm) ? fmt(rm) : "?";
-        string muzzleVel = vals.GetValueOrDefault("muzzle_velocity", vals.GetValueOrDefault("gl_velocity", "?"));
-        double bulletWt = WeaponScriptService.GetDoubleVal(vals, "bullet_weight");
-        double weight = WeaponScriptService.GetDoubleVal(vals, "weight");
-        string clipDisplay = WeaponScriptService.FormatClipSize(vals.GetValueOrDefault("clip_size", ""), vals.GetValueOrDefault("extrabulletchamber", "0"));
-        string fireModes = vals.GetValueOrDefault("supportedfiremodes", "?");
-        string hasBayonet = vals.GetValueOrDefault("hasbayonet", "0") == "1" ? "YES" : "NO";
+        string sFireRate = mpVals.TryGetValue("firerate", out var sFr) && sFr != "-1" && sFr != "0" ? sFr : "N/A";
+        string sSpread = mpVals.TryGetValue("bulletspreaddegrees", out var sH) ? fmt(sH) : "?";
+        string sSpreadAds = mpVals.TryGetValue("bulletspreaddegreesironsighted", out var sA) ? fmt(sA) : "?";
+        string sSpreadBipod = mpVals.TryGetValue("bulletspreaddegreesbipod", out var sBh) ? fmt(sBh) : "?";
+        string sSpreadBipodAds = mpVals.TryGetValue("bulletspreaddegreesbipodironsighted", out var sBa) ? fmt(sBa) : "?";
+        string sRangeMod = mpVals.TryGetValue("rangemodifier", out var sRm) ? fmt(sRm) : "?";
+        string sMuzzleVel = mpVals.GetValueOrDefault("muzzle_velocity", mpVals.GetValueOrDefault("gl_velocity", "?"));
+        double dBulletWt = WeaponScriptService.GetDoubleVal(mpVals, "bullet_weight");
+        double dWeight = WeaponScriptService.GetDoubleVal(mpVals, "weight");
+        string sClipDisplay = WeaponScriptService.FormatClipSize(mpVals.GetValueOrDefault("clip_size", ""), mpVals.GetValueOrDefault("extrabulletchamber", "0"));
+        string sFireModes = mpVals.GetValueOrDefault("supportedfiremodes", "?");
+        string sHasBayonet = mpVals.GetValueOrDefault("hasbayonet", "0") == "1" ? "YES" : "NO";
 
-        string factionText = info.Factions.Count > 0 ? string.Join("/", info.Factions) : "USVC";
-        result = Regex.Replace(result, @"\[\[USVC\]\]", factionText);
-        if (info.Factions.Count > 0)
+        string sFactionText = liInfo.Factions.Count > 0 ? string.Join("/", liInfo.Factions) : "USVC";
+        sResult = Regex.Replace(sResult, @"\[\[USVC\]\]", sFactionText);
+        if (liInfo.Factions.Count > 0)
         {
-            if (!info.Factions.Contains("US")) result = result.Replace("[[File:Flag_us_new.png|50px]]", "");
-            if (!info.Factions.Contains("VC")) result = result.Replace("[[File:Flag_vc_new.png|50px]]", "");
+            if (!liInfo.Factions.Contains("US")) sResult = sResult.Replace("[[File:Flag_us_new.png|50px]]", "");
+            if (!liInfo.Factions.Contains("VC")) sResult = sResult.Replace("[[File:Flag_vc_new.png|50px]]", "");
         }
 
-        result = result.Replace("[[File:.png|512px]]", $"[[File:{title}.png|512px]]");
-        result = result.Replace("[[File:.svg|512px]]", $"[[File:{scriptName}.svg|512px]]");
-        result = Regex.Replace(result, @"<b>\s*\[\[\]\]\s*</b>", $"<b>[[{title}]]</b>");
-        result = Regex.Replace(result, @"\[\[File:Class_\.png\|50px\]\]", BuildClassMarkup(info));
-        result = result.Replace("| [[]]", $"| [[{ammo}]]");
-        result = result.Replace("[[+1]] /  ", clipDisplay);
+        sResult = sResult.Replace("[[File:.png|512px]]", $"[[File:{sTitle}.png|512px]]");
+        sResult = sResult.Replace("[[File:.svg|512px]]", $"[[File:{sScriptName}.svg|512px]]");
+        sResult = Regex.Replace(sResult, @"<b>\s*\[\[\]\]\s*</b>", $"<b>[[{sTitle}]]</b>");
+        sResult = Regex.Replace(sResult, @"\[\[File:Class_\.png\|50px\]\]", BuildClassMarkup(liInfo));
+        sResult = sResult.Replace("| [[]]", $"| [[{sAmmo}]]");
+        sResult = sResult.Replace("[[+1]] /  ", sClipDisplay);
 
-        string dmgLine = $"| {fmt(dg)}";
+        string sDmgLine = $"| {fmt(dDg)}";
         for (int i = 0; i < 5; i++)
-            dmgLine += $"||x{fmt(mults[i])} = {fmt(dg * mults[i])}";
-        result = Regex.Replace(result, @"\| \|\|× = \|\|× = \|\|× = \|\|× = \|\|× = ", dmgLine);
+            sDmgLine += $"||x{fmt(rgMults[i])} = {fmt(dDg * rgMults[i])}";
+        sResult = Regex.Replace(sResult, @"\| \|\|× = \|\|× = \|\|× = \|\|× = \|\|× = ", sDmgLine);
 
-        if (!isPistol)
+        if (!bIsPistol)
         {
-            var bMatch = Regex.Match(result, @"\|\|YES NO");
-            if (bMatch.Success)
-                result = result.Substring(0, bMatch.Index + 2) + hasBayonet + result.Substring(bMatch.Index + 2 + "YES NO".Length);
-            var rMatch = Regex.Match(result, @"\|\|YES NO");
-            if (rMatch.Success)
-                result = result.Substring(0, rMatch.Index + 2) + "NO" + result.Substring(rMatch.Index + 2 + "YES NO".Length);
+            var mBayonet = Regex.Match(sResult, @"\|\|YES NO");
+            if (mBayonet.Success)
+                sResult = sResult.Substring(0, mBayonet.Index + 2) + sHasBayonet + sResult.Substring(mBayonet.Index + 2 + "YES NO".Length);
+            var mRail = Regex.Match(sResult, @"\|\|YES NO");
+            if (mRail.Success)
+                sResult = sResult.Substring(0, mRail.Index + 2) + "NO" + sResult.Substring(mRail.Index + 2 + "YES NO".Length);
         }
 
-        result = Regex.Replace(result, @"\|\[\[\]\]", $"|[[{weaponType}]]");
-        result = result.Replace("Auto+Semi", fireModes);
-        result = result.Replace("|| RPM", $"||{fireRate} RPM");
+        sResult = Regex.Replace(sResult, @"\|\[\[\]\]", $"|[[{sWeaponType}]]");
+        sResult = sResult.Replace("Auto+Semi", sFireModes);
+        sResult = sResult.Replace("|| RPM", $"||{sFireRate} RPM");
 
-        if (isLmg)
+        if (bIsLmg)
         {
-            var sMatch = Regex.Match(result, @"° & ° \[\[ADS\]\]");
-            if (sMatch.Success)
-                result = result.Substring(0, sMatch.Index) + $"{spread}° & {spreadAds}° [[ADS]]" + result.Substring(sMatch.Index + sMatch.Length);
-            sMatch = Regex.Match(result, @"° & ° \[\[ADS\]\]");
-            if (sMatch.Success)
-                result = result.Substring(0, sMatch.Index) + $"{spreadBipod}° & {spreadBipodAds}° [[ADS]]" + result.Substring(sMatch.Index + sMatch.Length);
+            var mSpread1 = Regex.Match(sResult, @"° & ° \[\[ADS\]\]");
+            if (mSpread1.Success)
+                sResult = sResult.Substring(0, mSpread1.Index) + $"{sSpread}° & {sSpreadAds}° [[ADS]]" + sResult.Substring(mSpread1.Index + mSpread1.Length);
+            var mSpread2 = Regex.Match(sResult, @"° & ° \[\[ADS\]\]");
+            if (mSpread2.Success)
+                sResult = sResult.Substring(0, mSpread2.Index) + $"{sSpreadBipod}° & {sSpreadBipodAds}° [[ADS]]" + sResult.Substring(mSpread2.Index + mSpread2.Length);
         }
         else
         {
-            result = result.Replace("° & ° [[ADS]]", $"{spread}° & {spreadAds}° [[ADS]]");
+            sResult = sResult.Replace("° & ° [[ADS]]", $"{sSpread}° & {sSpreadAds}° [[ADS]]");
         }
 
-        result = result.Replace("||RM", $"||{rangeMod}");
-        result = result.Replace("|| m/s", $"||{muzzleVel} m/s");
-        result = result.Replace("|| g ( gr)", $"||{fmt(bulletWt * 1000)} g ({fmt(bulletWt * 15432.36)} gr)");
-        result = result.Replace("|| kg ( lbs)", $"||{fmt(weight)} kg ({fmt(weight * 2.20462)} lbs)");
+        sResult = sResult.Replace("||RM", $"||{sRangeMod}");
+        sResult = sResult.Replace("|| m/s", $"||{sMuzzleVel} m/s");
+        sResult = sResult.Replace("|| g ( gr)", $"||{fmt(dBulletWt * 1000)} g ({fmt(dBulletWt * 15432.36)} gr)");
+        sResult = sResult.Replace("|| kg ( lbs)", $"||{fmt(dWeight)} kg ({fmt(dWeight * 2.20462)} lbs)");
 
-        result = result.Replace("|FN||", $"|{title}||");
-        result = result.Replace("|CAL||", $"|[[{ammo}]]||");
-        result = result.Replace("|[[PoO]]||", "||||");
-        result = result.Replace("||D8||", "||||");
-        result = result.Replace("||ARM||", "||||");
-        result = result.Replace("|weapon_", $"|{scriptName}");
+        sResult = sResult.Replace("|FN||", $"|{sTitle}||");
+        sResult = sResult.Replace("|CAL||", $"|[[{sAmmo}]]||");
+        sResult = sResult.Replace("|[[PoO]]||", "||||");
+        sResult = sResult.Replace("||D8||", "||||");
+        sResult = sResult.Replace("||ARM||", "||||");
+        sResult = sResult.Replace("|weapon_", $"|{sScriptName}");
 
-        return result;
+        return sResult;
     }
 
-    private static string FillShortTemplate(string tmpl, string scriptName, string title,
-        Dictionary<string, string> vals, LoadoutInfo info,
-        string ammo, string weaponType)
+    private static string FillShortTemplate(string sTmpl, string sScriptName, string sTitle,
+        Dictionary<string, string> mpVals, LoadoutInfo liInfo,
+        string sAmmo, string sWeaponType)
     {
-        string result = tmpl;
-        double dg = WeaponScriptService.GetDoubleVal(vals, "damagegeneric");
-        double hm = Math.Max(WeaponScriptService.GetDoubleVal(vals, "damageheadmultiplier"), 1.0);
-        double cm = Math.Max(WeaponScriptService.GetDoubleVal(vals, "damagechestmultiplier"), 1.0);
-        string clipDisplay = WeaponScriptService.FormatClipSize(vals.GetValueOrDefault("clip_size", ""), vals.GetValueOrDefault("extrabulletchamber", "0"));
+        string sResult = sTmpl;
+        double dDg = WeaponScriptService.GetDoubleVal(mpVals, "damagegeneric");
+        double dHm = Math.Max(WeaponScriptService.GetDoubleVal(mpVals, "damageheadmultiplier"), 1.0);
+        double dCm = Math.Max(WeaponScriptService.GetDoubleVal(mpVals, "damagechestmultiplier"), 1.0);
+        string sClipDisplay = WeaponScriptService.FormatClipSize(mpVals.GetValueOrDefault("clip_size", ""), mpVals.GetValueOrDefault("extrabulletchamber", "0"));
 
-        result = result.Replace("[[File:_3d_t.png|250px]]", $"[[File:{title}.png|250px]]");
-        result = result.Replace("[[File:_ki.svg|250px]]", $"[[File:{scriptName}.svg|250px]]");
-        result = result.Replace("[[File:Class_.png|50px]]", BuildClassMarkup(info));
-        result = result.Replace("<b>[[]]</b>", $"<b>[[{title}]]</b>");
-        result = result.Replace("[[+1]] /  ", clipDisplay);
-        result = result.Replace("||  || ", $"|| {fmt(dg * cm)} || {fmt(dg * hm)} || ");
+        sResult = sResult.Replace("[[File:_3d_t.png|250px]]", $"[[File:{sTitle}.png|250px]]");
+        sResult = sResult.Replace("[[File:_ki.svg|250px]]", $"[[File:{sScriptName}.svg|250px]]");
+        sResult = sResult.Replace("[[File:Class_.png|50px]]", BuildClassMarkup(liInfo));
+        sResult = sResult.Replace("<b>[[]]</b>", $"<b>[[{sTitle}]]</b>");
+        sResult = sResult.Replace("[[+1]] /  ", sClipDisplay);
+        sResult = sResult.Replace("||  || ", $"|| {fmt(dDg * dCm)} || {fmt(dDg * dHm)} || ");
 
-        if (info.Factions.Count > 0)
+        if (liInfo.Factions.Count > 0)
         {
-            if (!info.Factions.Contains("US")) result = result.Replace("[[File:Flag_us_new.png|50px]]", "");
-            if (!info.Factions.Contains("VC")) result = result.Replace("[[File:Flag_vc_new.png|50px]]", "");
+            if (!liInfo.Factions.Contains("US")) sResult = sResult.Replace("[[File:Flag_us_new.png|50px]]", "");
+            if (!liInfo.Factions.Contains("VC")) sResult = sResult.Replace("[[File:Flag_vc_new.png|50px]]", "");
         }
-        return result;
+        return sResult;
     }
 
-    private static readonly string[] AllMainClasses = { "assault", "medic", "gunner", "sniper", "engineer", "radioman" };
+    private static readonly string[] rgAllMainClasses = { "assault", "medic", "gunner", "sniper", "engineer", "radioman" };
 
-    private static string BuildClassMarkup(LoadoutInfo info)
+    private static string BuildClassMarkup(LoadoutInfo liInfo)
     {
-        if (info.Sources.Contains("main"))
+        if (liInfo.Sources.Contains("main"))
         {
-            if (info.Classes.Count == 0) return "''[[WIP]]''";
+            if (liInfo.Classes.Count == 0) return "''[[WIP]]''";
 
-            int missingCount = AllMainClasses.Length - info.Classes.Count;
-            if (missingCount <= 2 && missingCount > 0)
+            int iMissingCount = rgAllMainClasses.Length - liInfo.Classes.Count;
+            if (iMissingCount <= 2 && iMissingCount > 0)
             {
-                var missing = AllMainClasses.Where(c => !info.Classes.Contains(c)).ToList();
-                return $"<b>Everyone Except {string.Join(" and ", missing.Select(Capitalize))}<br>";
+                var rgMissing = rgAllMainClasses.Where(sC => !liInfo.Classes.Contains(sC)).ToList();
+                return $"<b>Everyone Except {string.Join(" and ", rgMissing.Select(Capitalize))}<br>";
             }
 
             var sb = new StringBuilder();
-            foreach (string cls in LoadoutService.ClassOrder)
-                if (info.Classes.Contains(cls) && LoadoutService.ClassImageMap.TryGetValue(cls, out var img))
-                    sb.Append($"[[File:{img}|50px]] <b>[[{Capitalize(cls)}]]</b><br>");
+            foreach (string sCls in LoadoutService.rgClassOrder)
+                if (liInfo.Classes.Contains(sCls) && LoadoutService.mpClassImage.TryGetValue(sCls, out var sImg))
+                    sb.Append($"[[File:{sImg}|50px]] <b>[[{Capitalize(sCls)}]]</b><br>");
             return sb.Length > 0 ? sb.ToString() : "''[[WIP]]''";
         }
 
-        if ((info.Sources.Contains("zombie") || info.Sources.Contains("special")) && info.Classes.Count == 0)
+        if ((liInfo.Sources.Contains("zombie") || liInfo.Sources.Contains("special")) && liInfo.Classes.Count == 0)
         {
-            var parts = new List<string>();
-            if (info.Sources.Contains("special")) parts.Add("[[Special Loadout]]");
-            if (info.Sources.Contains("zombie")) parts.Add("[[Zombies|<span style=\"color:#ff6905;\">Zombies</span>]]");
-            if (parts.Count > 0) return string.Join("<br>", parts);
+            var rgParts = new List<string>();
+            if (liInfo.Sources.Contains("special")) rgParts.Add("[[Special Loadout]]");
+            if (liInfo.Sources.Contains("zombie")) rgParts.Add("[[Zombies|<span style=\"color:#ff6905;\">Zombies</span>]]");
+            if (rgParts.Count > 0) return string.Join("<br>", rgParts);
         }
 
         return "''[[WIP]]''";

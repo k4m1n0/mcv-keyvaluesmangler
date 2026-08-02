@@ -14,41 +14,41 @@ namespace WeaponDamageCalc;
 
 public partial class Form1 : Form
 {
-    private List<WeaponData> weapons = null!;
-    private WeaponData? currentWeaponLeft = null;
-    private WeaponData? currentWeaponRight = null;
-    private static string? lastWikiUser = null;
-    private static string? lastWikiPw = null;
+    private List<WeaponData> rgWeapons = null!;
+    private WeaponData? wCurrentLeft = null;
+    private WeaponData? wCurrentRight = null;
+    private static string? sLastWikiUser = null;
+    private static string? sLastWikiPw = null;
 
     #nullable disable
     //放上面会爆warn
 
-    private bool updatingControls = false;
-    private bool initializing = true;
+    private bool bUpdatingControls = false;
+    private bool bInitializing = true;
 
-    private const double SliderMin = 0.0;
-    private const double SliderMax = 7.5;
-    private const double SliderStep = 0.01;
-    private const double DistanceDivisor = 12.7;//本来500HU=31.25英尺 但MCV的好像不一样 sb英制单位
+    private const double dSliderMin = 0.0;
+    private const double dSliderMax = 7.5;
+    private const double dSliderStep = 0.01;
+    private const double dDistanceDivisor = 12.7;//本来500HU=31.25英尺 但MCV的好像不一样 sb英制单位
 
-    private string lastScriptsDir = "";
-    private bool refreshing = false;
-    private int saveLock = 0;
-    private bool isTopmost = false;
-    private bool showingAltStats = false;
-    private WeaponScriptService.AltStatMode currentAltStatMode = WeaponScriptService.AltStatMode.Dov;
-    private bool _undoInProgress;
-    private System.Windows.Forms.Timer _undoTimer = null!;
-    private bool _undoPending;
+    private string sLastScriptsDir = "";
+    private bool bRefreshing = false;
+    private int iSaveLock = 0;
+    private bool bIsTopmost = false;
+    private bool bShowingAltStats = false;
+    private WeaponScriptService.AltStatMode amCurrentAltStat = WeaponScriptService.AltStatMode.Dov;
+    private bool bUndoInProgress;
+    private System.Windows.Forms.Timer tmrUndo = null!;
+    private bool bUndoPending;
 
-    private WeaponData _snapshotLeft = null!;
-    private WeaponData _snapshotRight = null!;
+    private WeaponData wSnapshotLeft = null!;
+    private WeaponData wSnapshotRight = null!;
 
-    private string _rapidStartLeft = null!;
-    private string _rapidStartRight = null!;
-    private DateTime _rapidDeadlineL;
-    private DateTime _rapidDeadlineR;
-    private const int RapidSettleMs = 300;
+    private string sRapidStartLeft = null;
+    private string sRapidStartRight = null;
+    private DateTime dtRapidDeadlineL;
+    private DateTime dtRapidDeadlineR;
+    private const int iRapidSettleMs = 300;
 
     private class UndoEntry
     {
@@ -60,19 +60,19 @@ public partial class Form1 : Form
         public WeaponScriptService.AltStatMode AltMode;
     }
 
-    private LinkedList<UndoEntry> _undoStack = new();
-    private LinkedList<UndoEntry> _redoStack = new();
-    private const int MaxUndo = 100;
+    private LinkedList<UndoEntry> llUndoStack = new();
+    private LinkedList<UndoEntry> llRedoStack = new();
+    private const int iMaxUndo = 100;
 
-    private PanelRenderer spreadRenderer = null!;
-    private PanelRenderer recoilRenderer = null!;
+    private PanelRenderer prSpreadRenderer = null!;
+    private PanelRenderer prRecoilRenderer = null!;
 
-    private bool lastFocusLeft = true;
-    public static bool ForceDarkMode = false;
-    public static bool ForceLightMode = false;
-    private bool _darkMode = false;
+    private bool bLastFocusLeft = true;
+    public static bool bForceDarkMode = false;
+    public static bool bForceLightMode = false;
+    private bool bDarkMode = false;
 
-    private int hotkeyId = 9001;
+    private int iHotkeyId = 9001;
 
     [DllImport("user32.dll")]
     private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
@@ -109,16 +109,16 @@ public partial class Form1 : Form
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
             this.MaximizeBox = false;
 
-            string csvPath = Path.Combine(AppContext.BaseDirectory, "weapons.csv");
-            weapons = File.Exists(csvPath) ? CsvService.LoadWeapons(csvPath) : new List<WeaponData>();
-            LogService.Info($"Weapons loaded: {weapons.Count}");
+            string sCsvPath = Path.Combine(AppContext.BaseDirectory, "weapons.csv");
+            rgWeapons = File.Exists(sCsvPath) ? CsvService.LoadWeapons(sCsvPath) : new List<WeaponData>();
+            LogService.Info($"Weapons loaded: {rgWeapons.Count}");
 
-            _undoTimer = new System.Windows.Forms.Timer { Interval = 300 };
-            _undoTimer.Tick += (_, _) => { _undoTimer.Stop(); if (_undoPending) { PushUndo(); _undoPending = false; } };
+            tmrUndo = new System.Windows.Forms.Timer { Interval = 300 };
+            tmrUndo.Tick += (_, _) => { tmrUndo.Stop(); if (bUndoPending) { PushUndo(); bUndoPending = false; } };
 
             InitCenterPanels();
-            InitLeftPanel(weapons);
-            InitRightPanel(weapons);
+            InitLeftPanel(rgWeapons);
+            InitRightPanel(rgWeapons);
             InitC64Labels();
             InitTopButtons();
             MarkPanelControls();
@@ -131,89 +131,89 @@ public partial class Form1 : Form
 
             this.Shown += (s, e) =>
             {
-                var screen = Screen.FromControl(this);
-                float scale = Math.Min((float)screen.WorkingArea.Width / 1366f, (float)screen.WorkingArea.Height / 768f);
-                scale = scale < 1.0f ? Math.Max(scale, 1280f / 1366f) : 1.0f;
-                this.Scale(new SizeF(scale, scale));
-                int w = (int)(1366 * scale), h = (int)(768 * scale);
-                this.Size = new Size(Math.Min(w, screen.WorkingArea.Width), Math.Min(h, screen.WorkingArea.Height));
+                var scr = Screen.FromControl(this);
+                float fScale = Math.Min((float)scr.WorkingArea.Width / 1366f, (float)scr.WorkingArea.Height / 768f);
+                fScale = fScale < 1.0f ? Math.Max(fScale, 1280f / 1366f) : 1.0f;
+                this.Scale(new SizeF(fScale, fScale));
+                int iW = (int)(1366 * fScale), iH = (int)(768 * fScale);
+                this.Size = new Size(Math.Min(iW, scr.WorkingArea.Width), Math.Min(iH, scr.WorkingArea.Height));
 
-                bool needDrag = screen.Bounds.Width < 1280 || screen.Bounds.Height < 720;
-                LogService.Info($"Scale: {scale:F3}, screen: {screen.WorkingArea.Width}x{screen.WorkingArea.Height}, needDrag={needDrag}");
-                if (needDrag)
+                bool bNeedDrag = scr.Bounds.Width < 1280 || scr.Bounds.Height < 720;
+                LogService.Info($"Scale: {fScale:F3}, screen: {scr.WorkingArea.Width}x{scr.WorkingArea.Height}, needDrag={bNeedDrag}");
+                if (bNeedDrag)
                 {
-                    var panel = new Panel { Location = Point.Empty, Size = new Size(w, h), AutoScroll = true };
-                    EnableDoubleBuffering(panel);
-                    foreach (var c in this.Controls.Cast<Control>().ToList()) { this.Controls.Remove(c); panel.Controls.Add(c); }
-                    this.Controls.Add(panel);
+                    var pnlScroll = new Panel { Location = Point.Empty, Size = new Size(iW, iH), AutoScroll = true };
+                    EnableDoubleBuffering(pnlScroll);
+                    foreach (var ctrl in this.Controls.Cast<Control>().ToList()) { this.Controls.Remove(ctrl); pnlScroll.Controls.Add(ctrl); }
+                    this.Controls.Add(pnlScroll);
                     //收缩panel至实际控件底部 消除多余空白
-                    int bottom = 0;
-                    foreach (Control c in panel.Controls) bottom = Math.Max(bottom, c.Bottom);
-                    if (bottom < panel.Height) panel.Height = bottom;
+                    int iBottom = 0;
+                    foreach (Control ctrl in pnlScroll.Controls) iBottom = Math.Max(iBottom, ctrl.Bottom);
+                    if (iBottom < pnlScroll.Height) pnlScroll.Height = iBottom;
 
-                    bool dragging = false;
-                    Point last = Point.Empty, off = Point.Empty;
-                    int mx = Math.Min(this.ClientSize.Width - panel.Width, 0), my = Math.Min(this.ClientSize.Height - panel.Height, 0);
-                    void Bind(Control p)
+                    bool bDragging = false;
+                    Point ptLast = Point.Empty, ptOff = Point.Empty;
+                    int iMx = Math.Min(this.ClientSize.Width - pnlScroll.Width, 0), iMy = Math.Min(this.ClientSize.Height - pnlScroll.Height, 0);
+                    void Bind(Control pCtrl)
                     {
-                        p.MouseDown += (_, me) => { dragging = true; last = p.PointToScreen(me.Location); };
-                        p.MouseUp += (_, _) => dragging = false;
-                        p.MouseMove += (_, me) =>
+                        pCtrl.MouseDown += (_, me) => { bDragging = true; ptLast = pCtrl.PointToScreen(me.Location); };
+                        pCtrl.MouseUp += (_, _) => bDragging = false;
+                        pCtrl.MouseMove += (_, me) =>
                         {
-                            if (!dragging) return;
-                            var cur = p.PointToScreen(me.Location);
-                            off.X = Math.Clamp(off.X + cur.X - last.X, mx, 0);
-                            off.Y = Math.Clamp(off.Y + cur.Y - last.Y, my, 0);
-                            panel.Location = off;
-                            last = cur;
+                            if (!bDragging) return;
+                            var ptCur = pCtrl.PointToScreen(me.Location);
+                            ptOff.X = Math.Clamp(ptOff.X + ptCur.X - ptLast.X, iMx, 0);
+                            ptOff.Y = Math.Clamp(ptOff.Y + ptCur.Y - ptLast.Y, iMy, 0);
+                            pnlScroll.Location = ptOff;
+                            ptLast = ptCur;
                         };
-                        foreach (Control c in p.Controls) Bind(c);
+                        foreach (Control ctrlChild in pCtrl.Controls) Bind(ctrlChild);
                     }
-                    Bind(panel);
+                    Bind(pnlScroll);
                     //跨屏幕拖动时重算可拖动范围
                     this.Resize += (_, _) =>
                     {
-                        mx = Math.Min(this.ClientSize.Width - panel.Width, 0);
-                        my = Math.Min(this.ClientSize.Height - panel.Height, 0);
-                        off.X = Math.Clamp(off.X, mx, 0);
-                        off.Y = Math.Clamp(off.Y, my, 0);
-                        panel.Location = off;
+                        iMx = Math.Min(this.ClientSize.Width - pnlScroll.Width, 0);
+                        iMy = Math.Min(this.ClientSize.Height - pnlScroll.Height, 0);
+                        ptOff.X = Math.Clamp(ptOff.X, iMx, 0);
+                        ptOff.Y = Math.Clamp(ptOff.Y, iMy, 0);
+                        pnlScroll.Location = ptOff;
                     };
                 }
 
-                var originalTitle = this.Text;
+                var sOriginalTitle = this.Text;
                 this.Text = "Keyvalues Mangler™ 5000 — Ctrl+T to toggle topmost/minimize";
-                var titleTimer = new System.Windows.Forms.Timer { Interval = 1919 };
-                titleTimer.Tick += (_, _) => { this.Text = originalTitle; titleTimer.Stop(); titleTimer.Dispose(); };
-                titleTimer.Start();
+                var tmrTitle = new System.Windows.Forms.Timer { Interval = 1919 };
+                tmrTitle.Tick += (_, _) => { this.Text = sOriginalTitle; tmrTitle.Stop(); tmrTitle.Dispose(); };
+                tmrTitle.Start();
 
-                if (weapons.Count > 0)
+                if (rgWeapons.Count > 0)
                 {
                     cmbWeaponsL.SelectedIndexChanged -= WeaponSelectedL;
                     cmbWeaponsR.SelectedIndexChanged -= WeaponSelectedR;
 
                     cmbWeaponsL.DataSource = null;
-                    cmbWeaponsL.DataSource = new List<WeaponData>(weapons);
+                    cmbWeaponsL.DataSource = new List<WeaponData>(rgWeapons);
                     cmbWeaponsL.DisplayMember = "PrintName";
                     cmbWeaponsL.SelectedIndex = 0;
 
                     cmbWeaponsR.DataSource = null;
-                    cmbWeaponsR.DataSource = new List<WeaponData>(weapons);
+                    cmbWeaponsR.DataSource = new List<WeaponData>(rgWeapons);
                     cmbWeaponsR.DisplayMember = "PrintName";
                     cmbWeaponsR.SelectedIndex = 0;
 
                     cmbWeaponsL.SelectedIndexChanged += WeaponSelectedL;
                     cmbWeaponsR.SelectedIndexChanged += WeaponSelectedR;
 
-                    initializing = false;
+                    bInitializing = false;
                     if (cmbWeaponsL.SelectedItem is WeaponData wL)
                     {
-                        currentWeaponLeft = wL;
+                        wCurrentLeft = wL;
                         LoadWeaponToControls(wL, true);
                     }
                     if (cmbWeaponsR.SelectedItem is WeaponData wR)
                     {
-                        currentWeaponRight = wR;
+                        wCurrentRight = wR;
                         LoadWeaponToControls(wR, false);
                     }
                     StoreSnapshot();
@@ -223,12 +223,12 @@ public partial class Form1 : Form
 
                     UpdateC64Labels(true);
                 }
-                initializing = false;
-                RegisterHotKey(this.Handle, hotkeyId, MOD_CONTROL, VK_T);
+                bInitializing = false;
+                RegisterHotKey(this.Handle, iHotkeyId, MOD_CONTROL, VK_T);
                 LogService.Info("Form1 ready");
             };
 
-            this.FormClosed += (s, e) => UnregisterHotKey(this.Handle, hotkeyId);
+            this.FormClosed += (s, e) => UnregisterHotKey(this.Handle, iHotkeyId);
         }
         catch (Exception ex)
         {
@@ -240,46 +240,46 @@ public partial class Form1 : Form
 
     private void InitCenterPanels()
     {
-        int cx = 525;
-        pnlSpread = new Panel { Location = new Point(cx, 38), Size = new Size(300, 300), BorderStyle = BorderStyle.FixedSingle, BackColor = Color.Black };
+        int iCx = 525;
+        pnlSpread = new Panel { Location = new Point(iCx, 38), Size = new Size(300, 300), BorderStyle = BorderStyle.FixedSingle, BackColor = Color.Black };
         EnableDoubleBuffering(pnlSpread);
         pnlSpread.Paint += PnlSpread_Paint;
         this.Controls.Add(pnlSpread);
 
-        pnlRecoil = new Panel { Location = new Point(cx, 313), Size = new Size(300, 300), BorderStyle = BorderStyle.FixedSingle, BackColor = Color.Black };
+        pnlRecoil = new Panel { Location = new Point(iCx, 313), Size = new Size(300, 300), BorderStyle = BorderStyle.FixedSingle, BackColor = Color.Black };
         EnableDoubleBuffering(pnlRecoil);
         pnlRecoil.Paint += PnlRecoil_Paint;
         this.Controls.Add(pnlRecoil);
 
-        spreadRenderer = new PanelRenderer(pnlSpread);
-        recoilRenderer = new PanelRenderer(pnlRecoil);
+        prSpreadRenderer = new PanelRenderer(pnlSpread);
+        prRecoilRenderer = new PanelRenderer(pnlRecoil);
     }
 
     private void InitTopButtons()
     {
-        int cx = 525;
-        btnSave = new Button { Text = "Save", Location = new Point(cx, 6), Size = new Size(59, 26) };
+        int iCx = 525;
+        btnSave = new Button { Text = "Save", Location = new Point(iCx, 6), Size = new Size(59, 26) };
         btnSave.Click += BtnSave_Click;
         this.Controls.Add(btnSave);
 
-        btnCsvToScripts = new Button { Text = "CSV>Script", Location = new Point(cx + 61, 6), Size = new Size(88, 26) };
+        btnCsvToScripts = new Button { Text = "CSV>Script", Location = new Point(iCx + 61, 6), Size = new Size(88, 26) };
         btnCsvToScripts.Click += BtnCsvToScripts_Click;
         this.Controls.Add(btnCsvToScripts);
 
-        btnScriptsToCsv = new Button { Text = "Script>CSV", Location = new Point(cx + 151, 6), Size = new Size(88, 26) };
+        btnScriptsToCsv = new Button { Text = "Script>CSV", Location = new Point(iCx + 151, 6), Size = new Size(88, 26) };
         btnScriptsToCsv.Click += BtnScriptsToCsv_Click;
         this.Controls.Add(btnScriptsToCsv);
 
-        var btnRefresh = new Button { Text = "Rfsh", Location = new Point(cx + 241, 6), Size = new Size(59, 26) };
+        var btnRefresh = new Button { Text = "Rfsh", Location = new Point(iCx + 241, 6), Size = new Size(59, 26) };
         btnRefresh.Click += BtnRefresh_Click;
         this.Controls.Add(btnRefresh);
 
-        var btnCopy = new Button { Text = "L>R", Location = new Point(cx + 22, 618), Size = new Size(48, 26) };
+        var btnCopy = new Button { Text = "L>R", Location = new Point(iCx + 22, 618), Size = new Size(48, 26) };
         btnCopy.Click += CopyLeftToRight;
         this.Controls.Add(btnCopy);
 
         //glory to our coders all i dont need to write a hook myself but just call a cvar
-        var btnCopyCvar = new Button { Text = "wpn_reload_script all", Location = new Point(cx + 73, 618), Size = new Size(152, 26) };
+        var btnCopyCvar = new Button { Text = "wpn_reload_script all", Location = new Point(iCx + 73, 618), Size = new Size(152, 26) };
         btnCopyCvar.Tag = false;
         btnCopyCvar.Click += BtnQuickExport_Click;
         btnCopyCvar.MouseLeave += (s, e) => CancelConfirm(btnCopyCvar);
@@ -289,38 +289,38 @@ public partial class Form1 : Form
         };
         this.Controls.Add(btnCopyCvar);
         
-        var btnConvertToTemplate = new Button { Text = "Tmpl", Location = new Point(cx + 22, 646), Size = new Size(48, 26) };
+        var btnConvertToTemplate = new Button { Text = "Tmpl", Location = new Point(iCx + 22, 646), Size = new Size(48, 26) };
         btnConvertToTemplate.Click += BtnConvertToTemplate_Click;
         this.Controls.Add(btnConvertToTemplate);
 
-        var btnToggleDov = new Button { Text = "DoV", Location = new Point(cx + 73, 646), Size = new Size(75, 26), BackColor = SystemColors.Control };
+        var btnToggleDov = new Button { Text = "DoV", Location = new Point(iCx + 73, 646), Size = new Size(75, 26), BackColor = SystemColors.Control };
         btnToggleDov.Click += (s, e) => ToggleAltStats(WeaponScriptService.AltStatMode.Dov);
         this.Controls.Add(btnToggleDov);
 
-        var btnToggleZombie = new Button { Text = "Zmb", Location = new Point(cx + 150, 646), Size = new Size(75, 26), BackColor = SystemColors.Control };
+        var btnToggleZombie = new Button { Text = "Zmb", Location = new Point(iCx + 150, 646), Size = new Size(75, 26), BackColor = SystemColors.Control };
         btnToggleZombie.Click += (s, e) => ToggleAltStats(WeaponScriptService.AltStatMode.Zombie);
         this.Controls.Add(btnToggleZombie);
 
-        var btnCopyR = new Button { Text = "L<R", Location = new Point(cx + 228, 618), Size = new Size(48, 26) };
+        var btnCopyR = new Button { Text = "L<R", Location = new Point(iCx + 228, 618), Size = new Size(48, 26) };
         btnCopyR.Click += CopyRightToLeft;
         this.Controls.Add(btnCopyR);
 
-        var btnWiki = new Button { Text = "Wiki", Location = new Point(cx + 228, 646), Size = new Size(48, 26) };
+        var btnWiki = new Button { Text = "Wiki", Location = new Point(iCx + 228, 646), Size = new Size(48, 26) };
         btnWiki.Click += BtnWiki_Click;
         this.Controls.Add(btnWiki);
 
-        var tooltip = new ToolTip();
-        tooltip.SetToolTip(btnSave, "Save current weapon data to CSV (Ctrl+S)\nCtrl+Z/Y to undo/redo");
-        tooltip.SetToolTip(btnCsvToScripts, "Export CSV data to weapon script files");
-        tooltip.SetToolTip(btnScriptsToCsv, "Import weapon script files to CSV");
-        tooltip.SetToolTip(btnRefresh, "Reload weapon list from CSV (Ctrl+R)");
-        tooltip.SetToolTip(btnCopy, "Copy left panel values to right");
-        tooltip.SetToolTip(btnCopyCvar, "Quick export: save CSV and export to scripts (Ctrl+Shift+S)\nRight-click to cancel");
-        tooltip.SetToolTip(btnConvertToTemplate, "Convert old scripts to preset_file template format");
-        tooltip.SetToolTip(btnToggleDov, "Toggle Day of Victory alternate stats");
-        tooltip.SetToolTip(btnToggleZombie, "Toggle Zombie Mode alternate stats");
-        tooltip.SetToolTip(btnCopyR, "Copy right panel values to left");
-        tooltip.SetToolTip(btnWiki, "Open Wiki Stats Updater");
+        var ttTooltip = new ToolTip();
+        ttTooltip.SetToolTip(btnSave, "Save current weapon data to CSV (Ctrl+S)\nCtrl+Z/Y to undo/redo");
+        ttTooltip.SetToolTip(btnCsvToScripts, "Export CSV data to weapon script files");
+        ttTooltip.SetToolTip(btnScriptsToCsv, "Import weapon script files to CSV");
+        ttTooltip.SetToolTip(btnRefresh, "Reload weapon list from CSV (Ctrl+R)");
+        ttTooltip.SetToolTip(btnCopy, "Copy left panel values to right");
+        ttTooltip.SetToolTip(btnCopyCvar, "Quick export: save CSV and export to scripts (Ctrl+Shift+S)\nRight-click to cancel");
+        ttTooltip.SetToolTip(btnConvertToTemplate, "Convert old scripts to preset_file template format");
+        ttTooltip.SetToolTip(btnToggleDov, "Toggle Day of Victory alternate stats");
+        ttTooltip.SetToolTip(btnToggleZombie, "Toggle Zombie Mode alternate stats");
+        ttTooltip.SetToolTip(btnCopyR, "Copy right panel values to left");
+        ttTooltip.SetToolTip(btnWiki, "Open Wiki Stats Updater");
     }
 
     private static void CancelConfirm(Button btn)
@@ -336,20 +336,20 @@ public partial class Form1 : Form
     private void Form1_FormClosing(object sender, FormClosingEventArgs e)
     {
         //结束未完成的rapid 保存当前状态
-        if (_rapidStartLeft != null || _rapidStartRight != null) PushUndo();
-        bool leftDirty = currentWeaponLeft != null && HasUnsavedChanges(true, checkBothSides: true);
-        bool rightDirty = currentWeaponRight != null && HasUnsavedChanges(false, checkBothSides: true);
-        if (leftDirty || rightDirty)
+        if (sRapidStartLeft != null || sRapidStartRight != null) PushUndo();
+        bool bLeftDirty = wCurrentLeft != null && HasUnsavedChanges(true, bCheckBothSides: true);
+        bool bRightDirty = wCurrentRight != null && HasUnsavedChanges(false, bCheckBothSides: true);
+        if (bLeftDirty || bRightDirty)
         {
-            LogService.Debug($"FormClosing: unsaved changes (L={leftDirty}, R={rightDirty}), prompting user");
-            var result = MessageBox.Show("Unsaved changes will be lost. Save now?",
+            LogService.Debug($"FormClosing: unsaved changes (L={bLeftDirty}, R={bRightDirty}), prompting user");
+            var drResult = MessageBox.Show("Unsaved changes will be lost. Save now?",
                 "Unsaved Changes", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
-            if (result == DialogResult.Yes)
+            if (drResult == DialogResult.Yes)
             {
                 LogService.Info("Form1 closing: saved changes");
                 BtnSave_Click(this, EventArgs.Empty);
             }
-            else if (result == DialogResult.Cancel)
+            else if (drResult == DialogResult.Cancel)
             {
                 LogService.Info("Form1 closing: cancelled");
                 e.Cancel = true;
@@ -371,36 +371,36 @@ public partial class Form1 : Form
     //给所有可交互控件绑Enter事件 追踪最后焦点所在面板侧
     private void MarkPanelControls()
     {
-        int count = 0;
-        foreach (Control c in GetAllDescendants(this))
+        int iCount = 0;
+        foreach (Control ctrl in GetAllDescendants(this))
         {
-            if (c is TextBox || c is NumericUpDown || c is TrackBar || c is CheckBox || c is ComboBox)
+            if (ctrl is TextBox || ctrl is NumericUpDown || ctrl is TrackBar || ctrl is CheckBox || ctrl is ComboBox)
             {
-                c.Enter += MarkFocusSide;
-                count++;
+                ctrl.Enter += MarkFocusSide;
+                iCount++;
             }
         }
-        LogService.Debug($"MarkPanelControls: {count} controls bound");
+        LogService.Debug($"MarkPanelControls: {iCount} controls bound");
     }
 
-    private static IEnumerable<Control> GetAllDescendants(Control parent)
+    private static IEnumerable<Control> GetAllDescendants(Control ctrlParent)
     {
-        foreach (Control c in parent.Controls)
+        foreach (Control ctrl in ctrlParent.Controls)
         {
-            yield return c;
-            foreach (Control child in GetAllDescendants(c))
-                yield return child;
+            yield return ctrl;
+            foreach (Control ctrlChild in GetAllDescendants(ctrl))
+                yield return ctrlChild;
         }
     }
 
     //控件获得焦点时记录其在左半还是右半
     private void MarkFocusSide(object sender, EventArgs e)
     {
-        if (sender is Control c)
+        if (sender is Control ctrl)
         {
-            var formX = this.PointToClient(c.PointToScreen(Point.Empty)).X;
-            lastFocusLeft = formX < 525;
-            LogService.DebugDebounce("focus_side", $"Focus side: {(lastFocusLeft ? "L" : "R")} ({c.GetType().Name})", 300);
+            int iFormX = this.PointToClient(ctrl.PointToScreen(Point.Empty)).X;
+            bLastFocusLeft = iFormX < 525;
+            LogService.DebugDebounce("focus_side", $"Focus side: {(bLastFocusLeft ? "L" : "R")} ({ctrl.GetType().Name})", 300);
         }
     }
     
@@ -409,55 +409,55 @@ public partial class Form1 : Form
     {
         if (ctrl != null)
         {
-            var formX = this.PointToClient(ctrl.PointToScreen(Point.Empty)).X;
-            lastFocusLeft = formX < 525;
+            int iFormX = this.PointToClient(ctrl.PointToScreen(Point.Empty)).X;
+            bLastFocusLeft = iFormX < 525;
         }
-        return lastFocusLeft;
+        return bLastFocusLeft;
     }
 
     protected override void WndProc(ref Message m)
     {
         const int WM_HOTKEY = 0x0312;
-        if (m.Msg == WM_HOTKEY && m.WParam.ToInt32() == hotkeyId)
+        if (m.Msg == WM_HOTKEY && m.WParam.ToInt32() == iHotkeyId)
         {
             try
             {
-                bool mcvOrSelf = IsMcvForeground() || GetForegroundWindow() == this.Handle;
+                bool bMcvOrSelf = IsMcvForeground() || GetForegroundWindow() == this.Handle;
                 if (this.WindowState == FormWindowState.Minimized || !this.Visible)
                 {
-                    if (!mcvOrSelf) return;
+                    if (!bMcvOrSelf) return;
                     LogService.Debug("Hotkey Ctrl+T: restore from minimized to topmost");
                     this.Visible = true;
                     this.WindowState = FormWindowState.Normal;
                     ShowWindow(this.Handle, SW_RESTORE);
                     SetWindowPos(this.Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-                    isTopmost = true;
+                    bIsTopmost = true;
                     this.Text = "Keyvalues Mangler™ 5000 [Topmost]";
                     this.Activate();
                 }
-                else if (isTopmost)
+                else if (bIsTopmost)
                 {
                     LogService.Debug("Hotkey Ctrl+T: exit topmost");
                     SetWindowPos(this.Handle, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-                    if (mcvOrSelf)
+                    if (bMcvOrSelf)
                         this.WindowState = FormWindowState.Minimized;
-                    isTopmost = false;
+                    bIsTopmost = false;
                     this.Text = "Keyvalues Mangler™ 5000";
                 }
                 else
                 {
-                    if (mcvOrSelf)
+                    if (bMcvOrSelf)
                     {
                         LogService.Debug("Hotkey Ctrl+T: minimize");
                         this.WindowState = FormWindowState.Minimized;
-                        isTopmost = false;
+                        bIsTopmost = false;
                         this.Text = "Keyvalues Mangler™ 5000";
                     }
                     else
                     {
                         LogService.Debug("Hotkey Ctrl+T: set topmost");
                         SetWindowPos(this.Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-                        isTopmost = true;
+                        bIsTopmost = true;
                         this.Text = "Keyvalues Mangler™ 5000 [Topmost]";
                         this.Activate();
                     }
@@ -473,15 +473,15 @@ public partial class Form1 : Form
 
     private static bool IsMcvForeground()
     {
-        IntPtr fgw = GetForegroundWindow();
-        if (fgw == IntPtr.Zero) return false;
-        GetWindowThreadProcessId(fgw, out uint pid);
+        IntPtr hFgw = GetForegroundWindow();
+        if (hFgw == IntPtr.Zero) return false;
+        GetWindowThreadProcessId(hFgw, out uint dwPid);
         try
         {
-            using var p = Process.GetProcessById((int)pid);
-            bool isMcv = p.ProcessName.Equals("mcv_x64", StringComparison.OrdinalIgnoreCase);
-            LogService.Debug($"IsMcvForeground: {p.ProcessName} -> {isMcv}");
-            return isMcv;
+            using var proc = Process.GetProcessById((int)dwPid);
+            bool bIsMcv = proc.ProcessName.Equals("mcv_x64", StringComparison.OrdinalIgnoreCase);
+            LogService.Debug($"IsMcvForeground: {proc.ProcessName} -> {bIsMcv}");
+            return bIsMcv;
         }
         catch (Exception ex)
         {
@@ -492,180 +492,180 @@ public partial class Form1 : Form
 
     public void ScheduleUndo()
     {
-        if (_undoInProgress || updatingControls || initializing) return;
-        _undoPending = true;
-        _undoTimer?.Stop();
-        _undoTimer?.Start();
+        if (bUndoInProgress || bUpdatingControls || bInitializing) return;
+        bUndoPending = true;
+        tmrUndo?.Stop();
+        tmrUndo?.Start();
         LogService.DebugDebounce("schedule_undo", "ScheduleUndo", 200);
     }
 
     public void PushUndoNow()
     {
-        _undoTimer?.Stop();
-        _undoPending = false;
+        tmrUndo?.Stop();
+        bUndoPending = false;
         PushUndo();
     }
 
-    public void PushUndo(bool clearRedo = true)
+    public void PushUndo(bool bClearRedo = true)
     {
-        if (_undoInProgress || currentWeaponLeft == null) return;
-        _rapidStartLeft = null;
-        _rapidStartRight = null;
-        if (clearRedo) _redoStack.Clear();
+        if (bUndoInProgress || wCurrentLeft == null) return;
+        sRapidStartLeft = null;
+        sRapidStartRight = null;
+        if (bClearRedo) llRedoStack.Clear();
 
-        var entry = new UndoEntry
+        var ueEntry = new UndoEntry
         {
-            LeftScriptName = currentWeaponLeft?.ScriptName,
-            RightScriptName = currentWeaponRight?.ScriptName,
+            LeftScriptName = wCurrentLeft?.ScriptName,
+            RightScriptName = wCurrentRight?.ScriptName,
             LeftData = new WeaponData(),
             RightData = new WeaponData(),
-            ShowingAltStats = showingAltStats,
-            AltMode = currentAltStatMode
+            ShowingAltStats = bShowingAltStats,
+            AltMode = amCurrentAltStat
         };
-        SaveControlsToWeapon(entry.LeftData, true);
-        SaveControlsToWeapon(entry.RightData, false);
+        SaveControlsToWeapon(ueEntry.LeftData, true);
+        SaveControlsToWeapon(ueEntry.RightData, false);
 
-        _undoStack.AddLast(entry);
-        if (_undoStack.Count > MaxUndo) _undoStack.RemoveFirst();
-        LogService.Debug($"PushUndo: stack={_undoStack.Count}, redo={_redoStack.Count}, altStats={showingAltStats}");
+        llUndoStack.AddLast(ueEntry);
+        if (llUndoStack.Count > iMaxUndo) llUndoStack.RemoveFirst();
+        LogService.Debug($"PushUndo: stack={llUndoStack.Count}, redo={llRedoStack.Count}, altStats={bShowingAltStats}");
     }
 
     private void PopUndo()
     {
-        if (_undoPending) { _undoTimer?.Stop(); PushUndo(); _undoPending = false; }
-        if (_undoStack.Count == 0) return;
-        _undoInProgress = true;
+        if (bUndoPending) { tmrUndo?.Stop(); PushUndo(); bUndoPending = false; }
+        if (llUndoStack.Count == 0) return;
+        bUndoInProgress = true;
         try
         {
-            var redoEntry = new UndoEntry
+            var ueRedoEntry = new UndoEntry
             {
-                LeftScriptName = currentWeaponLeft?.ScriptName,
-                RightScriptName = currentWeaponRight?.ScriptName,
+                LeftScriptName = wCurrentLeft?.ScriptName,
+                RightScriptName = wCurrentRight?.ScriptName,
                 LeftData = new WeaponData(),
                 RightData = new WeaponData(),
-                ShowingAltStats = showingAltStats,
-                AltMode = currentAltStatMode
+                ShowingAltStats = bShowingAltStats,
+                AltMode = amCurrentAltStat
             };
-            SaveControlsToWeapon(redoEntry.LeftData, true);
-            SaveControlsToWeapon(redoEntry.RightData, false);
-            _redoStack.AddLast(redoEntry);
+            SaveControlsToWeapon(ueRedoEntry.LeftData, true);
+            SaveControlsToWeapon(ueRedoEntry.RightData, false);
+            llRedoStack.AddLast(ueRedoEntry);
 
-            var entry = _undoStack.Last!.Value;
-            _undoStack.RemoveLast();
-            RestoreUndoEntry(entry);
-            LogService.Debug($"PopUndo: stack={_undoStack.Count}, redo={_redoStack.Count}");
+            var ueEntry = llUndoStack.Last!.Value;
+            llUndoStack.RemoveLast();
+            RestoreUndoEntry(ueEntry);
+            LogService.Debug($"PopUndo: stack={llUndoStack.Count}, redo={llRedoStack.Count}");
         }
         catch (Exception ex)
         {
             LogService.Error(ex, "Form1.PopUndo");
         }
-        finally { _undoInProgress = false; }
+        finally { bUndoInProgress = false; }
     }
 
     private void PopRedo()
     {
-        if (_undoPending) { _undoTimer?.Stop(); PushUndo(); _undoPending = false; }
-        if (_redoStack.Count == 0) return;
-        _undoInProgress = true;
+        if (bUndoPending) { tmrUndo?.Stop(); PushUndo(); bUndoPending = false; }
+        if (llRedoStack.Count == 0) return;
+        bUndoInProgress = true;
         try
         {
-            var entry = _redoStack.Last!.Value;
-            _redoStack.RemoveLast();
+            var ueEntry = llRedoStack.Last!.Value;
+            llRedoStack.RemoveLast();
 
-            var undoEntry = new UndoEntry
+            var ueUndoEntry = new UndoEntry
             {
-                LeftScriptName = currentWeaponLeft?.ScriptName,
-                RightScriptName = currentWeaponRight?.ScriptName,
+                LeftScriptName = wCurrentLeft?.ScriptName,
+                RightScriptName = wCurrentRight?.ScriptName,
                 LeftData = new WeaponData(),
                 RightData = new WeaponData(),
-                ShowingAltStats = showingAltStats,
-                AltMode = currentAltStatMode
+                ShowingAltStats = bShowingAltStats,
+                AltMode = amCurrentAltStat
             };
-            SaveControlsToWeapon(undoEntry.LeftData, true);
-            SaveControlsToWeapon(undoEntry.RightData, false);
-            _undoStack.AddLast(undoEntry);
-            if (_undoStack.Count > MaxUndo) _undoStack.RemoveFirst();
+            SaveControlsToWeapon(ueUndoEntry.LeftData, true);
+            SaveControlsToWeapon(ueUndoEntry.RightData, false);
+            llUndoStack.AddLast(ueUndoEntry);
+            if (llUndoStack.Count > iMaxUndo) llUndoStack.RemoveFirst();
 
-            RestoreUndoEntry(entry);
-            LogService.Debug($"PopRedo: stack={_undoStack.Count}, redo={_redoStack.Count}");
+            RestoreUndoEntry(ueEntry);
+            LogService.Debug($"PopRedo: stack={llUndoStack.Count}, redo={llRedoStack.Count}");
         }
         catch (Exception ex)
         {
             LogService.Error(ex, "Form1.PopRedo");
         }
-        finally { _undoInProgress = false; }
+        finally { bUndoInProgress = false; }
     }
 
     public void ClearRedo()
     {
-        _redoStack.Clear();
+        llRedoStack.Clear();
     }
 
     public void ClearUndoHistory()
     {
         LogService.Debug("ClearUndoHistory");
-        _undoStack.Clear();
-        _redoStack.Clear();
-        _rapidStartLeft = null;
-        _rapidStartRight = null;
+        llUndoStack.Clear();
+        llRedoStack.Clear();
+        sRapidStartLeft = null;
+        sRapidStartRight = null;
     }
 
-    public void StoreSnapshot(bool? leftOnly = null)
+    public void StoreSnapshot(bool? bLeftOnly = null)
     {
-        if (initializing)
+        if (bInitializing)
         {
             LogService.Debug("StoreSnapshot: skipped (initializing)");
             return;
         }
-        bool updateLeft = leftOnly != false;
-        bool updateRight = leftOnly != true;
-        if (updateLeft)
+        bool bUpdateLeft = bLeftOnly != false;
+        bool bUpdateRight = bLeftOnly != true;
+        if (bUpdateLeft)
         {
-            _snapshotLeft = new WeaponData();
-            SaveControlsToWeapon(_snapshotLeft, true);
+            wSnapshotLeft = new WeaponData();
+            SaveControlsToWeapon(wSnapshotLeft, true);
         }
-        if (updateRight)
+        if (bUpdateRight)
         {
-            _snapshotRight = new WeaponData();
-            SaveControlsToWeapon(_snapshotRight, false);
+            wSnapshotRight = new WeaponData();
+            SaveControlsToWeapon(wSnapshotRight, false);
         }
-        LogService.Debug($"StoreSnapshot: updated (altStats={showingAltStats}, L={updateLeft}, R={updateRight})");
+        LogService.Debug($"StoreSnapshot: updated (altStats={bShowingAltStats}, L={bUpdateLeft}, R={bUpdateRight})");
     }
 
-    private void RestoreUndoEntry(UndoEntry entry)
+    private void RestoreUndoEntry(UndoEntry ueEntry)
     {
-        LogService.Debug($"RestoreUndoEntry: L={entry.LeftScriptName}, R={entry.RightScriptName}, altStats={entry.ShowingAltStats}");
-        if (!string.IsNullOrEmpty(entry.LeftScriptName))
+        LogService.Debug($"RestoreUndoEntry: L={ueEntry.LeftScriptName}, R={ueEntry.RightScriptName}, altStats={ueEntry.ShowingAltStats}");
+        if (!string.IsNullOrEmpty(ueEntry.LeftScriptName))
         {
-            var w = weapons.FirstOrDefault(x => x.ScriptName == entry.LeftScriptName);
-            if (w != null && currentWeaponLeft?.ScriptName != w.ScriptName)
+            var wFound = rgWeapons.FirstOrDefault(x => x.ScriptName == ueEntry.LeftScriptName);
+            if (wFound != null && wCurrentLeft?.ScriptName != wFound.ScriptName)
             {
                 cmbWeaponsL.SelectedIndexChanged -= WeaponSelectedL;
-                currentWeaponLeft = w;
-                cmbWeaponsL.SelectedItem = w;
+                wCurrentLeft = wFound;
+                cmbWeaponsL.SelectedItem = wFound;
                 cmbWeaponsL.SelectedIndexChanged += WeaponSelectedL;
             }
         }
-        LoadWeaponToControls(entry.LeftData, true);
+        LoadWeaponToControls(ueEntry.LeftData, true);
 
-        if (!string.IsNullOrEmpty(entry.RightScriptName))
+        if (!string.IsNullOrEmpty(ueEntry.RightScriptName))
         {
-            var w = weapons.FirstOrDefault(x => x.ScriptName == entry.RightScriptName);
-            if (w != null && currentWeaponRight?.ScriptName != w.ScriptName)
+            var wFound = rgWeapons.FirstOrDefault(x => x.ScriptName == ueEntry.RightScriptName);
+            if (wFound != null && wCurrentRight?.ScriptName != wFound.ScriptName)
             {
                 cmbWeaponsR.SelectedIndexChanged -= WeaponSelectedR;
-                currentWeaponRight = w;
-                cmbWeaponsR.SelectedItem = w;
+                wCurrentRight = wFound;
+                cmbWeaponsR.SelectedItem = wFound;
                 cmbWeaponsR.SelectedIndexChanged += WeaponSelectedR;
             }
         }
-        LoadWeaponToControls(entry.RightData, false);
+        LoadWeaponToControls(ueEntry.RightData, false);
 
-        if (entry.ShowingAltStats != showingAltStats || entry.AltMode != currentAltStatMode)
+        if (ueEntry.ShowingAltStats != bShowingAltStats || ueEntry.AltMode != amCurrentAltStat)
         {
-            showingAltStats = entry.ShowingAltStats;
-            currentAltStatMode = entry.AltMode;
-            if (showingAltStats) HighlightAltStatButton(currentAltStatMode);
+            bShowingAltStats = ueEntry.ShowingAltStats;
+            amCurrentAltStat = ueEntry.AltMode;
+            if (bShowingAltStats) HighlightAltStatButton(amCurrentAltStat);
             else ResetAltStatButtons();
         }
 
@@ -680,13 +680,13 @@ public partial class Form1 : Form
 
     private void CopyLeftToRight(object sender, EventArgs e)
     {
-        if (currentWeaponLeft != null && currentWeaponRight != null)
+        if (wCurrentLeft != null && wCurrentRight != null)
         {
-            LogService.Debug($"Copy L>R: {currentWeaponLeft.ScriptName} -> {currentWeaponRight.ScriptName}");
+            LogService.Debug($"Copy L>R: {wCurrentLeft.ScriptName} -> {wCurrentRight.ScriptName}");
             PushUndo();
-            var temp = new WeaponData();
-            SaveControlsToWeapon(temp, true);
-            LoadWeaponToControls(temp, false);
+            var wTemp = new WeaponData();
+            SaveControlsToWeapon(wTemp, true);
+            LoadWeaponToControls(wTemp, false);
             UpdateAllDamage();
             pnlSpread.Invalidate();
             pnlRecoil.Invalidate();
@@ -695,13 +695,13 @@ public partial class Form1 : Form
 
     private void CopyRightToLeft(object sender, EventArgs e)
     {
-        if (currentWeaponRight != null && currentWeaponLeft != null)
+        if (wCurrentRight != null && wCurrentLeft != null)
         {
-            LogService.Debug($"Copy R>L: {currentWeaponRight.ScriptName} -> {currentWeaponLeft.ScriptName}");
+            LogService.Debug($"Copy R>L: {wCurrentRight.ScriptName} -> {wCurrentLeft.ScriptName}");
             PushUndo();
-            var temp = new WeaponData();
-            SaveControlsToWeapon(temp, false);
-            LoadWeaponToControls(temp, true);
+            var wTemp = new WeaponData();
+            SaveControlsToWeapon(wTemp, false);
+            LoadWeaponToControls(wTemp, true);
             UpdateAllDamage();
             pnlSpread.Invalidate();
             pnlRecoil.Invalidate();
@@ -709,205 +709,205 @@ public partial class Form1 : Form
     }
 
     //不拷贝ScriptName和PrintName防止覆盖武器身份
-    private static void CopyWeaponDataFields(WeaponData src, WeaponData dst)
+    private static void CopyWeaponDataFields(WeaponData wSrc, WeaponData wDst)
     {
-        dst.DamageHeadMultiplier = src.DamageHeadMultiplier;
-        dst.DamageChestMultiplier = src.DamageChestMultiplier;
-        dst.DamageStomachMultiplier = src.DamageStomachMultiplier;
-        dst.DamageLegMultiplier = src.DamageLegMultiplier;
-        dst.DamageArmMultiplier = src.DamageArmMultiplier;
-        dst.BulletSpread = src.BulletSpread;
-        dst.BulletSpreadDegreesIronsighted = src.BulletSpreadDegreesIronsighted;
-        dst.BulletSpreadDegreesBipod = src.BulletSpreadDegreesBipod;
-        dst.BulletSpreadDegreesBipodIronsighted = src.BulletSpreadDegreesBipodIronsighted;
-        dst.ViewSlideRecoilUp = src.ViewSlideRecoilUp;
-        dst.ViewSlideRecoilRight = src.ViewSlideRecoilRight;
-        dst.ViewSlideRecoilIronsightUp = src.ViewSlideRecoilIronsightUp;
-        dst.ViewSlideRecoilIronsightRight = src.ViewSlideRecoilIronsightRight;
-        dst.FireModes = src.FireModes;
-        dst.FireRate = src.FireRate;
-        dst.RangeModifier = src.RangeModifier;
-        dst.ClipSize = src.ClipSize;
-        dst.DefaultClip = src.DefaultClip;
-        dst.ExtraBulletChamber = src.ExtraBulletChamber;
-        dst.BulletsPerShot = src.BulletsPerShot;
-        dst.SecondaryFireRate = src.SecondaryFireRate;
-        dst.IronSight = src.IronSight;
-        dst.IronsightSpeedScale = src.IronsightSpeedScale;
-        dst.Weight = src.Weight;
-        dst.ZMBuyPrice = src.ZMBuyPrice;
-        dst.ZMWeight = src.ZMWeight;
-        dst.MetalPenetrationDepth = src.MetalPenetrationDepth;
-        dst.GlassPenetrationDepth = src.GlassPenetrationDepth;
-        dst.ConcretePenetrationDepth = src.ConcretePenetrationDepth;
-        dst.WoodPenetrationDepth = src.WoodPenetrationDepth;
-        dst.OtherPenetrationDepth = src.OtherPenetrationDepth;
-        dst.MetalDamageModifier = src.MetalDamageModifier;
-        dst.GlassDamageModifier = src.GlassDamageModifier;
-        dst.ConcreteDamageModifier = src.ConcreteDamageModifier;
-        dst.WoodDamageModifier = src.WoodDamageModifier;
-        dst.OtherDamageModifier = src.OtherDamageModifier;
-        dst.CrouchSpreadMultiplier = src.CrouchSpreadMultiplier;
-        dst.ProneSpreadMultiplier = src.ProneSpreadMultiplier;
-        dst.StandMoveSpreadMultiplier = src.StandMoveSpreadMultiplier;
-        dst.SneakMoveSpreadMultiplier = src.SneakMoveSpreadMultiplier;
-        dst.CrouchMoveSpreadMultiplier = src.CrouchMoveSpreadMultiplier;
-        dst.JumpSpreadMultiplier = src.JumpSpreadMultiplier;
-        dst.DamageGeneric = src.DamageGeneric;
-        dst.DovBulletSpreadDegreesBipod = src.DovBulletSpreadDegreesBipod;
-        dst.DovBulletSpreadDegreesBipodIronsighted = src.DovBulletSpreadDegreesBipodIronsighted;
-        dst.DovFireModes = src.DovFireModes;
+        wDst.DamageHeadMultiplier = wSrc.DamageHeadMultiplier;
+        wDst.DamageChestMultiplier = wSrc.DamageChestMultiplier;
+        wDst.DamageStomachMultiplier = wSrc.DamageStomachMultiplier;
+        wDst.DamageLegMultiplier = wSrc.DamageLegMultiplier;
+        wDst.DamageArmMultiplier = wSrc.DamageArmMultiplier;
+        wDst.BulletSpread = wSrc.BulletSpread;
+        wDst.BulletSpreadDegreesIronsighted = wSrc.BulletSpreadDegreesIronsighted;
+        wDst.BulletSpreadDegreesBipod = wSrc.BulletSpreadDegreesBipod;
+        wDst.BulletSpreadDegreesBipodIronsighted = wSrc.BulletSpreadDegreesBipodIronsighted;
+        wDst.ViewSlideRecoilUp = wSrc.ViewSlideRecoilUp;
+        wDst.ViewSlideRecoilRight = wSrc.ViewSlideRecoilRight;
+        wDst.ViewSlideRecoilIronsightUp = wSrc.ViewSlideRecoilIronsightUp;
+        wDst.ViewSlideRecoilIronsightRight = wSrc.ViewSlideRecoilIronsightRight;
+        wDst.FireModes = wSrc.FireModes;
+        wDst.FireRate = wSrc.FireRate;
+        wDst.RangeModifier = wSrc.RangeModifier;
+        wDst.ClipSize = wSrc.ClipSize;
+        wDst.DefaultClip = wSrc.DefaultClip;
+        wDst.ExtraBulletChamber = wSrc.ExtraBulletChamber;
+        wDst.BulletsPerShot = wSrc.BulletsPerShot;
+        wDst.SecondaryFireRate = wSrc.SecondaryFireRate;
+        wDst.IronSight = wSrc.IronSight;
+        wDst.IronsightSpeedScale = wSrc.IronsightSpeedScale;
+        wDst.Weight = wSrc.Weight;
+        wDst.ZMBuyPrice = wSrc.ZMBuyPrice;
+        wDst.ZMWeight = wSrc.ZMWeight;
+        wDst.MetalPenetrationDepth = wSrc.MetalPenetrationDepth;
+        wDst.GlassPenetrationDepth = wSrc.GlassPenetrationDepth;
+        wDst.ConcretePenetrationDepth = wSrc.ConcretePenetrationDepth;
+        wDst.WoodPenetrationDepth = wSrc.WoodPenetrationDepth;
+        wDst.OtherPenetrationDepth = wSrc.OtherPenetrationDepth;
+        wDst.MetalDamageModifier = wSrc.MetalDamageModifier;
+        wDst.GlassDamageModifier = wSrc.GlassDamageModifier;
+        wDst.ConcreteDamageModifier = wSrc.ConcreteDamageModifier;
+        wDst.WoodDamageModifier = wSrc.WoodDamageModifier;
+        wDst.OtherDamageModifier = wSrc.OtherDamageModifier;
+        wDst.CrouchSpreadMultiplier = wSrc.CrouchSpreadMultiplier;
+        wDst.ProneSpreadMultiplier = wSrc.ProneSpreadMultiplier;
+        wDst.StandMoveSpreadMultiplier = wSrc.StandMoveSpreadMultiplier;
+        wDst.SneakMoveSpreadMultiplier = wSrc.SneakMoveSpreadMultiplier;
+        wDst.CrouchMoveSpreadMultiplier = wSrc.CrouchMoveSpreadMultiplier;
+        wDst.JumpSpreadMultiplier = wSrc.JumpSpreadMultiplier;
+        wDst.DamageGeneric = wSrc.DamageGeneric;
+        wDst.DovBulletSpreadDegreesBipod = wSrc.DovBulletSpreadDegreesBipod;
+        wDst.DovBulletSpreadDegreesBipodIronsighted = wSrc.DovBulletSpreadDegreesBipodIronsighted;
+        wDst.DovFireModes = wSrc.DovFireModes;
     }
 
     #endregion
     #region 备选值联动同步
 
-    private static WeaponData CloneTopLevelFields(WeaponData src)
+    private static WeaponData CloneTopLevelFields(WeaponData wSrc)
     {
-        var dst = new WeaponData();
-        CopyWeaponDataFields(src, dst);
-        return dst;
+        var wDst = new WeaponData();
+        CopyWeaponDataFields(wSrc, wDst);
+        return wDst;
     }
 
     //保存顶层值后将备选值中与旧顶层值一致的字段同步到新顶层值
-    private static void SyncAltStatsToMatchTopLevel(WeaponData oldW, WeaponData newW)
+    private static void SyncAltStatsToMatchTopLevel(WeaponData wOld, WeaponData wNew)
     {
-        LogService.Debug($"SyncAltStatsToMatchTopLevel called for {newW.ScriptName}");
+        LogService.Debug($"SyncAltStatsToMatchTopLevel called for {wNew.ScriptName}");
         //double
-        SyncDoubleIfMatch(oldW.DamageGeneric, newW.DamageGeneric, newW.DovDamageGeneric, newW.ZombieDamageGeneric,
-            (w, v) => w.DovDamageGeneric = v, (w, v) => w.ZombieDamageGeneric = v, newW);
-        SyncDoubleIfMatch(oldW.DamageHeadMultiplier, newW.DamageHeadMultiplier, newW.DovDamageHeadMultiplier, newW.ZombieDamageHeadMultiplier,
-            (w, v) => w.DovDamageHeadMultiplier = v, (w, v) => w.ZombieDamageHeadMultiplier = v, newW);
-        SyncDoubleIfMatch(oldW.DamageChestMultiplier, newW.DamageChestMultiplier, newW.DovDamageChestMultiplier, newW.ZombieDamageChestMultiplier,
-            (w, v) => w.DovDamageChestMultiplier = v, (w, v) => w.ZombieDamageChestMultiplier = v, newW);
-        SyncDoubleIfMatch(oldW.DamageStomachMultiplier, newW.DamageStomachMultiplier, newW.DovDamageStomachMultiplier, newW.ZombieDamageStomachMultiplier,
-            (w, v) => w.DovDamageStomachMultiplier = v, (w, v) => w.ZombieDamageStomachMultiplier = v, newW);
-        SyncDoubleIfMatch(oldW.DamageLegMultiplier, newW.DamageLegMultiplier, newW.DovDamageLegMultiplier, newW.ZombieDamageLegMultiplier,
-            (w, v) => w.DovDamageLegMultiplier = v, (w, v) => w.ZombieDamageLegMultiplier = v, newW);
-        SyncDoubleIfMatch(oldW.DamageArmMultiplier, newW.DamageArmMultiplier, newW.DovDamageArmMultiplier, newW.ZombieDamageArmMultiplier,
-            (w, v) => w.DovDamageArmMultiplier = v, (w, v) => w.ZombieDamageArmMultiplier = v, newW);
-        SyncDoubleIfMatch(oldW.BulletSpread, newW.BulletSpread, newW.DovBulletSpread, newW.ZombieBulletSpread,
-            (w, v) => w.DovBulletSpread = v, (w, v) => w.ZombieBulletSpread = v, newW);
-        SyncDoubleIfMatch(oldW.BulletSpreadDegreesIronsighted, newW.BulletSpreadDegreesIronsighted, newW.DovBulletSpreadDegreesIronsighted, newW.ZombieBulletSpreadDegreesIronsighted,
-            (w, v) => w.DovBulletSpreadDegreesIronsighted = v, (w, v) => w.ZombieBulletSpreadDegreesIronsighted = v, newW);
-        SyncDoubleIfMatch(oldW.BulletSpreadDegreesBipod, newW.BulletSpreadDegreesBipod, newW.DovBulletSpreadDegreesBipod, newW.ZombieBulletSpreadDegreesBipod,
-            (w, v) => w.DovBulletSpreadDegreesBipod = v, (w, v) => w.ZombieBulletSpreadDegreesBipod = v, newW);
-        SyncDoubleIfMatch(oldW.BulletSpreadDegreesBipodIronsighted, newW.BulletSpreadDegreesBipodIronsighted, newW.DovBulletSpreadDegreesBipodIronsighted, newW.ZombieBulletSpreadDegreesBipodIronsighted,
-            (w, v) => w.DovBulletSpreadDegreesBipodIronsighted = v, (w, v) => w.ZombieBulletSpreadDegreesBipodIronsighted = v, newW);
-        SyncDoubleIfMatch(oldW.RangeModifier, newW.RangeModifier, newW.DovRangeModifier, newW.ZombieRangeModifier,
-            (w, v) => w.DovRangeModifier = v, (w, v) => w.ZombieRangeModifier = v, newW);
-        SyncDoubleIfMatch(oldW.IronsightSpeedScale, newW.IronsightSpeedScale, newW.DovIronsightSpeedScale, newW.ZombieIronsightSpeedScale,
-            (w, v) => w.DovIronsightSpeedScale = v, (w, v) => w.ZombieIronsightSpeedScale = v, newW);
-        SyncDoubleIfMatch(oldW.CrouchSpreadMultiplier, newW.CrouchSpreadMultiplier, newW.DovCrouchSpreadMultiplier, newW.ZombieCrouchSpreadMultiplier,
-            (w, v) => w.DovCrouchSpreadMultiplier = v, (w, v) => w.ZombieCrouchSpreadMultiplier = v, newW);
-        SyncDoubleIfMatch(oldW.ProneSpreadMultiplier, newW.ProneSpreadMultiplier, newW.DovProneSpreadMultiplier, newW.ZombieProneSpreadMultiplier,
-            (w, v) => w.DovProneSpreadMultiplier = v, (w, v) => w.ZombieProneSpreadMultiplier = v, newW);
-        SyncDoubleIfMatch(oldW.StandMoveSpreadMultiplier, newW.StandMoveSpreadMultiplier, newW.DovStandMoveSpreadMultiplier, newW.ZombieStandMoveSpreadMultiplier,
-            (w, v) => w.DovStandMoveSpreadMultiplier = v, (w, v) => w.ZombieStandMoveSpreadMultiplier = v, newW);
-        SyncDoubleIfMatch(oldW.SneakMoveSpreadMultiplier, newW.SneakMoveSpreadMultiplier, newW.DovSneakMoveSpreadMultiplier, newW.ZombieSneakMoveSpreadMultiplier,
-            (w, v) => w.DovSneakMoveSpreadMultiplier = v, (w, v) => w.ZombieSneakMoveSpreadMultiplier = v, newW);
-        SyncDoubleIfMatch(oldW.CrouchMoveSpreadMultiplier, newW.CrouchMoveSpreadMultiplier, newW.DovCrouchMoveSpreadMultiplier, newW.ZombieCrouchMoveSpreadMultiplier,
-            (w, v) => w.DovCrouchMoveSpreadMultiplier = v, (w, v) => w.ZombieCrouchMoveSpreadMultiplier = v, newW);
-        SyncDoubleIfMatch(oldW.JumpSpreadMultiplier, newW.JumpSpreadMultiplier, newW.DovJumpSpreadMultiplier, newW.ZombieJumpSpreadMultiplier,
-            (w, v) => w.DovJumpSpreadMultiplier = v, (w, v) => w.ZombieJumpSpreadMultiplier = v, newW);
-        SyncDoubleIfMatch(oldW.ViewSlideRecoilUp, newW.ViewSlideRecoilUp, newW.DovViewSlideRecoilUp, newW.ZombieViewSlideRecoilUp,
-            (w, v) => w.DovViewSlideRecoilUp = v, (w, v) => w.ZombieViewSlideRecoilUp = v, newW);
-        SyncDoubleIfMatch(oldW.ViewSlideRecoilRight, newW.ViewSlideRecoilRight, newW.DovViewSlideRecoilRight, newW.ZombieViewSlideRecoilRight,
-            (w, v) => w.DovViewSlideRecoilRight = v, (w, v) => w.ZombieViewSlideRecoilRight = v, newW);
-        SyncDoubleIfMatch(oldW.ViewSlideRecoilIronsightUp, newW.ViewSlideRecoilIronsightUp, newW.DovViewSlideRecoilIronsightUp, newW.ZombieViewSlideRecoilIronsightUp,
-            (w, v) => w.DovViewSlideRecoilIronsightUp = v, (w, v) => w.ZombieViewSlideRecoilIronsightUp = v, newW);
-        SyncDoubleIfMatch(oldW.ViewSlideRecoilIronsightRight, newW.ViewSlideRecoilIronsightRight, newW.DovViewSlideRecoilIronsightRight, newW.ZombieViewSlideRecoilIronsightRight,
-            (w, v) => w.DovViewSlideRecoilIronsightRight = v, (w, v) => w.ZombieViewSlideRecoilIronsightRight = v, newW);
-        SyncDoubleIfMatch(oldW.Weight, newW.Weight, newW.DovWeight, newW.ZombieWeight,
-            (w, v) => w.DovWeight = v, (w, v) => w.ZombieWeight = v, newW);
+        SyncDoubleIfMatch(wOld.DamageGeneric, wNew.DamageGeneric, wNew.DovDamageGeneric, wNew.ZombieDamageGeneric,
+            (w, fV) => w.DovDamageGeneric = fV, (w, fV) => w.ZombieDamageGeneric = fV, wNew);
+        SyncDoubleIfMatch(wOld.DamageHeadMultiplier, wNew.DamageHeadMultiplier, wNew.DovDamageHeadMultiplier, wNew.ZombieDamageHeadMultiplier,
+            (w, fV) => w.DovDamageHeadMultiplier = fV, (w, fV) => w.ZombieDamageHeadMultiplier = fV, wNew);
+        SyncDoubleIfMatch(wOld.DamageChestMultiplier, wNew.DamageChestMultiplier, wNew.DovDamageChestMultiplier, wNew.ZombieDamageChestMultiplier,
+            (w, fV) => w.DovDamageChestMultiplier = fV, (w, fV) => w.ZombieDamageChestMultiplier = fV, wNew);
+        SyncDoubleIfMatch(wOld.DamageStomachMultiplier, wNew.DamageStomachMultiplier, wNew.DovDamageStomachMultiplier, wNew.ZombieDamageStomachMultiplier,
+            (w, fV) => w.DovDamageStomachMultiplier = fV, (w, fV) => w.ZombieDamageStomachMultiplier = fV, wNew);
+        SyncDoubleIfMatch(wOld.DamageLegMultiplier, wNew.DamageLegMultiplier, wNew.DovDamageLegMultiplier, wNew.ZombieDamageLegMultiplier,
+            (w, fV) => w.DovDamageLegMultiplier = fV, (w, fV) => w.ZombieDamageLegMultiplier = fV, wNew);
+        SyncDoubleIfMatch(wOld.DamageArmMultiplier, wNew.DamageArmMultiplier, wNew.DovDamageArmMultiplier, wNew.ZombieDamageArmMultiplier,
+            (w, fV) => w.DovDamageArmMultiplier = fV, (w, fV) => w.ZombieDamageArmMultiplier = fV, wNew);
+        SyncDoubleIfMatch(wOld.BulletSpread, wNew.BulletSpread, wNew.DovBulletSpread, wNew.ZombieBulletSpread,
+            (w, fV) => w.DovBulletSpread = fV, (w, fV) => w.ZombieBulletSpread = fV, wNew);
+        SyncDoubleIfMatch(wOld.BulletSpreadDegreesIronsighted, wNew.BulletSpreadDegreesIronsighted, wNew.DovBulletSpreadDegreesIronsighted, wNew.ZombieBulletSpreadDegreesIronsighted,
+            (w, fV) => w.DovBulletSpreadDegreesIronsighted = fV, (w, fV) => w.ZombieBulletSpreadDegreesIronsighted = fV, wNew);
+        SyncDoubleIfMatch(wOld.BulletSpreadDegreesBipod, wNew.BulletSpreadDegreesBipod, wNew.DovBulletSpreadDegreesBipod, wNew.ZombieBulletSpreadDegreesBipod,
+            (w, fV) => w.DovBulletSpreadDegreesBipod = fV, (w, fV) => w.ZombieBulletSpreadDegreesBipod = fV, wNew);
+        SyncDoubleIfMatch(wOld.BulletSpreadDegreesBipodIronsighted, wNew.BulletSpreadDegreesBipodIronsighted, wNew.DovBulletSpreadDegreesBipodIronsighted, wNew.ZombieBulletSpreadDegreesBipodIronsighted,
+            (w, fV) => w.DovBulletSpreadDegreesBipodIronsighted = fV, (w, fV) => w.ZombieBulletSpreadDegreesBipodIronsighted = fV, wNew);
+        SyncDoubleIfMatch(wOld.RangeModifier, wNew.RangeModifier, wNew.DovRangeModifier, wNew.ZombieRangeModifier,
+            (w, fV) => w.DovRangeModifier = fV, (w, fV) => w.ZombieRangeModifier = fV, wNew);
+        SyncDoubleIfMatch(wOld.IronsightSpeedScale, wNew.IronsightSpeedScale, wNew.DovIronsightSpeedScale, wNew.ZombieIronsightSpeedScale,
+            (w, fV) => w.DovIronsightSpeedScale = fV, (w, fV) => w.ZombieIronsightSpeedScale = fV, wNew);
+        SyncDoubleIfMatch(wOld.CrouchSpreadMultiplier, wNew.CrouchSpreadMultiplier, wNew.DovCrouchSpreadMultiplier, wNew.ZombieCrouchSpreadMultiplier,
+            (w, fV) => w.DovCrouchSpreadMultiplier = fV, (w, fV) => w.ZombieCrouchSpreadMultiplier = fV, wNew);
+        SyncDoubleIfMatch(wOld.ProneSpreadMultiplier, wNew.ProneSpreadMultiplier, wNew.DovProneSpreadMultiplier, wNew.ZombieProneSpreadMultiplier,
+            (w, fV) => w.DovProneSpreadMultiplier = fV, (w, fV) => w.ZombieProneSpreadMultiplier = fV, wNew);
+        SyncDoubleIfMatch(wOld.StandMoveSpreadMultiplier, wNew.StandMoveSpreadMultiplier, wNew.DovStandMoveSpreadMultiplier, wNew.ZombieStandMoveSpreadMultiplier,
+            (w, fV) => w.DovStandMoveSpreadMultiplier = fV, (w, fV) => w.ZombieStandMoveSpreadMultiplier = fV, wNew);
+        SyncDoubleIfMatch(wOld.SneakMoveSpreadMultiplier, wNew.SneakMoveSpreadMultiplier, wNew.DovSneakMoveSpreadMultiplier, wNew.ZombieSneakMoveSpreadMultiplier,
+            (w, fV) => w.DovSneakMoveSpreadMultiplier = fV, (w, fV) => w.ZombieSneakMoveSpreadMultiplier = fV, wNew);
+        SyncDoubleIfMatch(wOld.CrouchMoveSpreadMultiplier, wNew.CrouchMoveSpreadMultiplier, wNew.DovCrouchMoveSpreadMultiplier, wNew.ZombieCrouchMoveSpreadMultiplier,
+            (w, fV) => w.DovCrouchMoveSpreadMultiplier = fV, (w, fV) => w.ZombieCrouchMoveSpreadMultiplier = fV, wNew);
+        SyncDoubleIfMatch(wOld.JumpSpreadMultiplier, wNew.JumpSpreadMultiplier, wNew.DovJumpSpreadMultiplier, wNew.ZombieJumpSpreadMultiplier,
+            (w, fV) => w.DovJumpSpreadMultiplier = fV, (w, fV) => w.ZombieJumpSpreadMultiplier = fV, wNew);
+        SyncDoubleIfMatch(wOld.ViewSlideRecoilUp, wNew.ViewSlideRecoilUp, wNew.DovViewSlideRecoilUp, wNew.ZombieViewSlideRecoilUp,
+            (w, fV) => w.DovViewSlideRecoilUp = fV, (w, fV) => w.ZombieViewSlideRecoilUp = fV, wNew);
+        SyncDoubleIfMatch(wOld.ViewSlideRecoilRight, wNew.ViewSlideRecoilRight, wNew.DovViewSlideRecoilRight, wNew.ZombieViewSlideRecoilRight,
+            (w, fV) => w.DovViewSlideRecoilRight = fV, (w, fV) => w.ZombieViewSlideRecoilRight = fV, wNew);
+        SyncDoubleIfMatch(wOld.ViewSlideRecoilIronsightUp, wNew.ViewSlideRecoilIronsightUp, wNew.DovViewSlideRecoilIronsightUp, wNew.ZombieViewSlideRecoilIronsightUp,
+            (w, fV) => w.DovViewSlideRecoilIronsightUp = fV, (w, fV) => w.ZombieViewSlideRecoilIronsightUp = fV, wNew);
+        SyncDoubleIfMatch(wOld.ViewSlideRecoilIronsightRight, wNew.ViewSlideRecoilIronsightRight, wNew.DovViewSlideRecoilIronsightRight, wNew.ZombieViewSlideRecoilIronsightRight,
+            (w, fV) => w.DovViewSlideRecoilIronsightRight = fV, (w, fV) => w.ZombieViewSlideRecoilIronsightRight = fV, wNew);
+        SyncDoubleIfMatch(wOld.Weight, wNew.Weight, wNew.DovWeight, wNew.ZombieWeight,
+            (w, fV) => w.DovWeight = fV, (w, fV) => w.ZombieWeight = fV, wNew);
         //int
-        SyncIntIfMatch(oldW.FireRate, newW.FireRate, newW.DovFireRate, newW.ZombieFireRate,
-            (w, v) => w.DovFireRate = v, (w, v) => w.ZombieFireRate = v, newW);
-        SyncIntIfMatch(oldW.ExtraBulletChamber, newW.ExtraBulletChamber, newW.DovExtraBulletChamber, newW.ZombieExtraBulletChamber,
-            (w, v) => w.DovExtraBulletChamber = v, (w, v) => w.ZombieExtraBulletChamber = v, newW);
-        SyncIntIfMatch(oldW.SecondaryFireRate, newW.SecondaryFireRate, newW.DovSecondaryFireRate, newW.ZombieSecondaryFireRate,
-            (w, v) => w.DovSecondaryFireRate = v, (w, v) => w.ZombieSecondaryFireRate = v, newW);
-        SyncIntIfMatch(oldW.IronSight, newW.IronSight, newW.DovIronSight, newW.ZombieIronSight,
-            (w, v) => w.DovIronSight = v, (w, v) => w.ZombieIronSight = v, newW);
-        SyncIntIfMatch(oldW.DefaultClip, newW.DefaultClip, newW.DovDefaultClip, newW.ZombieDefaultClip,
-            (w, v) => w.DovDefaultClip = v, (w, v) => w.ZombieDefaultClip = v, newW);
-        SyncIntIfMatch(oldW.BulletsPerShot, newW.BulletsPerShot, newW.DovBulletsPerShot, newW.ZombieBulletsPerShot,
-            (w, v) => w.DovBulletsPerShot = v, (w, v) => w.ZombieBulletsPerShot = v, newW);
+        SyncIntIfMatch(wOld.FireRate, wNew.FireRate, wNew.DovFireRate, wNew.ZombieFireRate,
+            (w, nV) => w.DovFireRate = nV, (w, nV) => w.ZombieFireRate = nV, wNew);
+        SyncIntIfMatch(wOld.ExtraBulletChamber, wNew.ExtraBulletChamber, wNew.DovExtraBulletChamber, wNew.ZombieExtraBulletChamber,
+            (w, nV) => w.DovExtraBulletChamber = nV, (w, nV) => w.ZombieExtraBulletChamber = nV, wNew);
+        SyncIntIfMatch(wOld.SecondaryFireRate, wNew.SecondaryFireRate, wNew.DovSecondaryFireRate, wNew.ZombieSecondaryFireRate,
+            (w, nV) => w.DovSecondaryFireRate = nV, (w, nV) => w.ZombieSecondaryFireRate = nV, wNew);
+        SyncIntIfMatch(wOld.IronSight, wNew.IronSight, wNew.DovIronSight, wNew.ZombieIronSight,
+            (w, nV) => w.DovIronSight = nV, (w, nV) => w.ZombieIronSight = nV, wNew);
+        SyncIntIfMatch(wOld.DefaultClip, wNew.DefaultClip, wNew.DovDefaultClip, wNew.ZombieDefaultClip,
+            (w, nV) => w.DovDefaultClip = nV, (w, nV) => w.ZombieDefaultClip = nV, wNew);
+        SyncIntIfMatch(wOld.BulletsPerShot, wNew.BulletsPerShot, wNew.DovBulletsPerShot, wNew.ZombieBulletsPerShot,
+            (w, nV) => w.DovBulletsPerShot = nV, (w, nV) => w.ZombieBulletsPerShot = nV, wNew);
         //string
-        SyncStrIfMatch(oldW.ClipSize, newW.ClipSize, newW.DovClipSize, newW.ZombieClipSize,
-            (w, v) => w.DovClipSize = v, (w, v) => w.ZombieClipSize = v, newW);
-        SyncStrIfMatch(oldW.FireModes, newW.FireModes, newW.DovFireModes, newW.ZombieFireModes,
-            (w, v) => w.DovFireModes = v, (w, v) => w.ZombieFireModes = v, newW);
+        SyncStrIfMatch(wOld.ClipSize, wNew.ClipSize, wNew.DovClipSize, wNew.ZombieClipSize,
+            (w, sV) => w.DovClipSize = sV, (w, sV) => w.ZombieClipSize = sV, wNew);
+        SyncStrIfMatch(wOld.FireModes, wNew.FireModes, wNew.DovFireModes, wNew.ZombieFireModes,
+            (w, sV) => w.DovFireModes = sV, (w, sV) => w.ZombieFireModes = sV, wNew);
     }
 
-    private static void SyncDoubleIfMatch(double? oldVal, double? newVal,
-        double? dov, double? zombie,
-        Action<WeaponData, double?> setDov, Action<WeaponData, double?> setZombie,
+    private static void SyncDoubleIfMatch(double? fOldVal, double? fNewVal,
+        double? fDov, double? fZombie,
+        Action<WeaponData, double?> actSetDov, Action<WeaponData, double?> actSetZombie,
         WeaponData w)
     {
-        if (dov.HasValue && oldVal.HasValue && Math.Abs(dov.Value - oldVal.Value) < 0.001)
+        if (fDov.HasValue && fOldVal.HasValue && Math.Abs(fDov.Value - fOldVal.Value) < 0.001)
         {
-            LogService.Debug($"SyncDoubleIfMatch: clearing Dov (old={oldVal}, dov={dov})");
-            setDov(w, null);
+            LogService.Debug($"SyncDoubleIfMatch: clearing Dov (old={fOldVal}, dov={fDov})");
+            actSetDov(w, null);
         }
-        if (zombie.HasValue && oldVal.HasValue && Math.Abs(zombie.Value - oldVal.Value) < 0.001)
+        if (fZombie.HasValue && fOldVal.HasValue && Math.Abs(fZombie.Value - fOldVal.Value) < 0.001)
         {
-            LogService.Debug($"SyncDoubleIfMatch: clearing Zombie (old={oldVal}, zombie={zombie})");
-            setZombie(w, null);
-        }
-    }
-
-    private static void SyncIntIfMatch(int? oldVal, int? newVal,
-        int? dov, int? zombie,
-        Action<WeaponData, int?> setDov, Action<WeaponData, int?> setZombie,
-        WeaponData w)
-    {
-        if (dov.HasValue && oldVal.HasValue && dov.Value == oldVal.Value)
-        {
-            LogService.Debug($"SyncIntIfMatch: clearing Dov (old={oldVal}, dov={dov})");
-            setDov(w, null);
-        }
-        if (zombie.HasValue && oldVal.HasValue && zombie.Value == oldVal.Value)
-        {
-            LogService.Debug($"SyncIntIfMatch: clearing Zombie (old={oldVal}, zombie={zombie})");
-            setZombie(w, null);
+            LogService.Debug($"SyncDoubleIfMatch: clearing Zombie (old={fOldVal}, zombie={fZombie})");
+            actSetZombie(w, null);
         }
     }
 
-    private static void SyncStrIfMatch(string oldVal, string newVal,
-        string dov, string zombie,
-        Action<WeaponData, string> setDov, Action<WeaponData, string> setZombie,
+    private static void SyncIntIfMatch(int? nOldVal, int? nNewVal,
+        int? nDov, int? nZombie,
+        Action<WeaponData, int?> actSetDov, Action<WeaponData, int?> actSetZombie,
         WeaponData w)
     {
-        if (!string.IsNullOrEmpty(dov) && string.Equals(dov, oldVal, StringComparison.OrdinalIgnoreCase))
+        if (nDov.HasValue && nOldVal.HasValue && nDov.Value == nOldVal.Value)
         {
-            LogService.Debug($"SyncStrIfMatch: clearing Dov (old={oldVal}, dov={dov})");
-            setDov(w, null);
+            LogService.Debug($"SyncIntIfMatch: clearing Dov (old={nOldVal}, dov={nDov})");
+            actSetDov(w, null);
         }
-        if (!string.IsNullOrEmpty(zombie) && string.Equals(zombie, oldVal, StringComparison.OrdinalIgnoreCase))
+        if (nZombie.HasValue && nOldVal.HasValue && nZombie.Value == nOldVal.Value)
         {
-            LogService.Debug($"SyncStrIfMatch: clearing Zombie (old={oldVal}, zombie={zombie})");
-            setZombie(w, null);
+            LogService.Debug($"SyncIntIfMatch: clearing Zombie (old={nOldVal}, zombie={nZombie})");
+            actSetZombie(w, null);
+        }
+    }
+
+    private static void SyncStrIfMatch(string sOldVal, string sNewVal,
+        string sDov, string sZombie,
+        Action<WeaponData, string> actSetDov, Action<WeaponData, string> actSetZombie,
+        WeaponData w)
+    {
+        if (!string.IsNullOrEmpty(sDov) && string.Equals(sDov, sOldVal, StringComparison.OrdinalIgnoreCase))
+        {
+            LogService.Debug($"SyncStrIfMatch: clearing Dov (old={sOldVal}, dov={sDov})");
+            actSetDov(w, null);
+        }
+        if (!string.IsNullOrEmpty(sZombie) && string.Equals(sZombie, sOldVal, StringComparison.OrdinalIgnoreCase))
+        {
+            LogService.Debug($"SyncStrIfMatch: clearing Zombie (old={sOldVal}, zombie={sZombie})");
+            actSetZombie(w, null);
         }
     }
 
     #endregion
     #region 杂项
 
-    private static void EnableDoubleBuffering(Control control)
+    private static void EnableDoubleBuffering(Control ctrl)
     {
         typeof(Control).InvokeMember("DoubleBuffered",
             BindingFlags.SetProperty | BindingFlags.Instance | BindingFlags.NonPublic,
-            null, control, new object[] { true });
+            null, ctrl, new object[] { true });
     }
 
     private static bool SystemUsesDarkMode()
     {
         try
         {
-            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+            using var rkKey = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
                 @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
-            if (key?.GetValue("AppsUseLightTheme") is int intVal && intVal == 0)
+            if (rkKey?.GetValue("AppsUseLightTheme") is int iIntVal && iIntVal == 0)
             {
                 LogService.Info("DarkMode: detected via Windows registry");
                 return true;
@@ -916,11 +916,11 @@ public partial class Form1 : Form
         catch (Exception ex) { LogService.Info($"DarkMode: Windows registry check failed: {ex.Message}"); }
 
         //下面这些真的会有人用到吗
-        string gtkTheme = Environment.GetEnvironmentVariable("GTK_THEME") ?? "";
-        if (!string.IsNullOrEmpty(gtkTheme))
+        string sGtkTheme = Environment.GetEnvironmentVariable("GTK_THEME") ?? "";
+        if (!string.IsNullOrEmpty(sGtkTheme))
         {
-            LogService.Info($"DarkMode: GTK_THEME={gtkTheme}");
-            if (gtkTheme.Contains("dark", StringComparison.OrdinalIgnoreCase))
+            LogService.Info($"DarkMode: GTK_THEME={sGtkTheme}");
+            if (sGtkTheme.Contains("dark", StringComparison.OrdinalIgnoreCase))
             {
                 LogService.Info("DarkMode: detected via GTK_THEME");
                 return true;
@@ -931,31 +931,31 @@ public partial class Form1 : Form
             LogService.Info("DarkMode: GTK_THEME not set, trying config files");
         }
 
-        var homes = new[] {
+        var rgHomes = new[] {
             Environment.GetEnvironmentVariable("HOME") ?? "",
             "/home/" + (Environment.GetEnvironmentVariable("USER") ?? ""),
             "/home/" + (Environment.GetEnvironmentVariable("LOGNAME") ?? "")
-        }.Where(h => !string.IsNullOrEmpty(h)).Distinct().ToList();
+        }.Where(sH => !string.IsNullOrEmpty(sH)).Distinct().ToList();
 
-        LogService.Info($"DarkMode: trying {homes.Count} home paths: [{string.Join(", ", homes)}]");
+        LogService.Info($"DarkMode: trying {rgHomes.Count} home paths: [{string.Join(", ", rgHomes)}]");
 
-        if (TryDetectLinuxDark(homes,
+        if (TryDetectLinuxDark(rgHomes,
             new[] { ".config/gtk-4.0/settings.ini", ".config/gtk-3.0/settings.ini" },
-            "[Settings]", "gtk-theme-name", out string gtkSource))
+            "[Settings]", "gtk-theme-name", out string sGtkSource))
         {
-            LogService.Info($"DarkMode: detected via {gtkSource}");
+            LogService.Info($"DarkMode: detected via {sGtkSource}");
             return true;
         }
 
-        if (TryDetectLinuxDark(homes,
+        if (TryDetectLinuxDark(rgHomes,
             new[] { ".config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml" },
-            "", "ThemeName", out string xfceSource, isXml: true))
+            "", "ThemeName", out string sXfceSource, bIsXml: true))
         {
-            LogService.Info($"DarkMode: detected via {xfceSource}");
+            LogService.Info($"DarkMode: detected via {sXfceSource}");
             return true;
         }
 
-        if (TryDetectKdeDark(homes))
+        if (TryDetectKdeDark(rgHomes))
         {
             LogService.Info("DarkMode: detected via KDE activeBackground");
             return true;
@@ -965,34 +965,34 @@ public partial class Form1 : Form
         return false;
     }
 
-    private static bool TryDetectLinuxDark(List<string> homes, string[] relativePaths,
-        string section, string keyName, out string source, bool isXml = false)
+    private static bool TryDetectLinuxDark(List<string> rgHomes, string[] rgRelativePaths,
+        string sSection, string sKeyName, out string sSource, bool bIsXml = false)
     {
-        source = "";
+        sSource = "";
         try
         {
-            foreach (string home in homes)
+            foreach (string sHome in rgHomes)
             {
-                foreach (string relPath in relativePaths)
+                foreach (string sRelPath in rgRelativePaths)
                 {
-                    string path = System.IO.Path.Combine(home, relPath);
-                    if (!File.Exists(path))
+                    string sPath = System.IO.Path.Combine(sHome, sRelPath);
+                    if (!File.Exists(sPath))
                     {
-                        LogService.Info($"DarkMode: config not found: {path}");
+                        LogService.Info($"DarkMode: config not found: {sPath}");
                         continue;
                     }
 
-                    LogService.Info($"DarkMode: reading {path}");
-                    string value = isXml
-                        ? ExtractXmlValue(path, keyName)
-                        : ExtractIniValue(path, section, keyName);
+                    LogService.Info($"DarkMode: reading {sPath}");
+                    string sValue = bIsXml
+                        ? ExtractXmlValue(sPath, sKeyName)
+                        : ExtractIniValue(sPath, sSection, sKeyName);
 
-                    if (!string.IsNullOrEmpty(value))
+                    if (!string.IsNullOrEmpty(sValue))
                     {
-                        LogService.Info($"DarkMode: {System.IO.Path.GetFileName(path)} {keyName}={value}");
-                        if (value.Contains("dark", StringComparison.OrdinalIgnoreCase))
+                        LogService.Info($"DarkMode: {System.IO.Path.GetFileName(sPath)} {sKeyName}={sValue}");
+                        if (sValue.Contains("dark", StringComparison.OrdinalIgnoreCase))
                         {
-                            source = path;
+                            sSource = sPath;
                             return true;
                         }
                     }
@@ -1003,60 +1003,60 @@ public partial class Form1 : Form
         return false;
     }
 
-    private static string ExtractIniValue(string path, string section, string key)
+    private static string ExtractIniValue(string sPath, string sSection, string sKey)
     {
-        bool inSection = false;
-        foreach (string line in File.ReadLines(path))
+        bool bInSection = false;
+        foreach (string sLine in File.ReadLines(sPath))
         {
-            string trimmed = line.Trim();
-            if (trimmed.Equals(section, StringComparison.OrdinalIgnoreCase))
-            { inSection = true; continue; }
-            if (inSection && trimmed.StartsWith("[")) break;
-            if (inSection && trimmed.StartsWith(key, StringComparison.OrdinalIgnoreCase))
+            string sTrimmed = sLine.Trim();
+            if (sTrimmed.Equals(sSection, StringComparison.OrdinalIgnoreCase))
+            { bInSection = true; continue; }
+            if (bInSection && sTrimmed.StartsWith("[")) break;
+            if (bInSection && sTrimmed.StartsWith(sKey, StringComparison.OrdinalIgnoreCase))
             {
-                string[] parts = trimmed.Split('=');
-                return parts.Length >= 2 ? parts[1].Trim() : "";
+                string[] rgParts = sTrimmed.Split('=');
+                return rgParts.Length >= 2 ? rgParts[1].Trim() : "";
             }
         }
         return "";
     }
 
-    private static string ExtractXmlValue(string path, string key)
+    private static string ExtractXmlValue(string sPath, string sKey)
     {
-        string content = File.ReadAllText(path);
-        var match = System.Text.RegularExpressions.Regex.Match(content,
-            $@"<property\s+name=""{key}""[^>]*>\s*<value[^>]*>\s*([^<]+)");
-        return match.Success ? match.Groups[1].Value.Trim() : "";
+        string sContent = File.ReadAllText(sPath);
+        var m = System.Text.RegularExpressions.Regex.Match(sContent,
+            $@"<property\s+name=""{sKey}""[^>]*>\s*<value[^>]*>\s*([^<]+)");
+        return m.Success ? m.Groups[1].Value.Trim() : "";
     }
 
-    private static bool TryDetectKdeDark(List<string> homes)
+    private static bool TryDetectKdeDark(List<string> rgHomes)
     {
         try
         {
-            foreach (string home in homes)
+            foreach (string sHome in rgHomes)
             {
-                string path = System.IO.Path.Combine(home, ".config", "kdeglobals");
-                if (!File.Exists(path))
+                string sPath = System.IO.Path.Combine(sHome, ".config", "kdeglobals");
+                if (!File.Exists(sPath))
                 {
-                    LogService.Info($"DarkMode: KDE config not found: {path}");
+                    LogService.Info($"DarkMode: KDE config not found: {sPath}");
                     continue;
                 }
 
-                LogService.Info($"DarkMode: reading {path}");
-                string color = ExtractIniValue(path, "[WM]", "activeBackground");
-                if (string.IsNullOrEmpty(color))
+                LogService.Info($"DarkMode: reading {sPath}");
+                string sColor = ExtractIniValue(sPath, "[WM]", "activeBackground");
+                if (string.IsNullOrEmpty(sColor))
                 {
                     LogService.Info("DarkMode: KDE activeBackground not found");
                     continue;
                 }
 
-                LogService.Info($"DarkMode: KDE activeBackground={color}");
-                string[] rgb = color.Split(',');
-                if (rgb.Length == 3 &&
-                    int.TryParse(rgb[0], out int r) &&
-                    int.TryParse(rgb[1], out int g) &&
-                    int.TryParse(rgb[2], out int b) &&
-                    (r + g + b) / 3.0 < 120)
+                LogService.Info($"DarkMode: KDE activeBackground={sColor}");
+                string[] rgRgb = sColor.Split(',');
+                if (rgRgb.Length == 3 &&
+                    int.TryParse(rgRgb[0], out int iR) &&
+                    int.TryParse(rgRgb[1], out int iG) &&
+                    int.TryParse(rgRgb[2], out int iB) &&
+                    (iR + iG + iB) / 3.0 < 120)
                     return true;
             }
         }
@@ -1073,8 +1073,8 @@ public partial class Form1 : Form
     {
         try
         {
-            int useDark = 1;
-            DwmSetWindowAttribute(this.Handle, DWMWA_USE_IMMERSIVE_DARK_MODE, ref useDark, sizeof(int));
+            int iUseDark = 1;
+            DwmSetWindowAttribute(this.Handle, DWMWA_USE_IMMERSIVE_DARK_MODE, ref iUseDark, sizeof(int));
         }
         catch { }
     }
@@ -1084,9 +1084,9 @@ public partial class Form1 : Form
         this.BackColor = Color.FromArgb(32, 32, 32);
         this.ForeColor = Color.FromArgb(240, 240, 240);
 
-        foreach (Control c in GetAllDescendants(this))
+        foreach (Control ctrl in GetAllDescendants(this))
         {
-            if (c is Label lbl)
+            if (ctrl is Label lbl)
             {
                 if (lbl == lblC64_1 || lbl == lblC64_2 || lbl == lblC64_3) continue;
                 if (lbl.ForeColor == Color.DarkRed)
@@ -1094,91 +1094,91 @@ public partial class Form1 : Form
                 else
                     lbl.ForeColor = Color.FromArgb(240, 240, 240);
             }
-            else if (c is Button btn)
+            else if (ctrl is Button btn)
             {
                 btn.BackColor = Color.FromArgb(60, 60, 60);
                 btn.ForeColor = Color.FromArgb(240, 240, 240);
                 btn.FlatStyle = FlatStyle.Flat;
                 btn.FlatAppearance.BorderColor = Color.FromArgb(80, 80, 80);
             }
-            else if (c is TextBox txt)
+            else if (ctrl is TextBox txt)
             {
                 txt.BackColor = Color.FromArgb(50, 50, 50);
                 txt.ForeColor = Color.FromArgb(240, 240, 240);
             }
-            else if (c is NumericUpDown nud)
+            else if (ctrl is NumericUpDown nud)
             {
                 nud.BackColor = Color.FromArgb(50, 50, 50);
                 nud.ForeColor = Color.FromArgb(240, 240, 240);
             }
-            else if (c is ComboBox cmb)
+            else if (ctrl is ComboBox cmb)
             {
                 cmb.BackColor = Color.FromArgb(50, 50, 50);
                 cmb.ForeColor = Color.FromArgb(240, 240, 240);
             }
-            else if (c is TrackBar tb)
+            else if (ctrl is TrackBar tb)
             {
                 tb.BackColor = Color.FromArgb(32, 32, 32);
             }
-            else if (c is GroupBox gb)
+            else if (ctrl is GroupBox gb)
             {
                 gb.ForeColor = Color.FromArgb(200, 200, 200);
             }
-            else if (c is CheckBox chk)
+            else if (ctrl is CheckBox chk)
             {
                 chk.ForeColor = Color.FromArgb(240, 240, 240);
             }
-            else if (c is Panel pnl)
+            else if (ctrl is Panel pnl)
             {
                 if (pnl == pnlSpread || pnl == pnlRecoil) continue;
                 pnl.BackColor = Color.FromArgb(40, 40, 40);
             }
         }
-        _darkMode = true;
+        bDarkMode = true;
         SetTitleBarDark();
     }
 
     private void PnlSpread_Paint(object sender, PaintEventArgs e)
     {
-        bool leftAds = nudIronSightL.Value != 0;
-        bool rightAds = nudIronSightR.Value != 0;
-        spreadRenderer.DrawSpread(e.Graphics, currentWeaponLeft, currentWeaponRight,
-            (double)nudHipSpreadL.Value, leftAds ? (double)nudAdsSpreadL.Value : 0,
-            (double)nudBipodHipSpreadL.Value, leftAds ? (double)nudBipodAdsSpreadL.Value : 0,
-            currentWeaponRight != null ? (double)nudHipSpreadR.Value : 1.0,
-            currentWeaponRight != null && rightAds ? (double)nudAdsSpreadR.Value : 1.0,
-            currentWeaponRight != null ? (double)nudBipodHipSpreadR.Value : 0,
-            currentWeaponRight != null && rightAds ? (double)nudBipodAdsSpreadR.Value : 0);
+        bool bLeftAds = nudIronSightL.Value != 0;
+        bool bRightAds = nudIronSightR.Value != 0;
+        prSpreadRenderer.DrawSpread(e.Graphics, wCurrentLeft, wCurrentRight,
+            (double)nudHipSpreadL.Value, bLeftAds ? (double)nudAdsSpreadL.Value : 0,
+            (double)nudBipodHipSpreadL.Value, bLeftAds ? (double)nudBipodAdsSpreadL.Value : 0,
+            wCurrentRight != null ? (double)nudHipSpreadR.Value : 1.0,
+            wCurrentRight != null && bRightAds ? (double)nudAdsSpreadR.Value : 1.0,
+            wCurrentRight != null ? (double)nudBipodHipSpreadR.Value : 0,
+            wCurrentRight != null && bRightAds ? (double)nudBipodAdsSpreadR.Value : 0);
     }
 
     private void PnlRecoil_Paint(object sender, PaintEventArgs e)
     {
-        bool leftAds = nudIronSightL.Value != 0;
-        bool rightAds = nudIronSightR.Value != 0;
-        float maxScale = (showingAltStats && currentAltStatMode == WeaponScriptService.AltStatMode.Dov) ? 1.25f : 2.5f;
-        recoilRenderer.DrawRecoil(e.Graphics, currentWeaponLeft, currentWeaponRight,
+        bool bLeftAds = nudIronSightL.Value != 0;
+        bool bRightAds = nudIronSightR.Value != 0;
+        float fMaxScale = (bShowingAltStats && amCurrentAltStat == WeaponScriptService.AltStatMode.Dov) ? 1.25f : 2.5f;
+        prRecoilRenderer.DrawRecoil(e.Graphics, wCurrentLeft, wCurrentRight,
             (double)nudHipRecoilUpL.Value, (double)nudHipRecoilRightL.Value,
-            leftAds ? (double)nudAdsRecoilUpL.Value : 0, leftAds ? (double)nudAdsRecoilRightL.Value : 0,
-            currentWeaponRight != null ? (double)nudHipRecoilUpR.Value : 0,
-            currentWeaponRight != null ? (double)nudHipRecoilRightR.Value : 0,
-            currentWeaponRight != null && rightAds ? (double)nudAdsRecoilUpR.Value : 0,
-            currentWeaponRight != null && rightAds ? (double)nudAdsRecoilRightR.Value : 0,
-            maxScale);
+            bLeftAds ? (double)nudAdsRecoilUpL.Value : 0, bLeftAds ? (double)nudAdsRecoilRightL.Value : 0,
+            wCurrentRight != null ? (double)nudHipRecoilUpR.Value : 0,
+            wCurrentRight != null ? (double)nudHipRecoilRightR.Value : 0,
+            wCurrentRight != null && bRightAds ? (double)nudAdsRecoilUpR.Value : 0,
+            wCurrentRight != null && bRightAds ? (double)nudAdsRecoilRightR.Value : 0,
+            fMaxScale);
     }
 
     public class LogForm : Form
     {
-        public LogForm(string title, string logText, bool darkMode = false)
+        public LogForm(string sTitle, string sLogText, bool bDarkMode = false)
         {
-            this.Text = title;
+            this.Text = sTitle;
             this.Size = new Size(320, 240);
             this.StartPosition = FormStartPosition.CenterParent;
             this.FormBorderStyle = FormBorderStyle.Sizable;
             this.MinimizeBox = false;
             this.MaximizeBox = false;
             this.TopMost = true;
-            var txt = new TextBox { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Dock = DockStyle.Fill, Font = new Font("Consolas", 9), Text = logText.Replace("\n", "\r\n") };
-            if (darkMode)
+            var txt = new TextBox { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Dock = DockStyle.Fill, Font = new Font("Consolas", 9), Text = sLogText.Replace("\n", "\r\n") };
+            if (bDarkMode)
             {
                 this.BackColor = Color.FromArgb(32, 32, 32);
                 this.ForeColor = Color.FromArgb(240, 240, 240);
@@ -1188,8 +1188,8 @@ public partial class Form1 : Form
                 {
                     try
                     {
-                        int useDark = 1;
-                        DwmSetWindowAttribute(this.Handle, DWMWA_USE_IMMERSIVE_DARK_MODE, ref useDark, sizeof(int));
+                        int iUseDark = 1;
+                        DwmSetWindowAttribute(this.Handle, DWMWA_USE_IMMERSIVE_DARK_MODE, ref iUseDark, sizeof(int));
                     }
                     catch { }
                 };

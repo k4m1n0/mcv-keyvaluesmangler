@@ -11,91 +11,91 @@ namespace WeaponDamageCalc.Tools;
 public static class ScriptToTemplateConverter
 {
     #region 入口
-    public static string ConvertAll(string scriptsDir, bool simpleMode)
+    public static string ConvertAll(string sScriptsDir, bool bSimpleMode)
     {
-        LogService.Info($"ConvertAll: {scriptsDir}, simpleMode={simpleMode}");
-        string[] templateLines = ReadEmbeddedTemplate();
-        if (templateLines == null || templateLines.Length == 0)
+        LogService.Info($"ConvertAll: {sScriptsDir}, simpleMode={bSimpleMode}");
+        string[] rgTemplateLines = ReadEmbeddedTemplate();
+        if (rgTemplateLines == null || rgTemplateLines.Length == 0)
         {
             LogService.Error("ConvertAll: embedded template not found");
             return "嵌入的模板文件未找到";
         }
 
-        var files = Directory.GetFiles(scriptsDir, "weapon_*.txt");
-        var log = new List<string>();
-        int success = 0, failed = 0;
+        var rgFiles = Directory.GetFiles(sScriptsDir, "weapon_*.txt");
+        var rgLog = new List<string>();
+        int iSuccess = 0, iFailed = 0;
 
-        string externalPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "preset_file.txt");
-        if (File.Exists(externalPath) && templateLines.Any(l => l.Contains("WeaponData")))
-            log.Add("使用外置模板: " + externalPath);
-        else if (File.Exists(externalPath))
-            log.Add("外置模板校验失败（缺少WeaponData块），已回退到内嵌默认模板");
+        string sExternalPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "preset_file.txt");
+        if (File.Exists(sExternalPath) && rgTemplateLines.Any(sL => sL.Contains("WeaponData")))
+            rgLog.Add("使用外置模板: " + sExternalPath);
+        else if (File.Exists(sExternalPath))
+            rgLog.Add("外置模板校验失败 (缺少WeaponData块)，已回退到内嵌默认模板");
 
-        log.Add("脚本 -> 模板转换");
-        log.Add($"目录: {scriptsDir}");
-        log.Add($"共 {files.Length} 个文件");
-        log.Add(new string('-', 50));
+        rgLog.Add("脚本 -> 模板转换");
+        rgLog.Add($"目录: {sScriptsDir}");
+        rgLog.Add($"共 {rgFiles.Length} 个文件");
+        rgLog.Add(new string('-', 50));
 
-        var opts = simpleMode ? RenderOptions.Simple : RenderOptions.Full;
+        var roOpts = bSimpleMode ? RenderOptions.Simple : RenderOptions.Full;
 
-        for (int i = 0; i < files.Length; i++)
+        for (int i = 0; i < rgFiles.Length; i++)
         {
-            string path = files[i];
-            string name = Path.GetFileName(path);
+            string sPath = rgFiles[i];
+            string sName = Path.GetFileName(sPath);
             try
             {
-                string script = WeaponScriptService.ReadScriptFile(path);
-                string result = ConvertSingle(script, templateLines, opts);
-                DumpDebugInfo(name, script, templateLines, result, log);
-                File.WriteAllText(path, result, new UTF8Encoding(false));
-                success++;
-                log.Add($"[{i + 1}/{files.Length}] {name}");
+                string sScript = WeaponScriptService.ReadScriptFile(sPath);
+                string sResult = ConvertSingle(sScript, rgTemplateLines, roOpts);
+                DumpDebugInfo(sName, sScript, rgTemplateLines, sResult, rgLog);
+                File.WriteAllText(sPath, sResult, new UTF8Encoding(false));
+                iSuccess++;
+                rgLog.Add($"[{i + 1}/{rgFiles.Length}] {sName}");
             }
             catch (Exception ex)
             {
-                failed++;
-                log.Add($"[{i + 1}/{files.Length}] 失败: {name} - {ex.Message}");
-                LogService.Error(ex, $"ConvertAll: {name}");
+                iFailed++;
+                rgLog.Add($"[{i + 1}/{rgFiles.Length}] 失败: {sName} - {ex.Message}");
+                LogService.Error(ex, $"ConvertAll: {sName}");
             }
         }
 
-        log.Add(new string('-', 50));
-        log.Add($"完成: 成功 {success}, 失败 {failed}, 总计 {files.Length}");
-        string resultLog = string.Join("\n", log);
-        LogService.Info($"ConvertAll done: {success} ok, {failed} fail, {files.Length} total");
-        return resultLog;
+        rgLog.Add(new string('-', 50));
+        rgLog.Add($"完成: 成功 {iSuccess}, 失败 {iFailed}, 总计 {rgFiles.Length}");
+        string sResultLog = string.Join("\n", rgLog);
+        LogService.Info($"ConvertAll done: {iSuccess} ok, {iFailed} fail, {rgFiles.Length} total");
+        return sResultLog;
     }
 
     private static string[] ReadEmbeddedTemplate()
     {
         try
         {
-            string externalPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "preset_file.txt");
-            if (File.Exists(externalPath))
+            string sExternalPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "preset_file.txt");
+            if (File.Exists(sExternalPath))
             {
-                LogService.Info($"ReadEmbeddedTemplate: loading external template: {externalPath}");
-                var lines = WeaponScriptService.ReadScriptFile(externalPath)
+                LogService.Info($"ReadEmbeddedTemplate: loading external template: {sExternalPath}");
+                var rgLines = WeaponScriptService.ReadScriptFile(sExternalPath)
                                .Replace("\r\n", "\n")
                                .Replace('\r', '\n')
                                .Split('\n');
-                if (lines.Any(l => l.Contains("WeaponData")) && lines.Any(l => l.Contains("{")) && lines.Any(l => l.Contains("}")))
+                if (rgLines.Any(sL => sL.Contains("WeaponData")) && rgLines.Any(sL => sL.Contains("{")) && rgLines.Any(sL => sL.Contains("}")))
                 {
                     LogService.Info("ReadEmbeddedTemplate: external template validated");
-                    return lines;
+                    return rgLines;
                 }
                 LogService.Warn("ReadEmbeddedTemplate: external template validation failed, falling back to embedded");
             }
 
             LogService.Info("ReadEmbeddedTemplate: loading embedded template");
-            using var stream = System.Reflection.Assembly.GetExecutingAssembly()
+            using var stmEmbedded = System.Reflection.Assembly.GetExecutingAssembly()
                 .GetManifestResourceStream("WeaponDamageCalc.Tools.preset_file.txt");
-            if (stream == null)
+            if (stmEmbedded == null)
             {
                 LogService.Error("ReadEmbeddedTemplate: embedded resource not found");
                 return Array.Empty<string>();
             }
-            using var reader = new StreamReader(stream, Encoding.UTF8);
-            return reader.ReadToEnd()
+            using var srReader = new StreamReader(stmEmbedded, Encoding.UTF8);
+            return srReader.ReadToEnd()
                          .Replace("\r\n", "\n")
                          .Replace('\r', '\n')
                          .Split('\n');
@@ -112,56 +112,56 @@ public static class ScriptToTemplateConverter
 
     private struct RenderOptions
     {
-        public bool SkipEmptyValues;
-        public bool SkipSeparators;
-        public bool CompressBlankLines;
+        public bool bSkipEmptyValues;
+        public bool bSkipSeparators;
+        public bool bCompressBlankLines;
 
         public static readonly RenderOptions Full = new()
         {
-            SkipEmptyValues = false,
-            SkipSeparators = false,
-            CompressBlankLines = false
+            bSkipEmptyValues = false,
+            bSkipSeparators = false,
+            bCompressBlankLines = false
         };
 
         public static readonly RenderOptions Simple = new()
         {
-            SkipEmptyValues = true,
-            SkipSeparators = true,
-            CompressBlankLines = true
+            bSkipEmptyValues = true,
+            bSkipSeparators = true,
+            bCompressBlankLines = true
         };
     }
 
     #endregion
     #region 转换解析
 
-    private static string ConvertSingle(string script, string[] templateLines, RenderOptions opts)
+    private static string ConvertSingle(string sScript, string[] rgTemplateLines, RenderOptions roOpts)
     {
         try
         {
-            var scriptMap = ParseTopLevelMap(script);
-            var scriptBlocks = ExtractAllBlocks(script);
+            var mpScriptMap = ParseTopLevelMap(sScript);
+            var mpScriptBlocks = ExtractAllBlocks(sScript);
 
-            var templateTree = ParseTemplateToTree(templateLines);
-            if (templateTree == null || templateTree.Children.Count == 0)
-                return string.Join("\n", templateLines);
+            var anTemplateTree = ParseTemplateToTree(rgTemplateLines);
+            if (anTemplateTree == null || anTemplateTree.Children.Count == 0)
+                return string.Join("\n", rgTemplateLines);
 
-            var missingKeys = new HashSet<string>(scriptMap.Keys, StringComparer.OrdinalIgnoreCase);
-            FillTreeWithScript(templateTree, scriptMap, scriptBlocks, script, missingKeys);
+            var hsMissingKeys = new HashSet<string>(mpScriptMap.Keys, StringComparer.OrdinalIgnoreCase);
+            FillTreeWithScript(anTemplateTree, mpScriptMap, mpScriptBlocks, sScript, hsMissingKeys);
 
-            var result = new StringBuilder();
-            var state = new RenderState();
-            RenderTree(templateTree, result, opts, state);
-            string output = result.ToString();
-            output = Regex.Replace(output, @"^\s*//\s*[\{\}]\s*$", "", RegexOptions.Multiline);
-            output = output.TrimStart('\r', '\n');
-            if (!output.EndsWith('\n'))
-                output += "\n";
-            return output;
+            var sbResult = new StringBuilder();
+            var rsState = new RenderState();
+            RenderTree(anTemplateTree, sbResult, roOpts, rsState);
+            string sOutput = sbResult.ToString();
+            sOutput = Regex.Replace(sOutput, @"^\s*//\s*[\{\}]\s*$", "", RegexOptions.Multiline);
+            sOutput = sOutput.TrimStart('\r', '\n');
+            if (!sOutput.EndsWith('\n'))
+                sOutput += "\n";
+            return sOutput;
         }
         catch (Exception ex)
         {
             LogService.Error(ex, "ConvertSingle");
-            return string.Join("\n", templateLines);
+            return string.Join("\n", rgTemplateLines);
         }
     }
 
@@ -181,10 +181,10 @@ public static class ScriptToTemplateConverter
 
         public override string ToString() => ToString(0);
 
-        private string ToString(int depth)
+        private string ToString(int iDepth)
         {
             var sb = new StringBuilder();
-            sb.Append(new string(' ', depth * 2));
+            sb.Append(new string(' ', iDepth * 2));
             switch (Type)
             {
                 case NodeType.Root:
@@ -211,51 +211,51 @@ public static class ScriptToTemplateConverter
                     break;
                 case NodeType.Raw:
                 {
-                    string preview = RawText.Length > 60 ? RawText[..60] + "..." : RawText;
-                    sb.AppendLine($"Raw \"{preview.Replace("\n", "\\n").Replace("\r", "\\r")}\"");
+                    string sPreview = RawText.Length > 60 ? RawText[..60] + "..." : RawText;
+                    sb.AppendLine($"Raw \"{sPreview.Replace("\n", "\\n").Replace("\r", "\\r")}\"");
                     break;
                 }
             }
-            foreach (var child in Children)
-                sb.Append(child.ToString(depth + 1));
+            foreach (var anChild in Children)
+                sb.Append(anChild.ToString(iDepth + 1));
             return sb.ToString();
         }
     }
 
     private class RenderState
     {
-        public bool LastWasBlank;
+        public bool bLastWasBlank;
     }
 
-    private static AstNode ParseTemplateToTree(string[] lines)
+    private static AstNode ParseTemplateToTree(string[] rgLines)
     {
         try
         {
-            var root = new AstNode { Type = NodeType.Root };
+            var anRoot = new AstNode { Type = NodeType.Root };
             int i = 0;
 
-            while (i < lines.Length)
+            while (i < rgLines.Length)
             {
-                if (IsBlockStart(lines, i, out string bn, out int end) &&
-                    bn.Equals("WeaponData", StringComparison.OrdinalIgnoreCase))
+                if (IsBlockStart(rgLines, i, out string sBlockName, out int iEnd) &&
+                    sBlockName.Equals("WeaponData", StringComparison.OrdinalIgnoreCase))
                 {
-                    var wdNode = new AstNode
+                    var anWdNode = new AstNode
                     {
                         Type = NodeType.Block,
-                        Indent = ExtractIndent(lines[i]),
+                        Indent = ExtractIndent(rgLines[i]),
                         Name = "WeaponData"
                     };
-                    wdNode.HeaderLines.Add(lines[i]);
+                    anWdNode.HeaderLines.Add(rgLines[i]);
 
-                    root.Children.Add(wdNode);
-                    ParseLines(lines, i + 1, end, wdNode.Children);
-                    i = end + 1;
+                    anRoot.Children.Add(anWdNode);
+                    ParseLines(rgLines, i + 1, iEnd, anWdNode.Children);
+                    i = iEnd + 1;
                     continue;
                 }
-                root.Children.Add(new AstNode { Type = NodeType.Raw, RawText = lines[i] });
+                anRoot.Children.Add(new AstNode { Type = NodeType.Raw, RawText = rgLines[i] });
                 i++;
             }
-            return root;
+            return anRoot;
         }
         catch (Exception ex)
         {
@@ -265,182 +265,182 @@ public static class ScriptToTemplateConverter
     }
 
     //统一逐行解析 所有解析都走这条路
-    private static void ParseLines(string[] lines, int start, int end, List<AstNode> nodes)
+    private static void ParseLines(string[] rgLines, int iStart, int iEnd, List<AstNode> rgNodes)
     {
-        int i = start;
-        while (i < end && i < lines.Length)
+        int i = iStart;
+        while (i < iEnd && i < rgLines.Length)
         {
-            string line = lines[i] ?? string.Empty;
-            string trimmed = line.TrimStart();
+            string sLine = rgLines[i] ?? string.Empty;
+            string sTrimmed = sLine.TrimStart();
 
-            if (string.IsNullOrWhiteSpace(line))
+            if (string.IsNullOrWhiteSpace(sLine))
             {
-                nodes.Add(new AstNode { Type = NodeType.Blank, RawText = line });
+                rgNodes.Add(new AstNode { Type = NodeType.Blank, RawText = sLine });
                 i++; continue;
             }
 
-            if (IsBlockStart(lines, i, out string subName, out int subEnd))
+            if (IsBlockStart(rgLines, i, out string sSubName, out int iSubEnd))
             {
-                var subNode = new AstNode
+                var anSubNode = new AstNode
                 {
                     Type = NodeType.Block,
-                    Indent = ExtractIndent(line),
-                    Name = subName
+                    Indent = ExtractIndent(sLine),
+                    Name = sSubName
                 };
 
-                int headerEnd = i;
-                for (int h = i; h <= subEnd; h++)
+                int iHeaderEnd = i;
+                for (int h = i; h <= iSubEnd; h++)
                 {
-                    subNode.HeaderLines.Add(lines[h]);
-                    if (lines[h].Contains('{'))
+                    anSubNode.HeaderLines.Add(rgLines[h]);
+                    if (rgLines[h].Contains('{'))
                     {
-                        headerEnd = h;
+                        iHeaderEnd = h;
                         break;
                     }
                 }
 
-                nodes.Add(subNode);
-                ParseLines(lines, headerEnd + 1, subEnd, subNode.Children);
-                i = subEnd + 1;
+                rgNodes.Add(anSubNode);
+                ParseLines(rgLines, iHeaderEnd + 1, iSubEnd, anSubNode.Children);
+                i = iSubEnd + 1;
                 continue;
             }
 
-            if (trimmed.StartsWith("//") && !trimmed.Contains('"'))
+            if (sTrimmed.StartsWith("//") && !sTrimmed.Contains('"'))
             {
-                string afterSlash = trimmed.Substring(2).TrimStart();
-                var parts = afterSlash.Split(new[] { ' ', '\t', '{', '}' }, StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length > 0)
+                string sAfterSlash = sTrimmed.Substring(2).TrimStart();
+                var rgParts = sAfterSlash.Split(new[] { ' ', '\t', '{', '}' }, StringSplitOptions.RemoveEmptyEntries);
+                if (rgParts.Length > 0)
                 {
-                    string potentialName = parts[0];
-                    if (TryFindCommentedBlockRange(lines, i, end, out int commentEnd))
+                    string sPotentialName = rgParts[0];
+                    if (TryFindCommentedBlockRange(rgLines, i, iEnd, out int iCommentEnd))
                     {
-                        var cNode = new AstNode
+                        var anCNode = new AstNode
                         {
                             Type = NodeType.CommentedBlock,
-                            Indent = ExtractIndent(line),
-                            Name = potentialName
+                            Indent = ExtractIndent(sLine),
+                            Name = sPotentialName
                         };
-                        cNode.HeaderLines.Add(lines[i]);
+                        anCNode.HeaderLines.Add(rgLines[i]);
 
                         //解析注释块内部 去掉行首//前缀
-                        for (int k = i + 1; k < commentEnd; k++)
+                        for (int k = i + 1; k < iCommentEnd; k++)
                         {
-                            string innerLine = lines[k];
-                            string innerTrimmed = innerLine.TrimStart();
-                            if (string.IsNullOrWhiteSpace(innerLine))
+                            string sInnerLine = rgLines[k];
+                            string sInnerTrimmed = sInnerLine.TrimStart();
+                            if (string.IsNullOrWhiteSpace(sInnerLine))
                             {
-                                cNode.Children.Add(new AstNode { Type = NodeType.Blank, RawText = innerLine });
+                                anCNode.Children.Add(new AstNode { Type = NodeType.Blank, RawText = sInnerLine });
                                 continue;
                             }
-                            string uncommented = innerTrimmed.StartsWith("//") ? innerTrimmed.Substring(2).TrimStart() : innerTrimmed;
-                            ExtractKVResult? kvr = ExtractKeyValueFromLine(uncommented);
-                            if (kvr != null)
+                            string sUncommented = sInnerTrimmed.StartsWith("//") ? sInnerTrimmed.Substring(2).TrimStart() : sInnerTrimmed;
+                            ExtractKVResult? ekvKvr = ExtractKeyValueFromLine(sUncommented);
+                            if (ekvKvr != null)
                             {
-                                cNode.Children.Add(new AstNode
+                                anCNode.Children.Add(new AstNode
                                 {
                                     Type = NodeType.CommentedKeyValue,
-                                    Indent = ExtractIndent(innerLine),
-                                    Name = kvr.Key,
-                                    Value = kvr.Value,
-                                    Separator = kvr.Separator,
-                                    Comment = kvr.Comment
+                                    Indent = ExtractIndent(sInnerLine),
+                                    Name = ekvKvr.Key,
+                                    Value = ekvKvr.Value,
+                                    Separator = ekvKvr.Separator,
+                                    Comment = ekvKvr.Comment
                                 });
                             }
                             else
                             {
-                                cNode.Children.Add(new AstNode { Type = NodeType.Raw, RawText = innerLine });//无法识别的行当raw处理
+                                anCNode.Children.Add(new AstNode { Type = NodeType.Raw, RawText = sInnerLine });//无法识别的行当raw处理
                             }
                         }
 
-                        nodes.Add(cNode);
-                        i = commentEnd + 1;
+                        rgNodes.Add(anCNode);
+                        i = iCommentEnd + 1;
                         continue;
                     }
                 }
                 //不是注释块 当作普通注释行
-                nodes.Add(new AstNode { Type = NodeType.Raw, RawText = line });
+                rgNodes.Add(new AstNode { Type = NodeType.Raw, RawText = sLine });
                 i++; continue;
             }
 
-            if (trimmed.StartsWith("//") && trimmed.Contains('"'))
+            if (sTrimmed.StartsWith("//") && sTrimmed.Contains('"'))
             {
-                string afterSlash = trimmed.Substring(trimmed.IndexOf('"'));
-                ExtractKVResult? kvr = ExtractKeyValueFromLine(afterSlash);
-                if (kvr != null)
+                string sAfterSlash = sTrimmed.Substring(sTrimmed.IndexOf('"'));
+                ExtractKVResult? ekvKvr = ExtractKeyValueFromLine(sAfterSlash);
+                if (ekvKvr != null)
                 {
-                    nodes.Add(new AstNode
+                    rgNodes.Add(new AstNode
                     {
                         Type = NodeType.CommentedKeyValue,
-                        Indent = ExtractIndent(line),
-                        Name = kvr.Key,
-                        Value = kvr.Value,
-                        Separator = kvr.Separator,
-                        Comment = kvr.Comment
+                        Indent = ExtractIndent(sLine),
+                        Name = ekvKvr.Key,
+                        Value = ekvKvr.Value,
+                        Separator = ekvKvr.Separator,
+                        Comment = ekvKvr.Comment
                     });
                     i++; continue;
                 }
-                nodes.Add(new AstNode { Type = NodeType.Raw, RawText = line });
+                rgNodes.Add(new AstNode { Type = NodeType.Raw, RawText = sLine });
                 i++; continue;
             }
 
-            if (trimmed.StartsWith("\""))
+            if (sTrimmed.StartsWith("\""))
             {
-                ExtractKVResult? kvr = ExtractKeyValueFromLine(trimmed);
-                if (kvr != null)
+                ExtractKVResult? ekvKvr = ExtractKeyValueFromLine(sTrimmed);
+                if (ekvKvr != null)
                 {
-                    nodes.Add(new AstNode
+                    rgNodes.Add(new AstNode
                     {
                         Type = NodeType.KeyValue,
-                        Indent = ExtractIndent(line),
-                        Name = kvr.Key,
-                        Value = kvr.Value,
-                        Separator = kvr.Separator,
-                        Comment = kvr.Comment
+                        Indent = ExtractIndent(sLine),
+                        Name = ekvKvr.Key,
+                        Value = ekvKvr.Value,
+                        Separator = ekvKvr.Separator,
+                        Comment = ekvKvr.Comment
                     });
                     i++; continue;
                 }
-                nodes.Add(new AstNode { Type = NodeType.Raw, RawText = line });
+                rgNodes.Add(new AstNode { Type = NodeType.Raw, RawText = sLine });
                 i++; continue;
             }
 
-            nodes.Add(new AstNode { Type = NodeType.Raw, RawText = line });
+            rgNodes.Add(new AstNode { Type = NodeType.Raw, RawText = sLine });
             i++;
         }
     }
 
     //手动扫描提取一行内的键值对 返回null表示该行不是合法kv
-    private static ExtractKVResult? ExtractKeyValueFromLine(string line)
+    private static ExtractKVResult? ExtractKeyValueFromLine(string sLine)
     {
-        if (string.IsNullOrEmpty(line)) return null;
+        if (string.IsNullOrEmpty(sLine)) return null;
 
-        int firstQuote = line.IndexOf('"');
-        if (firstQuote < 0) return null;
+        int iFirstQuote = sLine.IndexOf('"');
+        if (iFirstQuote < 0) return null;
 
-        int keyEnd = FindClosingQuote(line, firstQuote + 1);
-        if (keyEnd < 0) return null;
+        int iKeyEnd = FindClosingQuote(sLine, iFirstQuote + 1);
+        if (iKeyEnd < 0) return null;
 
-        string key = line.Substring(firstQuote + 1, keyEnd - firstQuote - 1);
-        if (string.IsNullOrEmpty(key)) return null;
+        string sKey = sLine.Substring(iFirstQuote + 1, iKeyEnd - iFirstQuote - 1);
+        if (string.IsNullOrEmpty(sKey)) return null;
 
-        int valOpen = line.IndexOf('"', keyEnd + 1);
-        if (valOpen < 0) return null;
-        string separator = line.Substring(keyEnd + 1, valOpen - keyEnd - 1);
-        if (string.IsNullOrWhiteSpace(separator)) separator = "\t\t\t\t";//回退默认
+        int iValOpen = sLine.IndexOf('"', iKeyEnd + 1);
+        if (iValOpen < 0) return null;
+        string sSeparator = sLine.Substring(iKeyEnd + 1, iValOpen - iKeyEnd - 1);
+        if (string.IsNullOrWhiteSpace(sSeparator)) sSeparator = "\t\t\t\t";//回退默认
 
-        int valEnd = FindClosingQuote(line, valOpen + 1);
-        if (valEnd < 0) return null;
+        int iValEnd = FindClosingQuote(sLine, iValOpen + 1);
+        if (iValEnd < 0) return null;
 
-        string value = line.Substring(valOpen + 1, valEnd - valOpen - 1);
+        string sValue = sLine.Substring(iValOpen + 1, iValEnd - iValOpen - 1);
 
-        string? comment = null;
-        int commentIdx = line.IndexOf("//", valEnd + 1, StringComparison.Ordinal);
-        if (commentIdx >= 0)
+        string? sComment = null;
+        int iCommentIdx = sLine.IndexOf("//", iValEnd + 1, StringComparison.Ordinal);
+        if (iCommentIdx >= 0)
         {
-            comment = line.Substring(commentIdx + 2).Trim();
-            if (string.IsNullOrEmpty(comment)) comment = null;
+            sComment = sLine.Substring(iCommentIdx + 2).Trim();
+            if (string.IsNullOrEmpty(sComment)) sComment = null;
         }
 
-        return new ExtractKVResult(key, value, separator, comment);
+        return new ExtractKVResult(sKey, sValue, sSeparator, sComment);
     }
 
     private sealed class ExtractKVResult
@@ -449,51 +449,51 @@ public static class ScriptToTemplateConverter
         public string Value { get; }
         public string Separator { get; }
         public string? Comment { get; }
-        public ExtractKVResult(string key, string value, string separator, string? comment)
+        public ExtractKVResult(string sKey, string sValue, string sSeparator, string? sComment)
         {
-            Key = key;
-            Value = value;
-            Separator = separator;
-            Comment = comment;
+            Key = sKey;
+            Value = sValue;
+            Separator = sSeparator;
+            Comment = sComment;
         }
     }
 
     //找下一个未转义的引号 返回索引 未找到返回-1
-    private static int FindClosingQuote(string line, int start)
+    private static int FindClosingQuote(string sLine, int iStart)
     {
-        for (int i = start; i < line.Length; i++)
+        for (int i = iStart; i < sLine.Length; i++)
         {
-            if (line[i] == '"' && (i == 0 || line[i - 1] != '\\'))
+            if (sLine[i] == '"' && (i == 0 || sLine[i - 1] != '\\'))
                 return i;
         }
         return -1;
     }
 
-    private static bool TryFindCommentedBlockRange(string[] lines, int start, int blockEnd, out int commentEnd)
+    private static bool TryFindCommentedBlockRange(string[] rgLines, int iStart, int iBlockEnd, out int iCommentEnd)
     {
-        commentEnd = start;
-        string firstLine = lines[start].TrimStart();
-        bool startsWithBraceOnSameLine = firstLine.Contains("{");
-        bool nextLineHasBrace = (start + 1 <= blockEnd &&
-                                 lines[start + 1].TrimStart().StartsWith("//") &&
-                                 lines[start + 1].Contains('{'));
+        iCommentEnd = iStart;
+        string sFirstLine = rgLines[iStart].TrimStart();
+        bool bStartsWithBraceOnSameLine = sFirstLine.Contains("{");
+        bool bNextLineHasBrace = (iStart + 1 <= iBlockEnd &&
+                                 rgLines[iStart + 1].TrimStart().StartsWith("//") &&
+                                 rgLines[iStart + 1].Contains('{'));
 
-        if (!startsWithBraceOnSameLine && !nextLineHasBrace)
+        if (!bStartsWithBraceOnSameLine && !bNextLineHasBrace)
             return false;
 
-        int depth = startsWithBraceOnSameLine ? 1 : 0;
-        int startSearch = start + 1;
+        int iDepth = bStartsWithBraceOnSameLine ? 1 : 0;
+        int iStartSearch = iStart + 1;
 
-        for (int k = startSearch; k <= blockEnd; k++)
+        for (int k = iStartSearch; k <= iBlockEnd; k++)
         {
-            string next = lines[k].TrimStart();
-            if (next.StartsWith("//") && next.Contains('{')) depth++;
-            else if (next.StartsWith("//") && next.Contains('}'))
+            string sNext = rgLines[k].TrimStart();
+            if (sNext.StartsWith("//") && sNext.Contains('{')) iDepth++;
+            else if (sNext.StartsWith("//") && sNext.Contains('}'))
             {
-                depth--;
-                if (depth == 0)
+                iDepth--;
+                if (iDepth == 0)
                 {
-                    commentEnd = k;
+                    iCommentEnd = k;
                     return true;
                 }
             }
@@ -504,239 +504,239 @@ public static class ScriptToTemplateConverter
     #endregion
     #region 数据填充
 
-    private static void FillTreeWithScript(AstNode node, Dictionary<string, string> currentMap,
-                                           Dictionary<string, string> scriptBlocks, string currentScriptText,
-                                           HashSet<string> missingKeys)
+    private static void FillTreeWithScript(AstNode anNode, Dictionary<string, string> mpCurrentMap,
+                                           Dictionary<string, string> mpScriptBlocks, string sCurrentScriptText,
+                                           HashSet<string> hsMissingKeys)
     {
         try
         {
-            if (node.Type == NodeType.Root || node.Type == NodeType.Block)
+            if (anNode.Type == NodeType.Root || anNode.Type == NodeType.Block)
             {
-                Dictionary<string, string> childMap = currentMap;
-                string childScriptText = currentScriptText;
+                Dictionary<string, string> mpChildMap = mpCurrentMap;
+                string sChildScriptText = sCurrentScriptText;
 
-                if (node.Type == NodeType.Block && node.Name != "WeaponData")
+                if (anNode.Type == NodeType.Block && anNode.Name != "WeaponData")
                 {
-                    if (scriptBlocks.TryGetValue(node.Name!, out string? blockContent) && !string.IsNullOrEmpty(blockContent))
+                    if (mpScriptBlocks.TryGetValue(anNode.Name!, out string? sBlockContent) && !string.IsNullOrEmpty(sBlockContent))
                     {
-                        childMap = ParseKeyValueMap(blockContent);
-                        childScriptText = blockContent;
+                        mpChildMap = ParseKeyValueMap(sBlockContent);
+                        sChildScriptText = sBlockContent;
                     }
                     else
                     {
-                        childMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                        childScriptText = string.Empty;
+                        mpChildMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                        sChildScriptText = string.Empty;
                     }
                 }
 
-                foreach (var child in node.Children)
-                    FillTreeWithScript(child, childMap, scriptBlocks, childScriptText, missingKeys);
+                foreach (var anChild in anNode.Children)
+                    FillTreeWithScript(anChild, mpChildMap, mpScriptBlocks, sChildScriptText, hsMissingKeys);
 
-                if (node.Type == NodeType.Block && node.Name == "WeaponData")
+                if (anNode.Type == NodeType.Block && anNode.Name == "WeaponData")
                 {
-                    var extraChildren = new List<AstNode>();
-                    foreach (var key in missingKeys.ToList())
+                    var rgExtraChildren = new List<AstNode>();
+                    foreach (var sKey in hsMissingKeys.ToList())
                     {
-                        if (currentMap.TryGetValue(key, out string? val) && !string.IsNullOrEmpty(val))
+                        if (mpCurrentMap.TryGetValue(sKey, out string? sVal) && !string.IsNullOrEmpty(sVal))
                         {
-                            extraChildren.Add(new AstNode
+                            rgExtraChildren.Add(new AstNode
                             {
                                 Type = NodeType.KeyValue,
                                 Indent = "\t",
-                                Name = key,
-                                Value = val,
+                                Name = sKey,
+                                Value = sVal,
                                 Separator = "\t\t\t\t"
                             });
-                            missingKeys.Remove(key);
+                            hsMissingKeys.Remove(sKey);
                         }
                     }
-                    if (extraChildren.Count > 0)
-                        LogService.Info($"FillTreeWithScript: {extraChildren.Count} extra keys appended to WeaponData");
-                    node.Children.AddRange(extraChildren);
+                    if (rgExtraChildren.Count > 0)
+                        LogService.Info($"FillTreeWithScript: {rgExtraChildren.Count} extra keys appended to WeaponData");
+                    anNode.Children.AddRange(rgExtraChildren);
                 }
             }
-            else if (node.Type == NodeType.CommentedBlock &&
-                     scriptBlocks.TryGetValue(node.Name!, out string? cbBlockContent) &&
-                     !string.IsNullOrEmpty(cbBlockContent))
+            else if (anNode.Type == NodeType.CommentedBlock &&
+                     mpScriptBlocks.TryGetValue(anNode.Name!, out string? sCbBlockContent) &&
+                     !string.IsNullOrEmpty(sCbBlockContent))
             {
                 //解析脚本块内容 提取键值对和子块
-                string[] blockLines = cbBlockContent.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-                var tempChildren = new List<AstNode>();
-                if (blockLines.Length > 0)
+                string[] rgBlockLines = sCbBlockContent.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                var rgTempChildren = new List<AstNode>();
+                if (rgBlockLines.Length > 0)
                 {
-                    ParseLines(blockLines, 0, blockLines.Length, tempChildren);
+                    ParseLines(rgBlockLines, 0, rgBlockLines.Length, rgTempChildren);
                 }
 
-                var scriptKeyValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                var scriptSubBlocks = new List<AstNode>();
-                foreach (var child in tempChildren)
+                var mpScriptKeyValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                var rgScriptSubBlocks = new List<AstNode>();
+                foreach (var anChild in rgTempChildren)
                 {
-                    if (child.Type == NodeType.KeyValue && !string.IsNullOrEmpty(child.Value))
-                        scriptKeyValues[child.Name!] = child.Value;
-                    else if (child.Type == NodeType.Block)
-                        scriptSubBlocks.Add(child);
+                    if (anChild.Type == NodeType.KeyValue && !string.IsNullOrEmpty(anChild.Value))
+                        mpScriptKeyValues[anChild.Name!] = anChild.Value;
+                    else if (anChild.Type == NodeType.Block)
+                        rgScriptSubBlocks.Add(anChild);
                 }
 
-                if (scriptKeyValues.Count > 0 || scriptSubBlocks.Count > 0)
+                if (mpScriptKeyValues.Count > 0 || rgScriptSubBlocks.Count > 0)
                 {
-                    node.Type = NodeType.Block;
-                    node.HeaderLines = new List<string>
+                    anNode.Type = NodeType.Block;
+                    anNode.HeaderLines = new List<string>
                     {
-                        $"{node.Indent}{node.Name}",
-                        $"{node.Indent}{{"
+                        $"{anNode.Indent}{anNode.Name}",
+                        $"{anNode.Indent}{{"
                     };
 
-                    var templateChildren = new List<AstNode>(node.Children);//保存模板中已有的注释子节点用于保留分隔符等信息
-                    node.Children.Clear();//清空原有注释子节点 用脚本中的实际键值对和子块重建
+                    var rgTemplateChildren = new List<AstNode>(anNode.Children);//保存模板中已有的注释子节点用于保留分隔符等信息
+                    anNode.Children.Clear();//清空原有注释子节点 用脚本中的实际键值对和子块重建
 
                     //先填充模板中已有的键值对 保留模板的分隔符和注释
-                    foreach (var tChild in templateChildren)
+                    foreach (var anTChild in rgTemplateChildren)
                     {
-                        if ((tChild.Type == NodeType.CommentedKeyValue || tChild.Type == NodeType.KeyValue)
-                            && tChild.Name != null
-                            && scriptKeyValues.TryGetValue(tChild.Name, out string? val)
-                            && !string.IsNullOrEmpty(val))
+                        if ((anTChild.Type == NodeType.CommentedKeyValue || anTChild.Type == NodeType.KeyValue)
+                            && anTChild.Name != null
+                            && mpScriptKeyValues.TryGetValue(anTChild.Name, out string? sVal)
+                            && !string.IsNullOrEmpty(sVal))
                         {
-                            node.Children.Add(new AstNode
+                            anNode.Children.Add(new AstNode
                             {
                                 Type = NodeType.KeyValue,
-                                Indent = tChild.Indent,
-                                Name = tChild.Name,
-                                Value = val,
-                                Separator = tChild.Separator,
-                                Comment = tChild.Comment
+                                Indent = anTChild.Indent,
+                                Name = anTChild.Name,
+                                Value = sVal,
+                                Separator = anTChild.Separator,
+                                Comment = anTChild.Comment
                             });
-                            scriptKeyValues.Remove(tChild.Name);
-                            missingKeys.Remove(tChild.Name);
+                            mpScriptKeyValues.Remove(anTChild.Name);
+                            hsMissingKeys.Remove(anTChild.Name);
                         }
                     }
 
                     //追加模板中没有但脚本中存在的键值对
-                    foreach (var kvp in scriptKeyValues)
+                    foreach (var kvp in mpScriptKeyValues)
                     {
-                        node.Children.Add(new AstNode
+                        anNode.Children.Add(new AstNode
                         {
                             Type = NodeType.KeyValue,
-                            Indent = node.Indent + "\t",
+                            Indent = anNode.Indent + "\t",
                             Name = kvp.Key,
                             Value = kvp.Value,
                             Separator = "\t\t\t\t"
                         });
-                        missingKeys.Remove(kvp.Key);
+                        hsMissingKeys.Remove(kvp.Key);
                     }
 
                     //追加脚本中的子块 如ViewSlideRecoil
-                    foreach (var subBlock in scriptSubBlocks)
+                    foreach (var anSubBlock in rgScriptSubBlocks)
                     {
-                        node.Children.Add(subBlock);
-                        RemoveSubBlockKeysFromMissing(subBlock, missingKeys);
+                        anNode.Children.Add(anSubBlock);
+                        RemoveSubBlockKeysFromMissing(anSubBlock, hsMissingKeys);
                     }
                 }
             }
-            else if (node.Type == NodeType.CommentedKeyValue || node.Type == NodeType.KeyValue)
+            else if (anNode.Type == NodeType.CommentedKeyValue || anNode.Type == NodeType.KeyValue)
             {
-                if (currentMap.TryGetValue(node.Name!, out string? scriptVal) && !string.IsNullOrEmpty(scriptVal))
+                if (mpCurrentMap.TryGetValue(anNode.Name!, out string? sScriptVal) && !string.IsNullOrEmpty(sScriptVal))
                 {
-                    node.Value = scriptVal;//注释键在脚本中有值 激活为普通键 重新计算分隔符以匹配模板对齐宽度
-                    if (node.Type == NodeType.CommentedKeyValue)
+                    anNode.Value = sScriptVal;//注释键在脚本中有值 激活为普通键 重新计算分隔符以匹配模板对齐宽度
+                    if (anNode.Type == NodeType.CommentedKeyValue)
                     {
-                        node.Type = NodeType.KeyValue;
+                        anNode.Type = NodeType.KeyValue;
                     }
 
-                    string? scriptComment = GetLineCommentFromScript(currentScriptText, node.Name!);
-                    node.Comment = scriptComment ?? node.Comment;
+                    string? sScriptComment = GetLineCommentFromScript(sCurrentScriptText, anNode.Name!);
+                    anNode.Comment = sScriptComment ?? anNode.Comment;
 
-                    missingKeys.Remove(node.Name!);
+                    hsMissingKeys.Remove(anNode.Name!);
                 }
             }
         }
         catch (Exception ex)
         {
-            LogService.Error(ex, $"FillTreeWithScript: node={node.Type}, name={node.Name}");
+            LogService.Error(ex, $"FillTreeWithScript: node={anNode.Type}, name={anNode.Name}");
         }
     }
 
     //递归移除子块中所有键值对的键名 防止被当作missingKey追加到WeaponData顶层
-    private static void RemoveSubBlockKeysFromMissing(AstNode block, HashSet<string> missingKeys)
+    private static void RemoveSubBlockKeysFromMissing(AstNode anBlock, HashSet<string> hsMissingKeys)
     {
-        foreach (var child in block.Children)
+        foreach (var anChild in anBlock.Children)
         {
-            if (child.Type == NodeType.KeyValue && child.Name != null)
-                missingKeys.Remove(child.Name);
-            else if (child.Type == NodeType.Block)
-                RemoveSubBlockKeysFromMissing(child, missingKeys);
+            if (anChild.Type == NodeType.KeyValue && anChild.Name != null)
+                hsMissingKeys.Remove(anChild.Name);
+            else if (anChild.Type == NodeType.Block)
+                RemoveSubBlockKeysFromMissing(anChild, hsMissingKeys);
         }
     }
 
     #endregion
     #region 序列化
 
-    private static void RenderTree(AstNode node, StringBuilder sb, RenderOptions opts, RenderState state)//this shit was heavily LLM assisted, happy debugging
+    private static void RenderTree(AstNode anNode, StringBuilder sb, RenderOptions roOpts, RenderState rsState)//this shit was heavily LLM assisted, happy debugging
     {
-        switch (node.Type)
+        switch (anNode.Type)
         {
             case NodeType.Root:
-                foreach (var child in node.Children) RenderTree(child, sb, opts, state);
+                foreach (var anChild in anNode.Children) RenderTree(anChild, sb, roOpts, rsState);
                 break;
             case NodeType.Blank:
-                if (opts.CompressBlankLines && state.LastWasBlank) break;//压缩连续空行
-                state.LastWasBlank = true;
-                if (opts.CompressBlankLines)
+                if (roOpts.bCompressBlankLines && rsState.bLastWasBlank) break;//压缩连续空行
+                rsState.bLastWasBlank = true;
+                if (roOpts.bCompressBlankLines)
                     sb.AppendLine();
                 else
-                    sb.AppendLine(node.RawText);//full模式保留原始空行内容 如带缩进的空行
+                    sb.AppendLine(anNode.RawText);//full模式保留原始空行内容 如带缩进的空行
                 break;
             case NodeType.Raw:
-                state.LastWasBlank = false;
-                if (opts.SkipSeparators && IsSeparatorComment(node.RawText))
+                rsState.bLastWasBlank = false;
+                if (roOpts.bSkipSeparators && IsSeparatorComment(anNode.RawText))
                     break;
-                sb.AppendLine(node.RawText);
+                sb.AppendLine(anNode.RawText);
                 break;
             case NodeType.Block:
-                if (opts.SkipEmptyValues && !BlockHasContent(node)) break;//空块跳过
-                state.LastWasBlank = false;
-                foreach (var header in node.HeaderLines)
-                    sb.AppendLine(header);
-                foreach (var child in node.Children) RenderTree(child, sb, opts, state);
-                string closeIndent = (node.Name == "WeaponData") ? "" : node.Indent;//最外层WeaponData块闭合顶格 子块保留缩进
-                sb.AppendLine($"{closeIndent}}}");
+                if (roOpts.bSkipEmptyValues && !BlockHasContent(anNode)) break;//空块跳过
+                rsState.bLastWasBlank = false;
+                foreach (var sHeader in anNode.HeaderLines)
+                    sb.AppendLine(sHeader);
+                foreach (var anChild in anNode.Children) RenderTree(anChild, sb, roOpts, rsState);
+                string sCloseIndent = (anNode.Name == "WeaponData") ? "" : anNode.Indent;//最外层WeaponData块闭合顶格 子块保留缩进
+                sb.AppendLine($"{sCloseIndent}}}");
                 break;
             case NodeType.KeyValue:
-                if (opts.SkipEmptyValues && string.IsNullOrEmpty(node.Value)) break;
-                state.LastWasBlank = false;
-                string commentStr = string.IsNullOrEmpty(node.Comment) ? "" : $" //{node.Comment}";
-                sb.AppendLine($"{node.Indent}\"{node.Name}\"{node.Separator}\"{node.Value}\"{commentStr}");
+                if (roOpts.bSkipEmptyValues && string.IsNullOrEmpty(anNode.Value)) break;
+                rsState.bLastWasBlank = false;
+                string sCommentStr = string.IsNullOrEmpty(anNode.Comment) ? "" : $" //{anNode.Comment}";
+                sb.AppendLine($"{anNode.Indent}\"{anNode.Name}\"{anNode.Separator}\"{anNode.Value}\"{sCommentStr}");
                 break;
             case NodeType.CommentedBlock:
-                if (opts.SkipEmptyValues && !node.Children.Any(c => c.Type == NodeType.KeyValue || c.Type == NodeType.Block))//无激活内容跳过
+                if (roOpts.bSkipEmptyValues && !anNode.Children.Any(anC => anC.Type == NodeType.KeyValue || anC.Type == NodeType.Block))//无激活内容跳过
                     break;
-                state.LastWasBlank = false;
-                foreach (var header in node.HeaderLines)
-                    sb.AppendLine(header);
-                sb.AppendLine($"{node.Indent}//{{");
-                foreach (var child in node.Children) RenderTree(child, sb, opts, state);
-                sb.AppendLine($"{node.Indent}//}}");
+                rsState.bLastWasBlank = false;
+                foreach (var sHeader in anNode.HeaderLines)
+                    sb.AppendLine(sHeader);
+                sb.AppendLine($"{anNode.Indent}//{{");
+                foreach (var anChild in anNode.Children) RenderTree(anChild, sb, roOpts, rsState);
+                sb.AppendLine($"{anNode.Indent}//}}");
                 break;
             case NodeType.CommentedKeyValue:
-                if (opts.SkipEmptyValues && string.IsNullOrEmpty(node.Value)) break;//空值注释键跳过
-                state.LastWasBlank = false;
-                string ckvCommentStr = string.IsNullOrEmpty(node.Comment) ? "" : $" //{node.Comment}";
-                sb.AppendLine($"{node.Indent}// \"{node.Name}\"{node.Separator}\"{node.Value}\"{ckvCommentStr}");
+                if (roOpts.bSkipEmptyValues && string.IsNullOrEmpty(anNode.Value)) break;//空值注释键跳过
+                rsState.bLastWasBlank = false;
+                string sCkvCommentStr = string.IsNullOrEmpty(anNode.Comment) ? "" : $" //{anNode.Comment}";
+                sb.AppendLine($"{anNode.Indent}// \"{anNode.Name}\"{anNode.Separator}\"{anNode.Value}\"{sCkvCommentStr}");
                 break;
         }
     }
 
     //递归检查块是否包含任何有效内容
-    private static bool BlockHasContent(AstNode block)
+    private static bool BlockHasContent(AstNode anBlock)
     {
-        foreach (var child in block.Children)
+        foreach (var anChild in anBlock.Children)
         {
-            switch (child.Type)
+            switch (anChild.Type)
             {
-                case NodeType.KeyValue when !string.IsNullOrEmpty(child.Value):
-                case NodeType.Block when BlockHasContent(child):
+                case NodeType.KeyValue when !string.IsNullOrEmpty(anChild.Value):
+                case NodeType.Block when BlockHasContent(anChild):
                     return true;
-                case NodeType.Raw when !string.IsNullOrWhiteSpace(child.RawText) && !child.RawText.TrimStart().StartsWith("//"):
+                case NodeType.Raw when !string.IsNullOrWhiteSpace(anChild.RawText) && !anChild.RawText.TrimStart().StartsWith("//"):
                     return true;
             }
         }
@@ -747,13 +747,13 @@ public static class ScriptToTemplateConverter
     #region 辅助
 
     //判断是否为仅由符号组成的装饰性分隔注释 如////////////// 或//--- 或//****
-    private static bool IsSeparatorComment(string line)
+    private static bool IsSeparatorComment(string sLine)
     {
-        string trimmed = line.TrimStart();
-        if (!trimmed.StartsWith("//")) return false;
-        string body = trimmed.Substring(2).Trim();//去掉//前缀和空白
-        if (string.IsNullOrEmpty(body)) return false;
-        foreach (char c in body) //如果剩余字符全部由 / * - = # _ . 空格和tab组成 视为分隔注释
+        string sTrimmed = sLine.TrimStart();
+        if (!sTrimmed.StartsWith("//")) return false;
+        string sBody = sTrimmed.Substring(2).Trim();//去掉//前缀和空白
+        if (string.IsNullOrEmpty(sBody)) return false;
+        foreach (char c in sBody) //如果剩余字符全部由 / * - = # _ . 空格和tab组成 视为分隔注释
         {
             if (c != '/' && c != '*' && c != '-' && c != '=' && c != '#' && c != '_' && c != '.' && c != ' ' && c != '\t')
                 return false;
@@ -761,86 +761,86 @@ public static class ScriptToTemplateConverter
         return true;
     }
 
-    private static string ExtractIndent(string line)
+    private static string ExtractIndent(string sLine)
     {
-        int idx = line.Length - line.TrimStart().Length;
-        return idx > 0 ? line[..idx] : "\t";
+        int iIdx = sLine.Length - sLine.TrimStart().Length;
+        return iIdx > 0 ? sLine[..iIdx] : "\t";
     }
 
     //从脚本全文中查找指定key所在行的行尾注释 用于FillTreeWithScript激活键值对时补注释
-    private static string? GetLineCommentFromScript(string text, string key)
+    private static string? GetLineCommentFromScript(string sText, string sKey)
     {
-        if (string.IsNullOrEmpty(text)) return null;
-        foreach (var rawLine in text.Split('\n'))
+        if (string.IsNullOrEmpty(sText)) return null;
+        foreach (var sRawLine in sText.Split('\n'))
         {
-            string line = rawLine.Trim();
-            if (line.StartsWith("//")) continue;
-            if (!line.Contains($"\"{key}\"")) continue;
-            bool inQuote = false;
-            for (int i = 0; i < line.Length - 1; i++)
+            string sLine = sRawLine.Trim();
+            if (sLine.StartsWith("//")) continue;
+            if (!sLine.Contains($"\"{sKey}\"")) continue;
+            bool bInQuote = false;
+            for (int i = 0; i < sLine.Length - 1; i++)
             {
-                if (line[i] == '"' && (i == 0 || line[i - 1] != '\\')) inQuote = !inQuote;
-                if (!inQuote && line[i] == '/' && line[i + 1] == '/')
-                    return line.Substring(i + 2).Trim();
+                if (sLine[i] == '"' && (i == 0 || sLine[i - 1] != '\\')) bInQuote = !bInQuote;
+                if (!bInQuote && sLine[i] == '/' && sLine[i + 1] == '/')
+                    return sLine.Substring(i + 2).Trim();
             }
             return null;
         }
         return null;
     }
 
-    private static string CleanBlockName(string raw)
+    private static string CleanBlockName(string sRaw)
     {
-        if (string.IsNullOrEmpty(raw)) return raw;
-        int c = raw.IndexOf("//", StringComparison.Ordinal);
-        if (c >= 0) raw = raw[..c];
-        raw = Regex.Replace(raw, @"[\u200B-\u200D\uFEFF\u00A0]", "");//sb！！！
-        return raw.Trim();
+        if (string.IsNullOrEmpty(sRaw)) return sRaw;
+        int iCommentIdx = sRaw.IndexOf("//", StringComparison.Ordinal);
+        if (iCommentIdx >= 0) sRaw = sRaw[..iCommentIdx];
+        sRaw = Regex.Replace(sRaw, @"[\u200B-\u200D\uFEFF\u00A0]", "");//sb！！！
+        return sRaw.Trim();
     }
 
     //从文本中解析键值对映射 复用ParseLines确保与模板解析使用相同的kv提取逻辑 递归穿透子块
-    private static Dictionary<string, string> ParseKeyValueMap(string text)
+    private static Dictionary<string, string> ParseKeyValueMap(string sText)
     {
-        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (string.IsNullOrEmpty(text)) return map;
+        var mpMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrEmpty(sText)) return mpMap;
 
         try
         {
-            var lines = text.Split('\n');
-            var nodes = new List<AstNode>();
-            ParseLines(lines, 0, lines.Length, nodes);
-            CollectKeyValues(nodes, map);
+            var rgLines = sText.Split('\n');
+            var rgNodes = new List<AstNode>();
+            ParseLines(rgLines, 0, rgLines.Length, rgNodes);
+            CollectKeyValues(rgNodes, mpMap);
         }
         catch (Exception ex)
         {
             LogService.Error(ex, "ParseKeyValueMap");
         }
-        return map;
+        return mpMap;
     }
 
     //递归收集键值对 穿透子块
-    private static void CollectKeyValues(List<AstNode> nodes, Dictionary<string, string> map)
+    private static void CollectKeyValues(List<AstNode> rgNodes, Dictionary<string, string> mpMap)
     {
-        foreach (var node in nodes)
+        foreach (var anNode in rgNodes)
         {
-            if (node.Type == NodeType.KeyValue && node.Name != null && !string.IsNullOrEmpty(node.Value))
-                map[node.Name] = node.Value;
-            else if (node.Type == NodeType.Block)
-                CollectKeyValues(node.Children, map);
+            if (anNode.Type == NodeType.KeyValue && anNode.Name != null && !string.IsNullOrEmpty(anNode.Value))
+                mpMap[anNode.Name] = anNode.Value;
+            else if (anNode.Type == NodeType.Block)
+                CollectKeyValues(anNode.Children, mpMap);
         }
     }
 
-    private static Dictionary<string, string> ParseTopLevelMap(string content)
+    private static Dictionary<string, string> ParseTopLevelMap(string sContent)
     {
         try
         {
-            int wdIdx = content.IndexOf("WeaponData", StringComparison.Ordinal);
-            if (wdIdx < 0) return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            int outerOpen = content.IndexOf('{', wdIdx);
-            if (outerOpen < 0) return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            int outerClose = FindMatchingBrace(content, outerOpen);
-            if (outerClose < 0 || outerOpen + 1 >= outerClose) return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            string inner = content.Substring(outerOpen + 1, outerClose - outerOpen - 1);
-            return ParseKeyValueMap(inner);
+            int iWdIdx = sContent.IndexOf("WeaponData", StringComparison.Ordinal);
+            if (iWdIdx < 0) return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            int iOuterOpen = sContent.IndexOf('{', iWdIdx);
+            if (iOuterOpen < 0) return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            int iOuterClose = FindMatchingBrace(sContent, iOuterOpen);
+            if (iOuterClose < 0 || iOuterOpen + 1 >= iOuterClose) return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            string sInner = sContent.Substring(iOuterOpen + 1, iOuterClose - iOuterOpen - 1);
+            return ParseKeyValueMap(sInner);
         }
         catch (Exception ex)
         {
@@ -849,108 +849,108 @@ public static class ScriptToTemplateConverter
         }
     }
 
-    private static Dictionary<string, string> ExtractAllBlocks(string content)
+    private static Dictionary<string, string> ExtractAllBlocks(string sContent)
     {
-        var blocks = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var mpBlocks = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         try
         {
-            int pos = 0;
-            while (pos < content.Length)
+            int iPos = 0;
+            while (iPos < sContent.Length)
             {
-                int brace = content.IndexOf('{', pos);
-                if (brace < 0) break;
+                int iBrace = sContent.IndexOf('{', iPos);
+                if (iBrace < 0) break;
 
                 //从{向前找非空白字符确定块名结束位置 再向前找空白或换行确定块名起始
-                int nameEnd = brace - 1;
-                while (nameEnd >= 0 && char.IsWhiteSpace(content[nameEnd])) nameEnd--;
-                if (nameEnd < 0) { pos = brace + 1; continue; }
+                int iNameEnd = iBrace - 1;
+                while (iNameEnd >= 0 && char.IsWhiteSpace(sContent[iNameEnd])) iNameEnd--;
+                if (iNameEnd < 0) { iPos = iBrace + 1; continue; }
 
-                int nameStart = nameEnd;
-                while (nameStart >= 0 && !char.IsWhiteSpace(content[nameStart]) && content[nameStart] != '\n')
-                    nameStart--;
-                nameStart++;
-                if (nameStart > nameEnd) { pos = brace + 1; continue; }
+                int iNameStart = iNameEnd;
+                while (iNameStart >= 0 && !char.IsWhiteSpace(sContent[iNameStart]) && sContent[iNameStart] != '\n')
+                    iNameStart--;
+                iNameStart++;
+                if (iNameStart > iNameEnd) { iPos = iBrace + 1; continue; }
 
-                string blockName = content[nameStart..(nameEnd + 1)];
-                blockName = CleanBlockName(blockName);
+                string sBlockName = sContent[iNameStart..(iNameEnd + 1)];
+                sBlockName = CleanBlockName(sBlockName);
 
-                if (!string.IsNullOrEmpty(blockName) && !blockName.StartsWith("//"))
+                if (!string.IsNullOrEmpty(sBlockName) && !sBlockName.StartsWith("//"))
                 {
-                    int close = FindMatchingBrace(content, brace);
-                    if (close >= 0)
+                    int iClose = FindMatchingBrace(sContent, iBrace);
+                    if (iClose >= 0)
                     {
-                        int len = close - brace - 1;
-                        if (len < 0) len = 0;
-                        string blockContent = content.Substring(brace + 1, len);
-                        if (!blocks.ContainsKey(blockName))
-                            blocks[blockName] = blockContent;
+                        int iLen = iClose - iBrace - 1;
+                        if (iLen < 0) iLen = 0;
+                        string sBlockContent = sContent.Substring(iBrace + 1, iLen);
+                        if (!mpBlocks.ContainsKey(sBlockName))
+                            mpBlocks[sBlockName] = sBlockContent;
                     }
                 }
-                pos = brace + 1;
+                iPos = iBrace + 1;
             }
         }
         catch (Exception ex)
         {
             LogService.Error(ex, "ExtractAllBlocks");
         }
-        return blocks;
+        return mpBlocks;
     }
 
-    private static int FindMatchingBrace(string content, int start)
+    private static int FindMatchingBrace(string sContent, int iStart)
     {
-        int depth = 0;
-        bool inString = false;
-        for (int i = start; i < content.Length; i++)
+        int iDepth = 0;
+        bool bInString = false;
+        for (int i = iStart; i < sContent.Length; i++)
         {
-            if (content[i] == '"' && (i == 0 || content[i - 1] != '\\'))
-                inString = !inString;
+            if (sContent[i] == '"' && (i == 0 || sContent[i - 1] != '\\'))
+                bInString = !bInString;
 
-            if (!inString)
+            if (!bInString)
             {
-                if (content[i] == '{') depth++;
-                else if (content[i] == '}')
+                if (sContent[i] == '{') iDepth++;
+                else if (sContent[i] == '}')
                 {
-                    depth--;
-                    if (depth == 0) return i;
+                    iDepth--;
+                    if (iDepth == 0) return i;
                 }
             }
         }
         return -1;
     }
 
-    private static bool IsBlockStart(string[] lines, int i, out string blockName, out int blockEndLine)
+    private static bool IsBlockStart(string[] rgLines, int i, out string sBlockName, out int iBlockEndLine)
     {
-        blockName = "";
-        blockEndLine = i;
-        if (i < 0 || i >= lines.Length) return false;
-        string line = lines[i]?.TrimStart() ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(line) || line.StartsWith("//")) return false;
+        sBlockName = "";
+        iBlockEndLine = i;
+        if (i < 0 || i >= rgLines.Length) return false;
+        string sLine = rgLines[i]?.TrimStart() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(sLine) || sLine.StartsWith("//")) return false;
 
-        int braceIdx = line.IndexOf('{');
-        if (braceIdx >= 0)
+        int iBraceIdx = sLine.IndexOf('{');
+        if (iBraceIdx >= 0)
         {
-            string beforeBrace = line[..braceIdx].Trim();
-            if (!string.IsNullOrEmpty(beforeBrace))
+            string sBeforeBrace = sLine[..iBraceIdx].Trim();
+            if (!string.IsNullOrEmpty(sBeforeBrace))
             {
-                blockName = CleanBlockName(beforeBrace);
-                if (FindMatchingBrace(lines, i, braceIdx, out blockEndLine)) return true;
+                sBlockName = CleanBlockName(sBeforeBrace);
+                if (FindMatchingBrace(rgLines, i, iBraceIdx, out iBlockEndLine)) return true;
             }
             return false;
         }
 
         //如果当前行没有{ 跳过空行后找到以{开头的行 说明块名独占一行 匹配到整个块结束
-        int next = i + 1;
-        while (next < lines.Length && string.IsNullOrWhiteSpace(lines[next]))
-            next++;
-        if (next < lines.Length && (lines[next]?.TrimStart() ?? "").StartsWith("{"))
+        int iNext = i + 1;
+        while (iNext < rgLines.Length && string.IsNullOrWhiteSpace(rgLines[iNext]))
+            iNext++;
+        if (iNext < rgLines.Length && (rgLines[iNext]?.TrimStart() ?? "").StartsWith("{"))
         {
-            string potentialName = line.TrimEnd();
-            if (!string.IsNullOrEmpty(potentialName) && !potentialName.StartsWith("//"))
+            string sPotentialName = sLine.TrimEnd();
+            if (!string.IsNullOrEmpty(sPotentialName) && !sPotentialName.StartsWith("//"))
             {
-                blockName = CleanBlockName(potentialName);
-                if (FindMatchingBrace(lines, next, 0, out int closing))
+                sBlockName = CleanBlockName(sPotentialName);
+                if (FindMatchingBrace(rgLines, iNext, 0, out int iClosing))
                 {
-                    blockEndLine = closing;
+                    iBlockEndLine = iClosing;
                     return true;
                 }
             }
@@ -958,29 +958,29 @@ public static class ScriptToTemplateConverter
         return false;
     }
 
-    private static bool FindMatchingBrace(string[] lines, int startLine, int startCol, out int endLine)
+    private static bool FindMatchingBrace(string[] rgLines, int iStartLine, int iStartCol, out int iEndLine)
     {
-        int depth = 0;
-        bool inString = false;
-        for (int j = startLine; j < lines.Length; j++)
+        int iDepth = 0;
+        bool bInString = false;
+        for (int j = iStartLine; j < rgLines.Length; j++)
         {
-            string l = lines[j] ?? string.Empty;
-            int k = (j == startLine) ? startCol : 0;
-            for (; k < l.Length; k++)
+            string sL = rgLines[j] ?? string.Empty;
+            int k = (j == iStartLine) ? iStartCol : 0;
+            for (; k < sL.Length; k++)
             {
-                if (l[k] == '"' && (k == 0 || l[k - 1] != '\\')) inString = !inString; //追踪字符串状态 防止字符串内的{或}干扰深度计数
-                if (!inString)
+                if (sL[k] == '"' && (k == 0 || sL[k - 1] != '\\')) bInString = !bInString; //追踪字符串状态 防止字符串内的{或}干扰深度计数
+                if (!bInString)
                 {
-                    if (l[k] == '{') depth++;
-                    else if (l[k] == '}')
+                    if (sL[k] == '{') iDepth++;
+                    else if (sL[k] == '}')
                     {
-                        depth--;
-                        if (depth == 0) { endLine = j; return true; }
+                        iDepth--;
+                        if (iDepth == 0) { iEndLine = j; return true; }
                     }
                 }
             }
         }
-        endLine = startLine;
+        iEndLine = iStartLine;
         return false;
     }
 
@@ -988,47 +988,47 @@ public static class ScriptToTemplateConverter
     #region 调试
 
     //把ast dump和脚本解析信息追加到logform
-    private static void DumpDebugInfo(string weaponName, string script, string[] templateLines, string result, List<string> log)
+    private static void DumpDebugInfo(string sWeaponName, string sScript, string[] rgTemplateLines, string sResult, List<string> rgLog)
     {
         if (!LogService.Enabled) return;
 
-        log.Add($"--- 调试: {weaponName} ---");
+        rgLog.Add($"--- 调试: {sWeaponName} ---");
 
-        var scriptMap = ParseTopLevelMap(script);
-        var scriptBlocks = ExtractAllBlocks(script);
-        log.Add($"脚本顶层键值对: {scriptMap.Count} 个");
-        int shown = 0;
-        foreach (var kv in scriptMap)
+        var mpScriptMap = ParseTopLevelMap(sScript);
+        var mpScriptBlocks = ExtractAllBlocks(sScript);
+        rgLog.Add($"脚本顶层键值对: {mpScriptMap.Count} 个");
+        int iShown = 0;
+        foreach (var kvp in mpScriptMap)
         {
-            if (shown >= 15) { log.Add($"  ... 共 {scriptMap.Count} 个"); break; }
-            log.Add($"  \"{kv.Key}\" = \"{kv.Value}\"");
-            shown++;
+            if (iShown >= 15) { rgLog.Add($"  ... 共 {mpScriptMap.Count} 个"); break; }
+            rgLog.Add($"  \"{kvp.Key}\" = \"{kvp.Value}\"");
+            iShown++;
         }
-        log.Add($"脚本子块: {scriptBlocks.Count} 个");
-        foreach (var bk in scriptBlocks.Keys)
-            log.Add($"  {bk} ({scriptBlocks[bk].Length} 字符)");
+        rgLog.Add($"脚本子块: {mpScriptBlocks.Count} 个");
+        foreach (var sBk in mpScriptBlocks.Keys)
+            rgLog.Add($"  {sBk} ({mpScriptBlocks[sBk].Length} 字符)");
 
-        var templateTree = ParseTemplateToTree(templateLines);
-        log.Add($"模板AST节点数: {CountNodes(templateTree)}");
-        log.Add(templateTree.ToString());
+        var anTemplateTree = ParseTemplateToTree(rgTemplateLines);
+        rgLog.Add($"模板AST节点数: {CountNodes(anTemplateTree)}");
+        rgLog.Add(anTemplateTree.ToString());
 
-        if (!string.IsNullOrEmpty(result))
+        if (!string.IsNullOrEmpty(sResult))
         {
-            var resultLines = result.Split('\n');
-            var resultTree = ParseTemplateToTree(resultLines);
-            log.Add($"转换后AST节点数: {CountNodes(resultTree)}");
-            log.Add(resultTree.ToString());
+            var rgResultLines = sResult.Split('\n');
+            var anResultTree = ParseTemplateToTree(rgResultLines);
+            rgLog.Add($"转换后AST节点数: {CountNodes(anResultTree)}");
+            rgLog.Add(anResultTree.ToString());
         }
 
-        log.Add($"--- 调试结束: {weaponName} ---");
+        rgLog.Add($"--- 调试结束: {sWeaponName} ---");
     }
 
-    private static int CountNodes(AstNode node)
+    private static int CountNodes(AstNode anNode)
     {
-        int n = 1;
-        foreach (var child in node.Children)
-            n += CountNodes(child);
-        return n;
+        int iN = 1;
+        foreach (var anChild in anNode.Children)
+            iN += CountNodes(anChild);
+        return iN;
     }
     #endregion
 }

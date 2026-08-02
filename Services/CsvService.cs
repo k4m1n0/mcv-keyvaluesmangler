@@ -7,14 +7,14 @@ namespace WeaponDamageCalc.Services;
 
 public static class CsvService
 {
-    public static List<WeaponData> LoadWeapons(string filePath)
+    public static List<WeaponData> LoadWeapons(string sFilePath)
     {
-        LogService.Info($"Loading CSV: {filePath}");
+        LogService.Info($"Loading CSV: {sFilePath}");
         try
         {
-            var result = CsvMapper.Read<WeaponData>(filePath);
-            LogService.Info($"CSV loaded: {result.Count} weapons");
-            return result;
+            var rgResult = CsvMapper.Read<WeaponData>(sFilePath);
+            LogService.Info($"CSV loaded: {rgResult.Count} weapons");
+            return rgResult;
         }
         catch (System.Exception ex)
         {
@@ -23,12 +23,12 @@ public static class CsvService
         }
     }
 
-    public static void SaveWeapons(string filePath, List<WeaponData> weapons)
+    public static void SaveWeapons(string sFilePath, List<WeaponData> rgWeapons)
     {
-        LogService.Info($"Saving CSV: {filePath} ({weapons.Count} weapons)");
+        LogService.Info($"Saving CSV: {sFilePath} ({rgWeapons.Count} weapons)");
         try
         {
-            CsvMapper.Write(filePath, weapons);
+            CsvMapper.Write(sFilePath, rgWeapons);
             LogService.Info("CSV saved successfully");
         }
         catch (System.Exception ex)

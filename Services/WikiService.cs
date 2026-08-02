@@ -10,11 +10,11 @@ namespace WeaponDamageCalc.Services;
 
 public static class WikiService
 {
-    public static async Task<bool> LoginAsync(string user, string pw)
+    public static async Task<bool> LoginAsync(string sUser, string sPw)
     {
         if (WikiApiService.IsLoggedIn) return true;
-        if (string.IsNullOrWhiteSpace(user) || string.IsNullOrWhiteSpace(pw)) return false;
-        return await WikiApiService.LoginAsync(user, pw);
+        if (string.IsNullOrWhiteSpace(sUser) || string.IsNullOrWhiteSpace(sPw)) return false;
+        return await WikiApiService.LoginAsync(sUser, sPw);
     }
 
     //构建脚本名索引 从Weapon Script Name页拉取
@@ -23,18 +23,18 @@ public static class WikiService
         try
         {
             LogService.Info("Building script name index...");
-            string? idx = await WikiApiService.GetPageSourceAsync("Weapon Script Name");
-            if (idx == null)
+            string? sIdx = await WikiApiService.GetPageSourceAsync("Weapon Script Name");
+            if (sIdx == null)
             {
                 LogService.Warn("BuildScriptIndexAsync: 'Weapon Script Name' page not found");
                 return null;
             }
-            idx = idx.Replace("\r\n", "\n").Replace('\r', '\n');
-            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (Match m in Regex.Matches(idx, @"\|\s*(weapon_[^\s|]+)\s*\n\|\s*\[\[([^\]]+)\]\]"))
-                map[m.Groups[2].Value.Trim()] = m.Groups[1].Value;
-            LogService.Info($"Script index built: {map.Count} entries");
-            return map;
+            sIdx = sIdx.Replace("\r\n", "\n").Replace('\r', '\n');
+            var mpMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (Match m in Regex.Matches(sIdx, @"\|\s*(weapon_[^\s|]+)\s*\n\|\s*\[\[([^\]]+)\]\]"))
+                mpMap[m.Groups[2].Value.Trim()] = m.Groups[1].Value;
+            LogService.Info($"Script index built: {mpMap.Count} entries");
+            return mpMap;
         }
         catch (Exception ex)
         {
@@ -44,66 +44,66 @@ public static class WikiService
     }
 
     //包含=[[xxx]]=特征的是汇总表走ConvertSummaryPage 否则走Convert
-    public static string ConvertWikiSource(string input, string scriptsDir, Dictionary<string, string>? titleToScript)
+    public static string ConvertWikiSource(string sInput, string sScriptsDir, Dictionary<string, string>? mpTitleToScript)
     {
-        input = input.Replace("\r\n", "\n").Replace('\r', '\n');
-        if (Regex.IsMatch(input, @"^=\[\[.+\]\]=\s*$", RegexOptions.Multiline))
+        sInput = sInput.Replace("\r\n", "\n").Replace('\r', '\n');
+        if (Regex.IsMatch(sInput, @"^=\[\[.+\]\]=\s*$", RegexOptions.Multiline))
         {
             LogService.Info("ConvertWikiSource: detected summary page, building printname map...");
-            var map = titleToScript != null ? new Dictionary<string, string>(titleToScript, StringComparer.OrdinalIgnoreCase) : new();
-            foreach (var path in Directory.GetFiles(scriptsDir, "weapon_*.txt"))
+            var mpMap = mpTitleToScript != null ? new Dictionary<string, string>(mpTitleToScript, StringComparer.OrdinalIgnoreCase) : new();
+            foreach (var sPath in Directory.GetFiles(sScriptsDir, "weapon_*.txt"))
             {
-                string sn = Path.GetFileNameWithoutExtension(path);
-                string c = WeaponScriptService.ReadScriptFile(path).Replace("\r\n", "\n");
-                var pm = Regex.Match(c, @"""printname""\s+""([^""]*)""");
-                string d = pm.Success ? pm.Groups[1].Value.TrimStart('#') : sn;
-                if (!map.ContainsKey(d.Replace("_", " "))) map[d.Replace("_", " ")] = sn;
+                string sSn = Path.GetFileNameWithoutExtension(sPath);
+                string sContent = WeaponScriptService.ReadScriptFile(sPath).Replace("\r\n", "\n");
+                var mPm = Regex.Match(sContent, @"""printname""\s+""([^""]*)""");
+                string sD = mPm.Success ? mPm.Groups[1].Value.TrimStart('#') : sSn;
+                if (!mpMap.ContainsKey(sD.Replace("_", " "))) mpMap[sD.Replace("_", " ")] = sSn;
             }
-            LogService.Info($"Printname map built: {map.Count} entries");
-            return WikiTableConverter.ConvertSummaryPage(input, scriptsDir, map);
+            LogService.Info($"Printname map built: {mpMap.Count} entries");
+            return WikiTableConverter.ConvertSummaryPage(sInput, sScriptsDir, mpMap);
         }
         LogService.Info("ConvertWikiSource: single page conversion");
-        return WikiTableConverter.Convert(input, scriptsDir);
+        return WikiTableConverter.Convert(sInput, sScriptsDir);
     }
 
-    public static List<string> ExtractWeaponLinks(string pageSource, Dictionary<string, string>? titleToScript)
+    public static List<string> ExtractWeaponLinks(string sPageSource, Dictionary<string, string>? mpTitleToScript)
     {
-        if (titleToScript == null || titleToScript.Count == 0) return new();
-        var links = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (Match m in Regex.Matches(pageSource, @"\[\[([^\]|:#<>]+)\]\]"))
-            if (titleToScript.ContainsKey(m.Groups[1].Value.Trim()))
-                links.Add(m.Groups[1].Value.Trim());
-        var result = links.OrderBy(x => x).ToList();
-        LogService.Info($"ExtractWeaponLinks: {result.Count} links found");
-        return result;
+        if (mpTitleToScript == null || mpTitleToScript.Count == 0) return new();
+        var hsLinks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (Match m in Regex.Matches(sPageSource, @"\[\[([^\]|:#<>]+)\]\]"))
+            if (mpTitleToScript.ContainsKey(m.Groups[1].Value.Trim()))
+                hsLinks.Add(m.Groups[1].Value.Trim());
+        var rgResult = hsLinks.OrderBy(s => s).ToList();
+        LogService.Info($"ExtractWeaponLinks: {rgResult.Count} links found");
+        return rgResult;
     }
 
     public static string GetWikiDir() => Path.Combine(AppContext.BaseDirectory, "wiki");
 
-    public static void SaveToWikiDir(string fileName, string content)
+    public static void SaveToWikiDir(string sFileName, string sContent)
     {
-        string dir = GetWikiDir();
-        Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, fileName), content);
+        string sDir = GetWikiDir();
+        Directory.CreateDirectory(sDir);
+        File.WriteAllText(Path.Combine(sDir, sFileName), sContent);
     }
 
     //反查脚本名
-    public static string? ReverseLookup(string input, Dictionary<string, string>? index)
+    public static string? ReverseLookup(string sInput, Dictionary<string, string>? mpIndex)
     {
-        if (index == null || index.Count == 0) return null;
-        string inputNoExt = Path.GetFileNameWithoutExtension(input);
-        if (index.ContainsKey(input)) return input;
-        foreach (var kv in index)
+        if (mpIndex == null || mpIndex.Count == 0) return null;
+        string sInputNoExt = Path.GetFileNameWithoutExtension(sInput);
+        if (mpIndex.ContainsKey(sInput)) return sInput;
+        foreach (var kvp in mpIndex)
         {
-            string sn = kv.Value;
-            string snNoExt = Path.GetFileNameWithoutExtension(sn);
-            string snStem = snNoExt.StartsWith("weapon_", StringComparison.OrdinalIgnoreCase) ? snNoExt.Substring(7) : snNoExt;
-            if (sn.Equals(input, StringComparison.OrdinalIgnoreCase)
-                || snNoExt.Equals(input, StringComparison.OrdinalIgnoreCase)
-                || snNoExt.Equals(inputNoExt, StringComparison.OrdinalIgnoreCase)
-                || snStem.Equals(inputNoExt, StringComparison.OrdinalIgnoreCase))
-                return kv.Key;
+            string sSn = kvp.Value;
+            string sSnNoExt = Path.GetFileNameWithoutExtension(sSn);
+            string sSnStem = sSnNoExt.StartsWith("weapon_", StringComparison.OrdinalIgnoreCase) ? sSnNoExt.Substring(7) : sSnNoExt;
+            if (sSn.Equals(sInput, StringComparison.OrdinalIgnoreCase)
+                || sSnNoExt.Equals(sInput, StringComparison.OrdinalIgnoreCase)
+                || sSnNoExt.Equals(sInputNoExt, StringComparison.OrdinalIgnoreCase)
+                || sSnStem.Equals(sInputNoExt, StringComparison.OrdinalIgnoreCase))
+                return kvp.Key;
         }
-        return index.Keys.FirstOrDefault(k => k.Equals(input, StringComparison.OrdinalIgnoreCase));
+        return mpIndex.Keys.FirstOrDefault(sK => sK.Equals(sInput, StringComparison.OrdinalIgnoreCase));
     }
 }

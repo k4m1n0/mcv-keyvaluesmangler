@@ -11,155 +11,155 @@ public static class CsvMapper
 {
     #region 列反射与缓存
 
-    private static readonly Dictionary<Type, ColumnMap[]> Cache = new();
+    private static readonly Dictionary<Type, ColumnMap[]> mpCache = new();
 
     public static ColumnMap[] GetColumns<T>()
     {
-        var type = typeof(T);
-        if (Cache.TryGetValue(type, out var cached))
-            return cached;
+        var tType = typeof(T);
+        if (mpCache.TryGetValue(tType, out var rgCached))
+            return rgCached;
 
-        var props = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
-        var list = new List<ColumnMap>();
-        foreach (var p in props)
+        var rgProps = tType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        var rgList = new List<ColumnMap>();
+        foreach (var pi in rgProps)
         {
-            var name = p.Name;
-            var attr = p.GetCustomAttribute<CsvColumnAttribute>();
-            if (attr != null)
-                name = attr.Name;
-            list.Add(new ColumnMap(name, p));
+            var sName = pi.Name;
+            var attrCol = pi.GetCustomAttribute<CsvColumnAttribute>();
+            if (attrCol != null)
+                sName = attrCol.Name;
+            rgList.Add(new ColumnMap(sName, pi));
         }
-        var arr = list.ToArray();
-        Cache[type] = arr;
-        return arr;
+        var rgArr = rgList.ToArray();
+        mpCache[tType] = rgArr;
+        return rgArr;
     }
 
     #endregion
     #region 公开接口
 
-    public static List<T> Read<T>(string path) where T : new()
+    public static List<T> Read<T>(string sPath) where T : new()
     {
-        var result = new List<T>();
-        var columns = GetColumns<T>();
-        if (columns.Length == 0) return result;
+        var rgResult = new List<T>();
+        var rgColumns = GetColumns<T>();
+        if (rgColumns.Length == 0) return rgResult;
 
-        string content;
+        string sContent;
         try
         {
-            content = ReadAllTextWithBomDetection(path);
+            sContent = ReadAllTextWithBomDetection(sPath);
         }
         catch (Exception ex)
         {
-            LogError($"Failed to read file: {path} — {ex.Message}");
-            return result;
+            LogError($"Failed to read file: {sPath} — {ex.Message}");
+            return rgResult;
         }
 
-        var lines = SplitLines(content);
+        var rgLines = SplitLines(sContent);
 
-        int headerIdx = -1;
-        for (int i = 0; i < lines.Count; i++)
+        int iHeaderIdx = -1;
+        for (int i = 0; i < rgLines.Count; i++)
         {
-            if (string.IsNullOrWhiteSpace(lines[i]))
+            if (string.IsNullOrWhiteSpace(rgLines[i]))
                 continue;
 
-            var firstField = GetField(lines[i], 0);
-            if (!string.IsNullOrWhiteSpace(firstField))
+            var sFirstField = GetField(rgLines[i], 0);
+            if (!string.IsNullOrWhiteSpace(sFirstField))
             {
                 //如果首字段不含任何字母 文件可能缺少header行
-                if (firstField.IndexOfAny("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".ToCharArray()) < 0)
-                    LogWarn($"Header row's first field '{firstField}' contains no letters. File may be missing a header row.");
+                if (sFirstField.IndexOfAny("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".ToCharArray()) < 0)
+                    LogWarn($"Header row's first field '{sFirstField}' contains no letters. File may be missing a header row.");
 
-                headerIdx = i;
+                iHeaderIdx = i;
                 break;
             }
         }
-        if (headerIdx < 0) return result;
+        if (iHeaderIdx < 0) return rgResult;
 
-        var headers = SplitRow(lines[headerIdx]);
-        var headerMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        for (int i = 0; i < headers.Count; i++)
+        var rgHeaders = SplitRow(rgLines[iHeaderIdx]);
+        var mpHeader = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < rgHeaders.Count; i++)
         {
-            var h = headers[i].Trim();
-            if (string.IsNullOrEmpty(h)) continue;
-            if (!headerMap.ContainsKey(h))
+            var sH = rgHeaders[i].Trim();
+            if (string.IsNullOrEmpty(sH)) continue;
+            if (!mpHeader.ContainsKey(sH))
             {
-                headerMap[h] = i;
+                mpHeader[sH] = i;
             }
             else
             {
-                LogWarn($"Duplicate column '{h}' at index {i}, using first occurrence at index {headerMap[h]}.");
+                LogWarn($"Duplicate column '{sH}' at index {i}, using first occurrence at index {mpHeader[sH]}.");
             }
         }
 
-        for (int i = headerIdx + 1; i < lines.Count; i++)
+        for (int i = iHeaderIdx + 1; i < rgLines.Count; i++)
         {
-            var line = lines[i];
-            if (string.IsNullOrWhiteSpace(line)) continue;
-            if (line.Trim().Replace(",", "").Length == 0) continue;//整行都是逗号
+            var sLine = rgLines[i];
+            if (string.IsNullOrWhiteSpace(sLine)) continue;
+            if (sLine.Trim().Replace(",", "").Length == 0) continue;//整行都是逗号
 
-            var firstField = GetField(line, 0);
-            if (string.IsNullOrWhiteSpace(firstField)) continue;
+            var sFirstField = GetField(sLine, 0);
+            if (string.IsNullOrWhiteSpace(sFirstField)) continue;
 
-            var fields = SplitRow(line);
+            var rgFields = SplitRow(sLine);
             var obj = new T();
-            foreach (var col in columns)
+            foreach (var col in rgColumns)
             {
-                if (!headerMap.TryGetValue(col.HeaderName, out int idx))
+                if (!mpHeader.TryGetValue(col.HeaderName, out int iIdx))
                     continue;
-                var raw = idx < fields.Count ? fields[idx] : "";
-                if (string.IsNullOrEmpty(raw))
-                    raw = null;
-                SetValue(obj, col.Property, raw);
+                var sRaw = iIdx < rgFields.Count ? rgFields[iIdx] : "";
+                if (string.IsNullOrEmpty(sRaw))
+                    sRaw = null;
+                SetValue(obj, col.Property, sRaw);
             }
-            result.Add(obj);
+            rgResult.Add(obj);
         }
-        return result;
+        return rgResult;
     }
 
-    public static void Write<T>(string path, List<T> items)
+    public static void Write<T>(string sPath, List<T> rgItems)
     {
-        var columns = GetColumns<T>();
+        var rgColumns = GetColumns<T>();
         var sb = new StringBuilder();
 
-        for (int i = 0; i < columns.Length; i++)
+        for (int i = 0; i < rgColumns.Length; i++)
         {
             if (i > 0) sb.Append(',');
-            sb.Append('"').Append(EscapeCsvField(columns[i].HeaderName)).Append('"');
+            sb.Append('"').Append(EscapeCsvField(rgColumns[i].HeaderName)).Append('"');
         }
         sb.AppendLine();
 
-        foreach (var item in items)
+        foreach (var item in rgItems)
         {
-            for (int i = 0; i < columns.Length; i++)
+            for (int i = 0; i < rgColumns.Length; i++)
             {
                 if (i > 0) sb.Append(',');
-                var rawVal = GetValue(item, columns[i].Property);
-                sb.Append('"').Append(EscapeCsvField(rawVal)).Append('"');
+                var sRawVal = GetValue(item, rgColumns[i].Property);
+                sb.Append('"').Append(EscapeCsvField(sRawVal)).Append('"');
             }
             sb.AppendLine();
         }
 
-        File.WriteAllText(path, sb.ToString(), new UTF8Encoding(false));
+        File.WriteAllText(sPath, sb.ToString(), new UTF8Encoding(false));
     }
 
     #endregion
     #region 编码检测
 
-    private static string ReadAllTextWithBomDetection(string path)
+    private static string ReadAllTextWithBomDetection(string sPath)
     {
-        byte[] bytes = File.ReadAllBytes(path);
-        if (bytes.Length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE)
-            return Encoding.Unicode.GetString(bytes);
-        if (bytes.Length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF)
-            return Encoding.BigEndianUnicode.GetString(bytes);
-        if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
-            return Encoding.UTF8.GetString(bytes, 3, bytes.Length - 3);
+        byte[] rgBytes = File.ReadAllBytes(sPath);
+        if (rgBytes.Length >= 2 && rgBytes[0] == 0xFF && rgBytes[1] == 0xFE)
+            return Encoding.Unicode.GetString(rgBytes);
+        if (rgBytes.Length >= 2 && rgBytes[0] == 0xFE && rgBytes[1] == 0xFF)
+            return Encoding.BigEndianUnicode.GetString(rgBytes);
+        if (rgBytes.Length >= 3 && rgBytes[0] == 0xEF && rgBytes[1] == 0xBB && rgBytes[2] == 0xBF)
+            return Encoding.UTF8.GetString(rgBytes, 3, rgBytes.Length - 3);
 
-        try { return Encoding.UTF8.GetString(bytes); }
+        try { return Encoding.UTF8.GetString(rgBytes); }
         catch
         {
-            LogWarn($"UTF-8 decoding failed for {path}, falling back to system default encoding.");
-            return Encoding.Default.GetString(bytes);
+            LogWarn($"UTF-8 decoding failed for {sPath}, falling back to system default encoding.");
+            return Encoding.Default.GetString(rgBytes);
         }
     }
 
@@ -167,49 +167,49 @@ public static class CsvMapper
     #region CSV解析
 
     //引号内超过此阈值仍未闭合则强制退出 防止损坏的csv吞掉后续所有行
-    private const int MaxQuotedFieldLength = 100_000;
+    private const int iMaxQuotedFieldLength = 100_000;
 
-    private static List<string> SplitLines(string content)
+    private static List<string> SplitLines(string sContent)
     {
-        var lines = new List<string>();
+        var rgLines = new List<string>();
         var sb = new StringBuilder();
-        bool inQuotes = false;
-        int quoteStart = -1;
+        bool bInQuotes = false;
+        int iQuoteStart = -1;
 
-        for (int i = 0; i < content.Length; i++)
+        for (int i = 0; i < sContent.Length; i++)
         {
-            var c = content[i];
+            var c = sContent[i];
 
-            if (inQuotes && quoteStart >= 0 && (i - quoteStart) > MaxQuotedFieldLength)
+            if (bInQuotes && iQuoteStart >= 0 && (i - iQuoteStart) > iMaxQuotedFieldLength)
             {
                 LogWarn($"Unclosed quote forced closure at position {i}.");
-                inQuotes = false;
-                quoteStart = -1;
+                bInQuotes = false;
+                iQuoteStart = -1;
             }
 
             if (c == '"')
             {
-                if (inQuotes && i + 1 < content.Length && content[i + 1] == '"')
+                if (bInQuotes && i + 1 < sContent.Length && sContent[i + 1] == '"')
                 {
                     sb.Append('"');
                     i++;
                 }
                 else
                 {
-                    inQuotes = !inQuotes;
-                    quoteStart = inQuotes ? i : -1;
+                    bInQuotes = !bInQuotes;
+                    iQuoteStart = bInQuotes ? i : -1;
                 }
             }
-            else if (c == '\n' && !inQuotes)
+            else if (c == '\n' && !bInQuotes)
             {
-                lines.Add(sb.ToString().TrimEnd('\r'));
+                rgLines.Add(sb.ToString().TrimEnd('\r'));
                 sb.Clear();
             }
-            else if (c == '\r' && !inQuotes)
+            else if (c == '\r' && !bInQuotes)
             {
-                if (i + 1 >= content.Length || content[i + 1] != '\n')
+                if (i + 1 >= sContent.Length || sContent[i + 1] != '\n')
                 {
-                    lines.Add(sb.ToString());
+                    rgLines.Add(sb.ToString());
                     sb.Clear();
                 }
             }
@@ -219,47 +219,47 @@ public static class CsvMapper
             }
         }
 
-        if (inQuotes)
+        if (bInQuotes)
             LogWarn($"Unclosed quote at end of file.");
         if (sb.Length > 0)
-            lines.Add(sb.ToString());
-        return lines;
+            rgLines.Add(sb.ToString());
+        return rgLines;
     }
 
-    private static List<string> SplitRow(string row)
+    private static List<string> SplitRow(string sRow)
     {
-        var fields = new List<string>();
+        var rgFields = new List<string>();
         var sb = new StringBuilder();
-        bool inQuotes = false;
-        int quoteStart = -1;
+        bool bInQuotes = false;
+        int iQuoteStart = -1;
 
-        for (int i = 0; i < row.Length; i++)
+        for (int i = 0; i < sRow.Length; i++)
         {
-            var c = row[i];
+            var c = sRow[i];
 
-            if (inQuotes && quoteStart >= 0 && (i - quoteStart) > MaxQuotedFieldLength)
+            if (bInQuotes && iQuoteStart >= 0 && (i - iQuoteStart) > iMaxQuotedFieldLength)
             {
-                LogWarn($"Unclosed quote forced closure in row at column ~{fields.Count + 1}.");
-                inQuotes = false;
-                quoteStart = -1;
+                LogWarn($"Unclosed quote forced closure in row at column ~{rgFields.Count + 1}.");
+                bInQuotes = false;
+                iQuoteStart = -1;
             }
 
             if (c == '"')
             {
-                if (inQuotes && i + 1 < row.Length && row[i + 1] == '"')
+                if (bInQuotes && i + 1 < sRow.Length && sRow[i + 1] == '"')
                 {
                     sb.Append('"');
                     i++;
                 }
                 else
                 {
-                    inQuotes = !inQuotes;
-                    quoteStart = inQuotes ? i : -1;
+                    bInQuotes = !bInQuotes;
+                    iQuoteStart = bInQuotes ? i : -1;
                 }
             }
-            else if (c == ',' && !inQuotes)
+            else if (c == ',' && !bInQuotes)
             {
-                fields.Add(sb.ToString());
+                rgFields.Add(sb.ToString());
                 sb.Clear();
             }
             else
@@ -268,133 +268,133 @@ public static class CsvMapper
             }
         }
 
-        if (inQuotes)
+        if (bInQuotes)
             LogWarn($"Unclosed quote at end of row.");
-        fields.Add(sb.ToString());
+        rgFields.Add(sb.ToString());
 
         //去掉外层引号 先Trim防行首空格
-        for (int i = 0; i < fields.Count; i++)
+        for (int i = 0; i < rgFields.Count; i++)
         {
-            var f = fields[i].Trim();
-            if (f.Length >= 2 && f.StartsWith("\"") && f.EndsWith("\""))
-                fields[i] = f.Substring(1, f.Length - 2);
+            var sF = rgFields[i].Trim();
+            if (sF.Length >= 2 && sF.StartsWith("\"") && sF.EndsWith("\""))
+                rgFields[i] = sF.Substring(1, sF.Length - 2);
             else
-                fields[i] = f;
+                rgFields[i] = sF;
         }
 
-        return fields;
+        return rgFields;
     }
 
-    private static string GetField(string row, int index)
+    private static string GetField(string sRow, int iIndex)
     {
-        var fields = SplitRow(row);
-        return index < fields.Count ? fields[index] : "";
+        var rgFields = SplitRow(sRow);
+        return iIndex < rgFields.Count ? rgFields[iIndex] : "";
     }
 
-    private static string EscapeCsvField(string? field)
+    private static string EscapeCsvField(string? sField)
     {
-        if (string.IsNullOrEmpty(field)) return "";
-        return field.Replace("\"", "\"\"");
+        if (string.IsNullOrEmpty(sField)) return "";
+        return sField.Replace("\"", "\"\"");
     }
 
     #endregion
     #region 值类型转换
 
-    private static void SetValue<T>(T obj, PropertyInfo prop, string? raw)
+    private static void SetValue<T>(T obj, PropertyInfo piProp, string? sRaw)
     {
         try
         {
-            if (raw == null)
+            if (sRaw == null)
             {
-                if (IsNullable(prop.PropertyType))
-                    prop.SetValue(obj, null);
+                if (IsNullable(piProp.PropertyType))
+                    piProp.SetValue(obj, null);
                 return;
             }
 
-            var targetType = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
+            var tTarget = Nullable.GetUnderlyingType(piProp.PropertyType) ?? piProp.PropertyType;
 
-            if (targetType == typeof(string))
+            if (tTarget == typeof(string))
             {
-                prop.SetValue(obj, raw);
+                piProp.SetValue(obj, sRaw);
             }
-            else if (targetType == typeof(int))
+            else if (tTarget == typeof(int))
             {
-                if (int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out int iv))
-                    prop.SetValue(obj, iv);
-                else if (int.TryParse(raw, NumberStyles.Integer, CultureInfo.CurrentCulture, out int iv2))
-                    prop.SetValue(obj, iv2);
+                if (int.TryParse(sRaw, NumberStyles.Integer, CultureInfo.InvariantCulture, out int iVal))
+                    piProp.SetValue(obj, iVal);
+                else if (int.TryParse(sRaw, NumberStyles.Integer, CultureInfo.CurrentCulture, out int iVal2))
+                    piProp.SetValue(obj, iVal2);
                 else
                 {
-                    LogWarn($"Failed to parse int '{prop.Name}': '{raw}'. Set to null.");
-                    prop.SetValue(obj, null);
+                    LogWarn($"Failed to parse int '{piProp.Name}': '{sRaw}'. Set to null.");
+                    piProp.SetValue(obj, null);
                 }
             }
-            else if (targetType == typeof(double))
+            else if (tTarget == typeof(double))
             {
-                if (double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out double dv))
-                    prop.SetValue(obj, dv);
-                else if (double.TryParse(raw, NumberStyles.Float, CultureInfo.CurrentCulture, out double dv2))
-                    prop.SetValue(obj, dv2);
+                if (double.TryParse(sRaw, NumberStyles.Float, CultureInfo.InvariantCulture, out double dVal))
+                    piProp.SetValue(obj, dVal);
+                else if (double.TryParse(sRaw, NumberStyles.Float, CultureInfo.CurrentCulture, out double dVal2))
+                    piProp.SetValue(obj, dVal2);
                 else
                 {
-                    LogWarn($"Failed to parse double '{prop.Name}': '{raw}'. Set to null.");
-                    prop.SetValue(obj, null);
+                    LogWarn($"Failed to parse double '{piProp.Name}': '{sRaw}'. Set to null.");
+                    piProp.SetValue(obj, null);
                 }
             }
         }
         catch (Exception ex)
         {
-            LogWarn($"SetValue failed for '{prop.Name}' with '{raw}': {ex.Message}");
+            LogWarn($"SetValue failed for '{piProp.Name}' with '{sRaw}': {ex.Message}");
         }
     }
 
-    private static string? GetValue<T>(T obj, PropertyInfo prop)
+    private static string? GetValue<T>(T obj, PropertyInfo piProp)
     {
-        var val = prop.GetValue(obj);
-        if (val == null) return "";
+        var oVal = piProp.GetValue(obj);
+        if (oVal == null) return "";
 
-        if (val is double dv)
+        if (oVal is double dVal)
         {
-            if (double.IsNaN(dv) || double.IsInfinity(dv))
+            if (double.IsNaN(dVal) || double.IsInfinity(dVal))
             {
-                LogWarn($"NaN/Infinity in double field '{prop.Name}'. Writing as empty.");
+                LogWarn($"NaN/Infinity in double field '{piProp.Name}'. Writing as empty.");
                 return "";
             }
-            if (dv == 0) return "0";
-            return dv.ToString("0.####", CultureInfo.InvariantCulture);
+            if (dVal == 0) return "0";
+            return dVal.ToString("0.####", CultureInfo.InvariantCulture);
         }
-        if (val is int iv && iv == 0) return "0";
-        return val.ToString();
+        if (oVal is int iVal && iVal == 0) return "0";
+        return oVal.ToString();
     }
 
-    private static bool IsNullable(Type type) =>
-        !type.IsValueType || Nullable.GetUnderlyingType(type) != null;
+    private static bool IsNullable(Type tType) =>
+        !tType.IsValueType || Nullable.GetUnderlyingType(tType) != null;
 
     #endregion
     #region 日志桥接
 
-    private static void LogWarn(string msg)
+    private static void LogWarn(string sMsg)
     {
         try
         {
-            var logType = Type.GetType("WeaponDamageCalc.LogService, WeaponDamageCalc");
-            logType?.GetMethod("Warn", new[] { typeof(string) })
-                   ?.Invoke(null, new object[] { "[CsvMapper] " + msg });
+            var tLogType = Type.GetType("WeaponDamageCalc.LogService, WeaponDamageCalc");
+            tLogType?.GetMethod("Warn", new[] { typeof(string) })
+                     ?.Invoke(null, new object[] { "[CsvMapper] " + sMsg });
         }
         catch { }
-        System.Diagnostics.Debug.WriteLine($"[CsvMapper WARN] {msg}");
+        System.Diagnostics.Debug.WriteLine($"[CsvMapper WARN] {sMsg}");
     }
 
-    private static void LogError(string msg)
+    private static void LogError(string sMsg)
     {
         try
         {
-            var logType = Type.GetType("WeaponDamageCalc.LogService, WeaponDamageCalc");
-            logType?.GetMethod("Error", new[] { typeof(string) })
-                   ?.Invoke(null, new object[] { "[CsvMapper] " + msg });
+            var tLogType = Type.GetType("WeaponDamageCalc.LogService, WeaponDamageCalc");
+            tLogType?.GetMethod("Error", new[] { typeof(string) })
+                     ?.Invoke(null, new object[] { "[CsvMapper] " + sMsg });
         }
         catch { }
-        System.Diagnostics.Debug.WriteLine($"[CsvMapper ERROR] {msg}");
+        System.Diagnostics.Debug.WriteLine($"[CsvMapper ERROR] {sMsg}");
     }
 
     #endregion
@@ -404,10 +404,10 @@ public class ColumnMap
 {
     public string HeaderName { get; }
     public PropertyInfo Property { get; }
-    public ColumnMap(string headerName, PropertyInfo property)
+    public ColumnMap(string sHeaderName, PropertyInfo piProperty)
     {
-        HeaderName = headerName;
-        Property = property;
+        HeaderName = sHeaderName;
+        Property = piProperty;
     }
 }
 
@@ -415,5 +415,5 @@ public class ColumnMap
 public class CsvColumnAttribute : Attribute
 {
     public string Name { get; }
-    public CsvColumnAttribute(string name) => Name = name;
+    public CsvColumnAttribute(string sName) => Name = sName;
 }

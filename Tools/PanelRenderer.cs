@@ -8,83 +8,83 @@ namespace WeaponDamageCalc.Tools;
 
 public class PanelRenderer
 {
-    private readonly Panel panel;
+    private readonly Panel pnlPanel;
 
-    public PanelRenderer(Panel panel)
+    public PanelRenderer(Panel pnlPanel)
     {
-        this.panel = panel;
+        this.pnlPanel = pnlPanel;
     }
 
     #region 公开绘图入口
-    public void DrawSpread(Graphics g, WeaponData? left, WeaponData? right,
-        double hipL, double adsL, double bipodHipL, double bipodAdsL,
-        double hipR, double adsR, double bipodHipR, double bipodAdsR)
+    public void DrawSpread(Graphics g, WeaponData? wLeft, WeaponData? wRight,
+        double dHipL, double dAdsL, double dBipodHipL, double dBipodAdsL,
+        double dHipR, double dAdsR, double dBipodHipR, double dBipodAdsR)
     {
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.Clear(Color.Black);
-        int cx = panel.Width / 2, cy = panel.Height / 2;
-        float r = Math.Min(cx, cy) - 20;
-        float s = r / 15f;
+        int iCx = pnlPanel.Width / 2, iCy = pnlPanel.Height / 2;
+        float fR = Math.Min(iCx, iCy) - 20;
+        float fS = fR / 15f;
         //s是每度散布对应的像素半径 15度对应最大可用半径
 
-        DrawCircle(g, cx, cy, (float)(hipL * s), Color.Red, DashStyle.Solid);
-        DrawCircle(g, cx, cy, (float)(adsL * s), Color.Red, DashStyle.Dash);
-        if (bipodHipL > 0)
-            DrawCircle(g, cx, cy, (float)(bipodHipL * s), Color.Lime, DashStyle.Solid);
-        if (bipodAdsL > 0)
-            DrawCircle(g, cx, cy, (float)(bipodAdsL * s), Color.Lime, DashStyle.Dash);
+        DrawCircle(g, iCx, iCy, (float)(dHipL * fS), Color.Red, DashStyle.Solid);
+        DrawCircle(g, iCx, iCy, (float)(dAdsL * fS), Color.Red, DashStyle.Dash);
+        if (dBipodHipL > 0)
+            DrawCircle(g, iCx, iCy, (float)(dBipodHipL * fS), Color.Lime, DashStyle.Solid);
+        if (dBipodAdsL > 0)
+            DrawCircle(g, iCx, iCy, (float)(dBipodAdsL * fS), Color.Lime, DashStyle.Dash);
 
-        if (right != null)
+        if (wRight != null)
         {
-            DrawCircle(g, cx, cy, (float)(hipR * s), Color.DodgerBlue, DashStyle.Solid);
-            DrawCircle(g, cx, cy, (float)(adsR * s), Color.DodgerBlue, DashStyle.Dash);
-            if (bipodHipR > 0)
-                DrawCircle(g, cx, cy, (float)(bipodHipR * s), Color.Yellow, DashStyle.Solid);
-            if (bipodAdsR > 0)
-                DrawCircle(g, cx, cy, (float)(bipodAdsR * s), Color.Yellow, DashStyle.Dash);
+            DrawCircle(g, iCx, iCy, (float)(dHipR * fS), Color.DodgerBlue, DashStyle.Solid);
+            DrawCircle(g, iCx, iCy, (float)(dAdsR * fS), Color.DodgerBlue, DashStyle.Dash);
+            if (dBipodHipR > 0)
+                DrawCircle(g, iCx, iCy, (float)(dBipodHipR * fS), Color.Yellow, DashStyle.Solid);
+            if (dBipodAdsR > 0)
+                DrawCircle(g, iCx, iCy, (float)(dBipodAdsR * fS), Color.Yellow, DashStyle.Dash);
         }
 
-        DrawLeftLegend(g, 5, panel.Height - 5, Color.Red, Color.Lime);
-        if (right != null)
-            DrawRightLegend(g, panel.Width - 5, panel.Height - 5, Color.DodgerBlue, Color.Yellow);
+        DrawLeftLegend(g, 5, pnlPanel.Height - 5, Color.Red, Color.Lime);
+        if (wRight != null)
+            DrawRightLegend(g, pnlPanel.Width - 5, pnlPanel.Height - 5, Color.DodgerBlue, Color.Yellow);
 
-        string curCal = left?.PrimaryAmmo ?? "";
-        string cmpCal = right?.PrimaryAmmo ?? "";
-        string calText = !string.IsNullOrEmpty(curCal) && !string.IsNullOrEmpty(cmpCal)
-            ? $"{curCal} | {cmpCal}"
-            : !string.IsNullOrEmpty(curCal) ? curCal : cmpCal;
-        if (!string.IsNullOrEmpty(calText))
+        string sCurCal = wLeft?.PrimaryAmmo ?? "";
+        string sCmpCal = wRight?.PrimaryAmmo ?? "";
+        string sCalText = !string.IsNullOrEmpty(sCurCal) && !string.IsNullOrEmpty(sCmpCal)
+            ? $"{sCurCal} | {sCmpCal}"
+            : !string.IsNullOrEmpty(sCurCal) ? sCurCal : sCmpCal;
+        if (!string.IsNullOrEmpty(sCalText))
         {
-            using var cf = new Font("Arial", 7, FontStyle.Bold);
-            using var cb = new SolidBrush(Color.FromArgb(180, 180, 180));
-            var sz = g.MeasureString(calText, cf);
-            g.DrawString(calText, cf, cb, (panel.Width - sz.Width) / 2, 5);
+            using var fntCal = new Font("Arial", 7, FontStyle.Bold);
+            using var brCal = new SolidBrush(Color.FromArgb(180, 180, 180));
+            var szfText = g.MeasureString(sCalText, fntCal);
+            g.DrawString(sCalText, fntCal, brCal, (pnlPanel.Width - szfText.Width) / 2, 5);
         }
     }
 
-    public void DrawRecoil(Graphics g, WeaponData? left, WeaponData? right,
-        double hipUpL, double hipRtL, double adsUpL, double adsRtL,
-        double hipUpR, double hipRtR, double adsUpR, double adsRtR,
-        float maxScale = 2.5f)
+    public void DrawRecoil(Graphics g, WeaponData? wLeft, WeaponData? wRight,
+        double dHipUpL, double dHipRtL, double dAdsUpL, double dAdsRtL,
+        double dHipUpR, double dHipRtR, double dAdsUpR, double dAdsRtR,
+        float fMaxScale = 2.5f)
     {
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.Clear(Color.Black);
-        int cx = panel.Width / 2;
-        int cy = panel.Height - 30;
-        int shots = 30;
-        float s = Math.Min(maxScale, (float)((panel.Height - 40) / (Math.Max(hipUpL, 0.01) * shots)));
+        int iCx = pnlPanel.Width / 2;
+        int iCy = pnlPanel.Height - 30;
+        int iShots = 30;
+        float fS = Math.Min(fMaxScale, (float)((pnlPanel.Height - 40) / (Math.Max(dHipUpL, 0.01) * iShots)));
         //scale钳制到maxScale 防止低后座时扇形过大 用hipUpL防除零
 
-        DrawSector(g, cx, cy, (float)hipUpL, (float)hipRtL, shots, s,
+        DrawSector(g, iCx, iCy, (float)dHipUpL, (float)dHipRtL, iShots, fS,
             Color.FromArgb(80, 255, 0, 0), Color.Red, "L Hip", "left");
-        DrawSector(g, cx, cy, (float)adsUpL, (float)adsRtL, shots, s,
+        DrawSector(g, iCx, iCy, (float)dAdsUpL, (float)dAdsRtL, iShots, fS,
             Color.FromArgb(80, 0, 255, 0), Color.Lime, "L ADS", "left");
 
-        if (right != null)
+        if (wRight != null)
         {
-            DrawSector(g, cx, cy, (float)hipUpR, (float)hipRtR, shots, s,
+            DrawSector(g, iCx, iCy, (float)dHipUpR, (float)dHipRtR, iShots, fS,
                 Color.FromArgb(40, 0, 191, 255), Color.DeepSkyBlue, "R Hip", "right");
-            DrawSector(g, cx, cy, (float)adsUpR, (float)adsRtR, shots, s,
+            DrawSector(g, iCx, iCy, (float)dAdsUpR, (float)dAdsRtR, iShots, fS,
                 Color.FromArgb(40, 255, 165, 0), Color.Yellow, "R ADS", "right");
         }
     }
@@ -92,68 +92,68 @@ public class PanelRenderer
     #endregion
     #region 绘图辅助
 
-    private void DrawCircle(Graphics g, int cx, int cy, float radius, Color color, DashStyle dashStyle)
+    private void DrawCircle(Graphics g, int iCx, int iCy, float fRadius, Color color, DashStyle dsStyle)
     {
-        if (radius <= 0) return;
-        using var pen = new Pen(color, 1.2f) { DashStyle = dashStyle };
-        g.DrawEllipse(pen, cx - radius, cy - radius, radius * 2, radius * 2);
+        if (fRadius <= 0) return;
+        using var pen = new Pen(color, 1.2f) { DashStyle = dsStyle };
+        g.DrawEllipse(pen, iCx - fRadius, iCy - fRadius, fRadius * 2, fRadius * 2);
     }
 
-    private void DrawLeftLegend(Graphics g, int x, int y, Color hipColor, Color bipodColor)
+    private void DrawLeftLegend(Graphics g, int iX, int iY, Color cHip, Color cBipod)
     {
-        using var font = new Font("Arial", 7);
-        using var hipBrush = new SolidBrush(hipColor);
-        using var bipodBrush = new SolidBrush(bipodColor);
-        float drawY = y - 56;
-        g.DrawString("━ Hip", font, hipBrush, x, drawY);
-        g.DrawString("┅ ADS", font, hipBrush, x, drawY + 14);
-        g.DrawString("━ Bipod", font, bipodBrush, x, drawY + 28);
-        g.DrawString("┅ Bipod ADS", font, bipodBrush, x, drawY + 42);
+        using var fntLegend = new Font("Arial", 7);
+        using var brHip = new SolidBrush(cHip);
+        using var brBipod = new SolidBrush(cBipod);
+        float fDrawY = iY - 56;
+        g.DrawString("━ Hip", fntLegend, brHip, iX, fDrawY);
+        g.DrawString("┅ ADS", fntLegend, brHip, iX, fDrawY + 14);
+        g.DrawString("━ Bipod", fntLegend, brBipod, iX, fDrawY + 28);
+        g.DrawString("┅ Bipod ADS", fntLegend, brBipod, iX, fDrawY + 42);
     }
 
-    private void DrawRightLegend(Graphics g, int rightX, int rightY, Color hipColor, Color bipodColor)
+    private void DrawRightLegend(Graphics g, int iRightX, int iRightY, Color cHip, Color cBipod)
     {
-        using var font = new Font("Arial", 7);
-        using var hipBrush = new SolidBrush(hipColor);
-        using var bipodBrush = new SolidBrush(bipodColor);
-        float y = rightY - 56;
-        g.DrawString("Hip ━", font, hipBrush,
-            rightX - g.MeasureString("Hip ━", font).Width, y);
-        g.DrawString("ADS ┅", font, hipBrush,
-            rightX - g.MeasureString("ADS ┅", font).Width, y + 14);
-        g.DrawString("Bipod ━", font, bipodBrush,
-            rightX - g.MeasureString("Bipod ━", font).Width, y + 28);
-        g.DrawString("Bipod ADS ┅", font, bipodBrush,
-            rightX - g.MeasureString("Bipod ADS ┅", font).Width, y + 42);
+        using var fntLegend = new Font("Arial", 7);
+        using var brHip = new SolidBrush(cHip);
+        using var brBipod = new SolidBrush(cBipod);
+        float fY = iRightY - 56;
+        g.DrawString("Hip ━", fntLegend, brHip,
+            iRightX - g.MeasureString("Hip ━", fntLegend).Width, fY);
+        g.DrawString("ADS ┅", fntLegend, brHip,
+            iRightX - g.MeasureString("ADS ┅", fntLegend).Width, fY + 14);
+        g.DrawString("Bipod ━", fntLegend, brBipod,
+            iRightX - g.MeasureString("Bipod ━", fntLegend).Width, fY + 28);
+        g.DrawString("Bipod ADS ┅", fntLegend, brBipod,
+            iRightX - g.MeasureString("Bipod ADS ┅", fntLegend).Width, fY + 42);
     }
 
-    private void DrawSector(Graphics g, int cx, int cy,
-        float up, float right, int shots, float scale,
-        Color fill, Color line, string label, string side)
+    private void DrawSector(Graphics g, int iCx, int iCy,
+        float fUp, float fRight, int iShots, float fScale,
+        Color cFill, Color cLine, string sLabel, string sSide)
     {
-        float totalUp = up * shots * scale;
-        float totalRight = right * shots * scale;
-        float radius = totalUp;
-        if (radius <= 0) return;
+        float fTotalUp = fUp * iShots * fScale;
+        float fTotalRight = fRight * iShots * fScale;
+        float fRadius = fTotalUp;
+        if (fRadius <= 0) return;
 
         //以正上方270度为基准 左右扩展halfAngle
-        float halfAngle = (float)Math.Atan2(totalRight, totalUp);
-        float startAngle = 270f - halfAngle * 180f / (float)Math.PI;
-        float sweepAngle = 2f * halfAngle * 180f / (float)Math.PI;
+        float fHalfAngle = (float)Math.Atan2(fTotalRight, fTotalUp);
+        float fStartAngle = 270f - fHalfAngle * 180f / (float)Math.PI;
+        float fSweepAngle = 2f * fHalfAngle * 180f / (float)Math.PI;
 
-        using var fillBrush = new SolidBrush(fill);
-        g.FillPie(fillBrush, cx - radius, cy - radius, radius * 2, radius * 2, startAngle, sweepAngle);
+        using var brFill = new SolidBrush(cFill);
+        g.FillPie(brFill, iCx - fRadius, iCy - fRadius, fRadius * 2, fRadius * 2, fStartAngle, fSweepAngle);
 
-        using var outlinePen = new Pen(line, 1.2f);
-        g.DrawPie(outlinePen, cx - radius, cy - radius, radius * 2, radius * 2, startAngle, sweepAngle);
+        using var penOutline = new Pen(cLine, 1.2f);
+        g.DrawPie(penOutline, iCx - fRadius, iCy - fRadius, fRadius * 2, fRadius * 2, fStartAngle, fSweepAngle);
 
-        using var labelFont = new Font("Arial", 6);
-        using var labelBrush = new SolidBrush(line);
-        var textSize = g.MeasureString(label, labelFont);
-        float labelX = side == "left"
-            ? cx - totalRight - textSize.Width - 4
-            : cx + totalRight + 4;
-        g.DrawString(label, labelFont, labelBrush, labelX, cy - totalUp - textSize.Height);
+        using var fntLabel = new Font("Arial", 6);
+        using var brLabel = new SolidBrush(cLine);
+        var szfLabel = g.MeasureString(sLabel, fntLabel);
+        float fLabelX = sSide == "left"
+            ? iCx - fTotalRight - szfLabel.Width - 4
+            : iCx + fTotalRight + 4;
+        g.DrawString(sLabel, fntLabel, brLabel, fLabelX, iCy - fTotalUp - szfLabel.Height);
     }
     #endregion
 }
