@@ -55,7 +55,7 @@
     - Windows 7 SP1 with KB3063858 (use the self contained one)
     - Wine/Proton 9.0+ for the OS of evil
     - Pentium 4 630 with SVGA graphics
-    - 1.44 MB floppy (Desktop Runtime) or 64 MB drive space available
+    - 720 KiB floppy (Desktop Runtime) or 64 MiB drive space available
     - A keyboard. A mouse. Fingers optional but recommended
 
   RECOMMENDED:
@@ -160,7 +160,7 @@
   8. LIMITATIONS
 ================================================================================
 
-  - Self contained build is ~60 MB and blame Microsoft not me
+  - Self contained build is ~60 MiB and blame Microsoft not me
   - Some wiki operations require login to
     wiki.militaryconflictvietnam.com
   - Two copies from the same folder will not open, this is intentional
