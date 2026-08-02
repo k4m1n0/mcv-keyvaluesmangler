@@ -267,7 +267,8 @@ public partial class Form1
             wWeapon.DovFireModes = GetTextBox(bIsLeft, txtFireModesL, txtFireModesR).Text;
             wWeapon.DovShakeScale = wWeapon.ShakeScale; wWeapon.DovShakeFreq = wWeapon.ShakeFreq; wWeapon.DovShakeDuration = wWeapon.ShakeDuration;
             wWeapon.DovCrosshairMinDistance = wWeapon.CrosshairMinDistance; wWeapon.DovCrosshairDeltaDistance = wWeapon.CrosshairDeltaDistance;
-            wWeapon.DovZMBuyPrice = wWeapon.ZMBuyPrice; wWeapon.DovZMWeight = wWeapon.ZMWeight;
+            wWeapon.DovZMBuyPrice = (int)GetNud(bIsLeft, nudZMBuyPriceL, nudZMBuyPriceR).Value;
+            wWeapon.DovZMWeight = (int)GetNud(bIsLeft, nudZMWeightL, nudZMWeightR).Value;
             wWeapon.DovRecoilPushbackValue = wWeapon.RecoilPushbackValue; wWeapon.DovIronsightWalkBobbingStrength = wWeapon.IronsightWalkBobbingStrength;
             wWeapon.DovMetalPenetrationDepth = wWeapon.MetalPenetrationDepth; wWeapon.DovGlassPenetrationDepth = wWeapon.GlassPenetrationDepth;
             wWeapon.DovConcretePenetrationDepth = wWeapon.ConcretePenetrationDepth; wWeapon.DovWoodPenetrationDepth = wWeapon.WoodPenetrationDepth;
@@ -308,7 +309,8 @@ public partial class Form1
             wWeapon.ZombieFireModes = GetTextBox(bIsLeft, txtFireModesL, txtFireModesR).Text;
             wWeapon.ZombieShakeScale = wWeapon.ShakeScale; wWeapon.ZombieShakeFreq = wWeapon.ShakeFreq; wWeapon.ZombieShakeDuration = wWeapon.ShakeDuration;
             wWeapon.ZombieCrosshairMinDistance = wWeapon.CrosshairMinDistance; wWeapon.ZombieCrosshairDeltaDistance = wWeapon.CrosshairDeltaDistance;
-            wWeapon.ZombieZMBuyPrice = wWeapon.ZMBuyPrice; wWeapon.ZombieZMWeight = wWeapon.ZMWeight;
+            wWeapon.ZMBuyPrice = (int)GetNud(bIsLeft, nudZMBuyPriceL, nudZMBuyPriceR).Value;
+            wWeapon.ZMWeight = (int)GetNud(bIsLeft, nudZMWeightL, nudZMWeightR).Value;
             wWeapon.ZombieRecoilPushbackValue = wWeapon.RecoilPushbackValue; wWeapon.ZombieIronsightWalkBobbingStrength = wWeapon.IronsightWalkBobbingStrength;
             wWeapon.ZombieMetalPenetrationDepth = wWeapon.MetalPenetrationDepth; wWeapon.ZombieGlassPenetrationDepth = wWeapon.GlassPenetrationDepth;
             wWeapon.ZombieConcretePenetrationDepth = wWeapon.ConcretePenetrationDepth; wWeapon.ZombieWoodPenetrationDepth = wWeapon.WoodPenetrationDepth;
