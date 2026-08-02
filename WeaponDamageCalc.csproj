@@ -22,10 +22,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="CsvHelper" Version="*" />
-  </ItemGroup>
-
-  <ItemGroup>
     <None Update="weapons.csv">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

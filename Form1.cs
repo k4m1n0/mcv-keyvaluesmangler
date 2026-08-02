@@ -8,6 +8,7 @@ using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using WeaponDamageCalc.Models;
 using WeaponDamageCalc.Services;
+using WeaponDamageCalc.Tools;
 
 namespace WeaponDamageCalc;
 

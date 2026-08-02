@@ -75,6 +75,9 @@ public partial class Form1
                     SetAltStatReadonly(true, currentAltStatMode);
                     updatingControls = false;
                     HighlightAltStatButton(currentAltStatMode);
+                    UpdateAllDamage();
+                    pnlSpread.Invalidate();
+                    pnlRecoil.Invalidate();
                     StoreSnapshot(leftOnly: true);
                 }
                 if (showingAltStats && !WeaponHasAltStats(w, currentAltStatMode))
@@ -82,6 +85,9 @@ public partial class Form1
                     RestoreAllNudEnabled(true);
                     LoadWeaponToControls(w, true);
                     HighlightAltStatButton(currentAltStatMode);
+                    UpdateAllDamage();
+                    pnlSpread.Invalidate();
+                    pnlRecoil.Invalidate();
                     StoreSnapshot(leftOnly: true);
                 }
                 if (!showingAltStats)
@@ -156,13 +162,19 @@ public partial class Form1
                     SetAltStatReadonly(false, currentAltStatMode);
                     updatingControls = false;
                     HighlightAltStatButton(currentAltStatMode);
+                    UpdateAllDamage();
+                    pnlSpread.Invalidate();
+                    pnlRecoil.Invalidate();
                     StoreSnapshot(leftOnly: false);
                 }
                 if (showingAltStats && !WeaponHasAltStats(w, currentAltStatMode))
                 {
-                    RestoreAllNudEnabled(true);
-                    LoadWeaponToControls(w, true);
+                    RestoreAllNudEnabled(false);
+                    LoadWeaponToControls(w, false);
                     HighlightAltStatButton(currentAltStatMode);
+                    UpdateAllDamage();
+                    pnlSpread.Invalidate();
+                    pnlRecoil.Invalidate();
                     StoreSnapshot(leftOnly: false);
                 }
                 if (!showingAltStats)

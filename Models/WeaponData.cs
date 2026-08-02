@@ -1,372 +1,372 @@
-using CsvHelper.Configuration.Attributes;
+using WeaponDamageCalc.Tools;
 
 namespace WeaponDamageCalc.Models;
 
 public class WeaponData
 {
-    [Name("ScriptName")]
+    [CsvColumn("ScriptName")]
     public string ScriptName { get; set; } = string.Empty;
 
-    [Name("printname")]
+    [CsvColumn("printname")]
     public string PrintName { get; set; } = string.Empty;
 
-    [Name("SupportedFireModes")]
+    [CsvColumn("SupportedFireModes")]
     public string FireModes { get; set; } = string.Empty;
-    [Name("dov_SupportedFireModes")]
+    [CsvColumn("dov_SupportedFireModes")]
     public string DovFireModes { get; set; } = string.Empty;
-    [Name("zombie_SupportedFireModes")]
+    [CsvColumn("zombie_SupportedFireModes")]
     public string ZombieFireModes { get; set; } = string.Empty;
 
-    [Name("default_clip")]
+    [CsvColumn("default_clip")]
     public int? DefaultClip { get; set; }
-    [Name("dov_default_clip")]
+    [CsvColumn("dov_default_clip")]
     public int? DovDefaultClip { get; set; }
-    [Name("zombie_default_clip")]
+    [CsvColumn("zombie_default_clip")]
     public int? ZombieDefaultClip { get; set; }
 
-    [Name("SecondaryFireRate")]
+    [CsvColumn("SecondaryFireRate")]
     public int? SecondaryFireRate { get; set; }
-    [Name("dov_SecondaryFireRate")]
+    [CsvColumn("dov_SecondaryFireRate")]
     public int? DovSecondaryFireRate { get; set; }
-    [Name("zombie_SecondaryFireRate")]
+    [CsvColumn("zombie_SecondaryFireRate")]
     public int? ZombieSecondaryFireRate { get; set; }
 
-    [Name("ExtraBulletChamber")]
+    [CsvColumn("ExtraBulletChamber")]
     public int? ExtraBulletChamber { get; set; }
-    [Name("dov_ExtraBulletChamber")]
+    [CsvColumn("dov_ExtraBulletChamber")]
     public int? DovExtraBulletChamber { get; set; }
-    [Name("zombie_ExtraBulletChamber")]
+    [CsvColumn("zombie_ExtraBulletChamber")]
     public int? ZombieExtraBulletChamber { get; set; }
 
-    [Name("bullets_per_shot")]
+    [CsvColumn("bullets_per_shot")]
     public int? BulletsPerShot { get; set; }
-    [Name("dov_bullets_per_shot")]
+    [CsvColumn("dov_bullets_per_shot")]
     public int? DovBulletsPerShot { get; set; }
-    [Name("zombie_bullets_per_shot")]
+    [CsvColumn("zombie_bullets_per_shot")]
     public int? ZombieBulletsPerShot { get; set; }
 
-    [Name("FireRate")]
+    [CsvColumn("FireRate")]
     public int? FireRate { get; set; }
-    [Name("dov_FireRate")]
+    [CsvColumn("dov_FireRate")]
     public int? DovFireRate { get; set; }
-    [Name("zombie_FireRate")]
+    [CsvColumn("zombie_FireRate")]
     public int? ZombieFireRate { get; set; }
 
-    [Name("BulletSpreadDegrees")]
+    [CsvColumn("BulletSpreadDegrees")]
     public double? BulletSpread { get; set; }
-    [Name("dov_BulletSpreadDegrees")]
+    [CsvColumn("dov_BulletSpreadDegrees")]
     public double? DovBulletSpread { get; set; }
-    [Name("zombie_BulletSpreadDegrees")]
+    [CsvColumn("zombie_BulletSpreadDegrees")]
     public double? ZombieBulletSpread { get; set; }
 
-    [Name("BulletSpreadDegreesIronsighted")]
+    [CsvColumn("BulletSpreadDegreesIronsighted")]
     public double? BulletSpreadDegreesIronsighted { get; set; }
-    [Name("dov_BulletSpreadDegreesIronsighted")]
+    [CsvColumn("dov_BulletSpreadDegreesIronsighted")]
     public double? DovBulletSpreadDegreesIronsighted { get; set; }
-    [Name("zombie_BulletSpreadDegreesIronsighted")]
+    [CsvColumn("zombie_BulletSpreadDegreesIronsighted")]
     public double? ZombieBulletSpreadDegreesIronsighted { get; set; }
 
-    [Name("BulletSpreadDegreesBipod")]
+    [CsvColumn("BulletSpreadDegreesBipod")]
     public double? BulletSpreadDegreesBipod { get; set; }
-    [Name("dov_BulletSpreadDegreesBipod")]
+    [CsvColumn("dov_BulletSpreadDegreesBipod")]
     public double? DovBulletSpreadDegreesBipod { get; set; }
-    [Name("zombie_BulletSpreadDegreesBipod")]
+    [CsvColumn("zombie_BulletSpreadDegreesBipod")]
     public double? ZombieBulletSpreadDegreesBipod { get; set; }
 
-    [Name("BulletSpreadDegreesBipodIronsighted")]
+    [CsvColumn("BulletSpreadDegreesBipodIronsighted")]
     public double? BulletSpreadDegreesBipodIronsighted { get; set; }
-    [Name("dov_BulletSpreadDegreesBipodIronsighted")]
+    [CsvColumn("dov_BulletSpreadDegreesBipodIronsighted")]
     public double? DovBulletSpreadDegreesBipodIronsighted { get; set; }
-    [Name("zombie_BulletSpreadDegreesBipodIronsighted")]
+    [CsvColumn("zombie_BulletSpreadDegreesBipodIronsighted")]
     public double? ZombieBulletSpreadDegreesBipodIronsighted { get; set; }
 
-    [Name("rangemodifier")]
+    [CsvColumn("rangemodifier")]
     public double? RangeModifier { get; set; }
-    [Name("dov_rangemodifier")]
+    [CsvColumn("dov_rangemodifier")]
     public double? DovRangeModifier { get; set; }
-    [Name("zombie_rangemodifier")]
+    [CsvColumn("zombie_rangemodifier")]
     public double? ZombieRangeModifier { get; set; }
 
-    [Name("IronsightSpeedScale")]
+    [CsvColumn("IronsightSpeedScale")]
     public double? IronsightSpeedScale { get; set; }
-    [Name("dov_IronsightSpeedScale")]
+    [CsvColumn("dov_IronsightSpeedScale")]
     public double? DovIronsightSpeedScale { get; set; }
-    [Name("zombie_IronsightSpeedScale")]
+    [CsvColumn("zombie_IronsightSpeedScale")]
     public double? ZombieIronsightSpeedScale { get; set; }
 
-    [Name("IronSight")]
+    [CsvColumn("IronSight")]
     public int? IronSight { get; set; }
-    [Name("dov_IronSight")]
+    [CsvColumn("dov_IronSight")]
     public int? DovIronSight { get; set; }
-    [Name("zombie_IronSight")]
+    [CsvColumn("zombie_IronSight")]
     public int? ZombieIronSight { get; set; }
 
-    [Name("CrouchSpreadMultiplier")]
+    [CsvColumn("CrouchSpreadMultiplier")]
     public double? CrouchSpreadMultiplier { get; set; }
-    [Name("dov_CrouchSpreadMultiplier")]
+    [CsvColumn("dov_CrouchSpreadMultiplier")]
     public double? DovCrouchSpreadMultiplier { get; set; }
-    [Name("zombie_CrouchSpreadMultiplier")]
+    [CsvColumn("zombie_CrouchSpreadMultiplier")]
     public double? ZombieCrouchSpreadMultiplier { get; set; }
 
-    [Name("ProneSpreadMultiplier")]
+    [CsvColumn("ProneSpreadMultiplier")]
     public double? ProneSpreadMultiplier { get; set; }
-    [Name("dov_ProneSpreadMultiplier")]
+    [CsvColumn("dov_ProneSpreadMultiplier")]
     public double? DovProneSpreadMultiplier { get; set; }
-    [Name("zombie_ProneSpreadMultiplier")]
+    [CsvColumn("zombie_ProneSpreadMultiplier")]
     public double? ZombieProneSpreadMultiplier { get; set; }
 
-    [Name("StandMoveSpreadMultiplier")]
+    [CsvColumn("StandMoveSpreadMultiplier")]
     public double? StandMoveSpreadMultiplier { get; set; }
-    [Name("dov_StandMoveSpreadMultiplier")]
+    [CsvColumn("dov_StandMoveSpreadMultiplier")]
     public double? DovStandMoveSpreadMultiplier { get; set; }
-    [Name("zombie_StandMoveSpreadMultiplier")]
+    [CsvColumn("zombie_StandMoveSpreadMultiplier")]
     public double? ZombieStandMoveSpreadMultiplier { get; set; }
 
-    [Name("SneakMoveSpreadMultiplier")]
+    [CsvColumn("SneakMoveSpreadMultiplier")]
     public double? SneakMoveSpreadMultiplier { get; set; }
-    [Name("dov_SneakMoveSpreadMultiplier")]
+    [CsvColumn("dov_SneakMoveSpreadMultiplier")]
     public double? DovSneakMoveSpreadMultiplier { get; set; }
-    [Name("zombie_SneakMoveSpreadMultiplier")]
+    [CsvColumn("zombie_SneakMoveSpreadMultiplier")]
     public double? ZombieSneakMoveSpreadMultiplier { get; set; }
 
-    [Name("CrouchMoveSpreadMultiplier")]
+    [CsvColumn("CrouchMoveSpreadMultiplier")]
     public double? CrouchMoveSpreadMultiplier { get; set; }
-    [Name("dov_CrouchMoveSpreadMultiplier")]
+    [CsvColumn("dov_CrouchMoveSpreadMultiplier")]
     public double? DovCrouchMoveSpreadMultiplier { get; set; }
-    [Name("zombie_CrouchMoveSpreadMultiplier")]
+    [CsvColumn("zombie_CrouchMoveSpreadMultiplier")]
     public double? ZombieCrouchMoveSpreadMultiplier { get; set; }
 
-    [Name("JumpSpreadMultiplier")]
+    [CsvColumn("JumpSpreadMultiplier")]
     public double? JumpSpreadMultiplier { get; set; }
-    [Name("dov_JumpSpreadMultiplier")]
+    [CsvColumn("dov_JumpSpreadMultiplier")]
     public double? DovJumpSpreadMultiplier { get; set; }
-    [Name("zombie_JumpSpreadMultiplier")]
+    [CsvColumn("zombie_JumpSpreadMultiplier")]
     public double? ZombieJumpSpreadMultiplier { get; set; }
 
-    [Name("ViewSlideRecoil.Up")]
+    [CsvColumn("ViewSlideRecoil.Up")]
     public double? ViewSlideRecoilUp { get; set; }
-    [Name("dov_ViewSlideRecoil.Up")]
+    [CsvColumn("dov_ViewSlideRecoil.Up")]
     public double? DovViewSlideRecoilUp { get; set; }
-    [Name("zombie_ViewSlideRecoil.Up")]
+    [CsvColumn("zombie_ViewSlideRecoil.Up")]
     public double? ZombieViewSlideRecoilUp { get; set; }
 
-    [Name("ViewSlideRecoil.Right")]
+    [CsvColumn("ViewSlideRecoil.Right")]
     public double? ViewSlideRecoilRight { get; set; }
-    [Name("dov_ViewSlideRecoil.Right")]
+    [CsvColumn("dov_ViewSlideRecoil.Right")]
     public double? DovViewSlideRecoilRight { get; set; }
-    [Name("zombie_ViewSlideRecoil.Right")]
+    [CsvColumn("zombie_ViewSlideRecoil.Right")]
     public double? ZombieViewSlideRecoilRight { get; set; }
 
-    [Name("ViewSlideRecoilIronsight.Up")]
+    [CsvColumn("ViewSlideRecoilIronsight.Up")]
     public double? ViewSlideRecoilIronsightUp { get; set; }
-    [Name("dov_ViewSlideRecoilIronsight.Up")]
+    [CsvColumn("dov_ViewSlideRecoilIronsight.Up")]
     public double? DovViewSlideRecoilIronsightUp { get; set; }
-    [Name("zombie_ViewSlideRecoilIronsight.Up")]
+    [CsvColumn("zombie_ViewSlideRecoilIronsight.Up")]
     public double? ZombieViewSlideRecoilIronsightUp { get; set; }
 
-    [Name("ViewSlideRecoilIronsight.Right")]
+    [CsvColumn("ViewSlideRecoilIronsight.Right")]
     public double? ViewSlideRecoilIronsightRight { get; set; }
-    [Name("dov_ViewSlideRecoilIronsight.Right")]
+    [CsvColumn("dov_ViewSlideRecoilIronsight.Right")]
     public double? DovViewSlideRecoilIronsightRight { get; set; }
-    [Name("zombie_ViewSlideRecoilIronsight.Right")]
+    [CsvColumn("zombie_ViewSlideRecoilIronsight.Right")]
     public double? ZombieViewSlideRecoilIronsightRight { get; set; }
 
-    [Name("DamageHeadMultiplier")]
+    [CsvColumn("DamageHeadMultiplier")]
     public double? DamageHeadMultiplier { get; set; }
-    [Name("dov_DamageHeadMultiplier")]
+    [CsvColumn("dov_DamageHeadMultiplier")]
     public double? DovDamageHeadMultiplier { get; set; }
-    [Name("zombie_DamageHeadMultiplier")]
+    [CsvColumn("zombie_DamageHeadMultiplier")]
     public double? ZombieDamageHeadMultiplier { get; set; }
 
-    [Name("DamageChestMultiplier")]
+    [CsvColumn("DamageChestMultiplier")]
     public double? DamageChestMultiplier { get; set; }
-    [Name("dov_DamageChestMultiplier")]
+    [CsvColumn("dov_DamageChestMultiplier")]
     public double? DovDamageChestMultiplier { get; set; }
-    [Name("zombie_DamageChestMultiplier")]
+    [CsvColumn("zombie_DamageChestMultiplier")]
     public double? ZombieDamageChestMultiplier { get; set; }
 
-    [Name("DamageStomachMultiplier")]
+    [CsvColumn("DamageStomachMultiplier")]
     public double? DamageStomachMultiplier { get; set; }
-    [Name("dov_DamageStomachMultiplier")]
+    [CsvColumn("dov_DamageStomachMultiplier")]
     public double? DovDamageStomachMultiplier { get; set; }
-    [Name("zombie_DamageStomachMultiplier")]
+    [CsvColumn("zombie_DamageStomachMultiplier")]
     public double? ZombieDamageStomachMultiplier { get; set; }
 
-    [Name("DamageLegMultiplier")]
+    [CsvColumn("DamageLegMultiplier")]
     public double? DamageLegMultiplier { get; set; }
-    [Name("dov_DamageLegMultiplier")]
+    [CsvColumn("dov_DamageLegMultiplier")]
     public double? DovDamageLegMultiplier { get; set; }
-    [Name("zombie_DamageLegMultiplier")]
+    [CsvColumn("zombie_DamageLegMultiplier")]
     public double? ZombieDamageLegMultiplier { get; set; }
 
-    [Name("DamageArmMultiplier")]
+    [CsvColumn("DamageArmMultiplier")]
     public double? DamageArmMultiplier { get; set; }
-    [Name("dov_DamageArmMultiplier")]
+    [CsvColumn("dov_DamageArmMultiplier")]
     public double? DovDamageArmMultiplier { get; set; }
-    [Name("zombie_DamageArmMultiplier")]
+    [CsvColumn("zombie_DamageArmMultiplier")]
     public double? ZombieDamageArmMultiplier { get; set; }
 
-    [Name("DamageGeneric")]
+    [CsvColumn("DamageGeneric")]
     public double? DamageGeneric { get; set; }
-    [Name("dov_DamageGeneric")]
+    [CsvColumn("dov_DamageGeneric")]
     public double? DovDamageGeneric { get; set; }
-    [Name("zombie_DamageGeneric")]
+    [CsvColumn("zombie_DamageGeneric")]
     public double? ZombieDamageGeneric { get; set; }
 
-    [Name("ShakeScale")]
+    [CsvColumn("ShakeScale")]
     public double? ShakeScale { get; set; }
-    [Name("dov_ShakeScale")]
+    [CsvColumn("dov_ShakeScale")]
     public double? DovShakeScale { get; set; }
-    [Name("zombie_ShakeScale")]
+    [CsvColumn("zombie_ShakeScale")]
     public double? ZombieShakeScale { get; set; }
 
-    [Name("ShakeFreq")]
+    [CsvColumn("ShakeFreq")]
     public double? ShakeFreq { get; set; }
-    [Name("dov_ShakeFreq")]
+    [CsvColumn("dov_ShakeFreq")]
     public double? DovShakeFreq { get; set; }
-    [Name("zombie_ShakeFreq")]
+    [CsvColumn("zombie_ShakeFreq")]
     public double? ZombieShakeFreq { get; set; }
 
-    [Name("ShakeDuration")]
+    [CsvColumn("ShakeDuration")]
     public double? ShakeDuration { get; set; }
-    [Name("dov_ShakeDuration")]
+    [CsvColumn("dov_ShakeDuration")]
     public double? DovShakeDuration { get; set; }
-    [Name("zombie_ShakeDuration")]
+    [CsvColumn("zombie_ShakeDuration")]
     public double? ZombieShakeDuration { get; set; }
 
-    [Name("CrosshairMinDistance")]
+    [CsvColumn("CrosshairMinDistance")]
     public int? CrosshairMinDistance { get; set; }
-    [Name("dov_CrosshairMinDistance")]
+    [CsvColumn("dov_CrosshairMinDistance")]
     public int? DovCrosshairMinDistance { get; set; }
-    [Name("zombie_CrosshairMinDistance")]
+    [CsvColumn("zombie_CrosshairMinDistance")]
     public int? ZombieCrosshairMinDistance { get; set; }
 
-    [Name("CrosshairDeltaDistance")]
+    [CsvColumn("CrosshairDeltaDistance")]
     public int? CrosshairDeltaDistance { get; set; }
-    [Name("dov_CrosshairDeltaDistance")]
+    [CsvColumn("dov_CrosshairDeltaDistance")]
     public int? DovCrosshairDeltaDistance { get; set; }
-    [Name("zombie_CrosshairDeltaDistance")]
+    [CsvColumn("zombie_CrosshairDeltaDistance")]
     public int? ZombieCrosshairDeltaDistance { get; set; }
 
-    [Name("weight")]
+    [CsvColumn("weight")]
     public double? Weight { get; set; }
-    [Name("dov_weight")]
+    [CsvColumn("dov_weight")]
     public double? DovWeight { get; set; }
-    [Name("zombie_weight")]
+    [CsvColumn("zombie_weight")]
     public double? ZombieWeight { get; set; }
 
-    [Name("ZMBuyPrice")]
+    [CsvColumn("ZMBuyPrice")]
     public int? ZMBuyPrice { get; set; }
-    [Name("dov_ZMBuyPrice")]
+    [CsvColumn("dov_ZMBuyPrice")]
     public int? DovZMBuyPrice { get; set; }
-    [Name("zombie_ZMBuyPrice")]
+    [CsvColumn("zombie_ZMBuyPrice")]
     public int? ZombieZMBuyPrice { get; set; }
 
-    [Name("ZMWeight")]
+    [CsvColumn("ZMWeight")]
     public int? ZMWeight { get; set; }
-    [Name("dov_ZMWeight")]
+    [CsvColumn("dov_ZMWeight")]
     public int? DovZMWeight { get; set; }
-    [Name("zombie_ZMWeight")]
+    [CsvColumn("zombie_ZMWeight")]
     public int? ZombieZMWeight { get; set; }
 
-    [Name("recoilpushbackvalue")]
+    [CsvColumn("recoilpushbackvalue")]
     public double? RecoilPushbackValue { get; set; }
-    [Name("dov_recoilpushbackvalue")]
+    [CsvColumn("dov_recoilpushbackvalue")]
     public double? DovRecoilPushbackValue { get; set; }
-    [Name("zombie_recoilpushbackvalue")]
+    [CsvColumn("zombie_recoilpushbackvalue")]
     public double? ZombieRecoilPushbackValue { get; set; }
 
-    [Name("ironsightwalkbobbingstrength")]
+    [CsvColumn("ironsightwalkbobbingstrength")]
     public double? IronsightWalkBobbingStrength { get; set; }
-    [Name("dov_ironsightwalkbobbingstrength")]
+    [CsvColumn("dov_ironsightwalkbobbingstrength")]
     public double? DovIronsightWalkBobbingStrength { get; set; }
-    [Name("zombie_ironsightwalkbobbingstrength")]
+    [CsvColumn("zombie_ironsightwalkbobbingstrength")]
     public double? ZombieIronsightWalkBobbingStrength { get; set; }
 
-    [Name("MetalPenetrationDepth")]
+    [CsvColumn("MetalPenetrationDepth")]
     public double? MetalPenetrationDepth { get; set; }
-    [Name("dov_MetalPenetrationDepth")]
+    [CsvColumn("dov_MetalPenetrationDepth")]
     public double? DovMetalPenetrationDepth { get; set; }
-    [Name("zombie_MetalPenetrationDepth")]
+    [CsvColumn("zombie_MetalPenetrationDepth")]
     public double? ZombieMetalPenetrationDepth { get; set; }
 
-    [Name("GlassPenetrationDepth")]
+    [CsvColumn("GlassPenetrationDepth")]
     public double? GlassPenetrationDepth { get; set; }
-    [Name("dov_GlassPenetrationDepth")]
+    [CsvColumn("dov_GlassPenetrationDepth")]
     public double? DovGlassPenetrationDepth { get; set; }
-    [Name("zombie_GlassPenetrationDepth")]
+    [CsvColumn("zombie_GlassPenetrationDepth")]
     public double? ZombieGlassPenetrationDepth { get; set; }
 
-    [Name("ConcretePenetrationDepth")]
+    [CsvColumn("ConcretePenetrationDepth")]
     public double? ConcretePenetrationDepth { get; set; }
-    [Name("dov_ConcretePenetrationDepth")]
+    [CsvColumn("dov_ConcretePenetrationDepth")]
     public double? DovConcretePenetrationDepth { get; set; }
-    [Name("zombie_ConcretePenetrationDepth")]
+    [CsvColumn("zombie_ConcretePenetrationDepth")]
     public double? ZombieConcretePenetrationDepth { get; set; }
 
-    [Name("WoodPenetrationDepth")]
+    [CsvColumn("WoodPenetrationDepth")]
     public double? WoodPenetrationDepth { get; set; }
-    [Name("dov_WoodPenetrationDepth")]
+    [CsvColumn("dov_WoodPenetrationDepth")]
     public double? DovWoodPenetrationDepth { get; set; }
-    [Name("zombie_WoodPenetrationDepth")]
+    [CsvColumn("zombie_WoodPenetrationDepth")]
     public double? ZombieWoodPenetrationDepth { get; set; }
 
-    [Name("OtherPenetrationDepth")]
+    [CsvColumn("OtherPenetrationDepth")]
     public double? OtherPenetrationDepth { get; set; }
-    [Name("dov_OtherPenetrationDepth")]
+    [CsvColumn("dov_OtherPenetrationDepth")]
     public double? DovOtherPenetrationDepth { get; set; }
-    [Name("zombie_OtherPenetrationDepth")]
+    [CsvColumn("zombie_OtherPenetrationDepth")]
     public double? ZombieOtherPenetrationDepth { get; set; }
 
-    [Name("MetalDamageModifier")]
+    [CsvColumn("MetalDamageModifier")]
     public double? MetalDamageModifier { get; set; }
-    [Name("dov_MetalDamageModifier")]
+    [CsvColumn("dov_MetalDamageModifier")]
     public double? DovMetalDamageModifier { get; set; }
-    [Name("zombie_MetalDamageModifier")]
+    [CsvColumn("zombie_MetalDamageModifier")]
     public double? ZombieMetalDamageModifier { get; set; }
 
-    [Name("GlassDamageModifier")]
+    [CsvColumn("GlassDamageModifier")]
     public double? GlassDamageModifier { get; set; }
-    [Name("dov_GlassDamageModifier")]
+    [CsvColumn("dov_GlassDamageModifier")]
     public double? DovGlassDamageModifier { get; set; }
-    [Name("zombie_GlassDamageModifier")]
+    [CsvColumn("zombie_GlassDamageModifier")]
     public double? ZombieGlassDamageModifier { get; set; }
 
-    [Name("ConcreteDamageModifier")]
+    [CsvColumn("ConcreteDamageModifier")]
     public double? ConcreteDamageModifier { get; set; }
-    [Name("dov_ConcreteDamageModifier")]
+    [CsvColumn("dov_ConcreteDamageModifier")]
     public double? DovConcreteDamageModifier { get; set; }
-    [Name("zombie_ConcreteDamageModifier")]
+    [CsvColumn("zombie_ConcreteDamageModifier")]
     public double? ZombieConcreteDamageModifier { get; set; }
 
-    [Name("WoodDamageModifier")]
+    [CsvColumn("WoodDamageModifier")]
     public double? WoodDamageModifier { get; set; }
-    [Name("dov_WoodDamageModifier")]
+    [CsvColumn("dov_WoodDamageModifier")]
     public double? DovWoodDamageModifier { get; set; }
-    [Name("zombie_WoodDamageModifier")]
+    [CsvColumn("zombie_WoodDamageModifier")]
     public double? ZombieWoodDamageModifier { get; set; }
 
-    [Name("OtherDamageModifier")]
+    [CsvColumn("OtherDamageModifier")]
     public double? OtherDamageModifier { get; set; }
-    [Name("dov_OtherDamageModifier")]
+    [CsvColumn("dov_OtherDamageModifier")]
     public double? DovOtherDamageModifier { get; set; }
-    [Name("zombie_OtherDamageModifier")]
+    [CsvColumn("zombie_OtherDamageModifier")]
     public double? ZombieOtherDamageModifier { get; set; }
 
-    [Name("NearwallDistance")]
+    [CsvColumn("NearwallDistance")]
     public int? NearwallDistance { get; set; }
-    [Name("dov_NearwallDistance")]
+    [CsvColumn("dov_NearwallDistance")]
     public int? DovNearwallDistance { get; set; }
-    [Name("zombie_NearwallDistance")]
+    [CsvColumn("zombie_NearwallDistance")]
     public int? ZombieNearwallDistance { get; set; }
 
-    [Name("primary_ammo")]
+    [CsvColumn("primary_ammo")]
     public string PrimaryAmmo { get; set; } = string.Empty;
 
-    [Name("clip_size")]
+    [CsvColumn("clip_size")]
     public string ClipSize { get; set; } = string.Empty;
-    [Name("dov_clip_size")]
+    [CsvColumn("dov_clip_size")]
     public string DovClipSize { get; set; } = string.Empty;
-    [Name("zombie_clip_size")]
+    [CsvColumn("zombie_clip_size")]
     public string ZombieClipSize { get; set; } = string.Empty;
 }
