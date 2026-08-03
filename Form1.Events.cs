@@ -33,11 +33,11 @@ public partial class Form1
                 bool bWasRapid = sRapidStartLeft != null;
                 if (bShowingAltStats)
                 {
-                    bool bFocusLeft = bLastFocusLeft;
+                    bool bFocusLeft = ResolveSameWeaponFocus();
                     if (bFocusLeft && wCurrentLeft != null && WeaponHasAltStats(wCurrentLeft, amCurrentAltStat))
-                        SyncAltStatFields(wCurrentLeft, amCurrentAltStat);
+                        SyncAltStatFields(wCurrentLeft, amCurrentAltStat, true);
                     else if (!bFocusLeft && wCurrentRight != null && WeaponHasAltStats(wCurrentRight, amCurrentAltStat))
-                        SyncAltStatFields(wCurrentRight, amCurrentAltStat);
+                        SyncAltStatFields(wCurrentRight, amCurrentAltStat, false);
                     if (wCurrentLeft != null && HasUnsavedChanges(true, bCheckBothSides: true))
                     {
                         var drResult = MessageBox.Show("Unsaved alt stat changes to left weapon. Discard?",
@@ -133,11 +133,11 @@ public partial class Form1
                 bool bWasRapid = sRapidStartRight != null;
                 if (bShowingAltStats)
                 {
-                    bool bFocusLeft = bLastFocusLeft;
+                    bool bFocusLeft = ResolveSameWeaponFocus();
                     if (bFocusLeft && wCurrentLeft != null && WeaponHasAltStats(wCurrentLeft, amCurrentAltStat))
-                        SyncAltStatFields(wCurrentLeft, amCurrentAltStat);
+                        SyncAltStatFields(wCurrentLeft, amCurrentAltStat, true);
                     else if (!bFocusLeft && wCurrentRight != null && WeaponHasAltStats(wCurrentRight, amCurrentAltStat))
-                        SyncAltStatFields(wCurrentRight, amCurrentAltStat);
+                        SyncAltStatFields(wCurrentRight, amCurrentAltStat, false);
                     if (wCurrentRight != null && HasUnsavedChanges(false, bCheckBothSides: true))
                     {
                         var drResult = MessageBox.Show("Unsaved alt stat changes to right weapon. Discard?",
@@ -311,6 +311,22 @@ public partial class Form1
         return nA.Value == nB.Value;
     }
 
+    //同一武器时判定应该读哪一侧的控件值
+    private bool ResolveSameWeaponFocus()
+    {
+        var wCmpL = new WeaponData(); SaveControlsToWeapon(wCmpL, true);
+        var wCmpR = new WeaponData(); SaveControlsToWeapon(wCmpR, false);
+        if (!WeaponDataEquals(wCmpL, wCmpR))
+        {
+            bool bLeftDiff = !WeaponDataEquals(wCmpL, wSnapshotLeft);
+            bool bRightDiff = !WeaponDataEquals(wCmpR, wSnapshotRight);
+            if (bLeftDiff && !bRightDiff) return true;
+            if (!bLeftDiff && bRightDiff) return false;
+        }
+        var ctrlActive = this.GetChildAtPoint(this.PointToClient(Cursor.Position));
+        return ctrlActive != null ? IsControlOnLeft(ctrlActive) : bLastFocusLeft;
+    }
+
     #endregion
     #region 滑块联动
 
@@ -391,19 +407,16 @@ public partial class Form1
             //强制提交活跃控件的待定输入 防止NUD焦点未移走导致值未更新
             var ctrlActive = this.ActiveControl;
             if (ctrlActive != null) { this.ActiveControl = null; ctrlActive.Focus(); }
-            if (ctrlActive == null || string.IsNullOrEmpty(ctrlActive.Name))
-                ctrlActive = this.GetChildAtPoint(this.PointToClient(Cursor.Position));
             bool bSameWeapon = wCurrentLeft != null && wCurrentRight != null
                 && ReferenceEquals(wCurrentLeft, wCurrentRight);
             if (bSameWeapon)
             {
-                //同一武器时只保存焦点所在侧 防止后保存的一侧覆盖前一侧
-                bool bFocusLeft = ctrlActive != null ? IsControlOnLeft(ctrlActive) : bLastFocusLeft;
+                bool bFocusLeft = ResolveSameWeaponFocus();
                 if (bFocusLeft)
                 {
                     if (bShowingAltStats)
                     {
-                        SyncAltStatFields(wCurrentLeft!, amCurrentAltStat);
+                        SyncAltStatFields(wCurrentLeft!, amCurrentAltStat, true);
                         var wOldClone = CloneTopLevelFields(wCurrentLeft!);
                         SyncAltStatsToMatchTopLevel(wOldClone, wCurrentLeft!);
                         LoadAltStatsToControls(true, amCurrentAltStat);
@@ -421,7 +434,7 @@ public partial class Form1
                 {
                     if (bShowingAltStats)
                     {
-                        SyncAltStatFields(wCurrentRight!, amCurrentAltStat);
+                        SyncAltStatFields(wCurrentRight!, amCurrentAltStat, false);
                         var wOldClone = CloneTopLevelFields(wCurrentRight!);
                         SyncAltStatsToMatchTopLevel(wOldClone, wCurrentRight!);
                         LoadAltStatsToControls(false, amCurrentAltStat);
@@ -551,18 +564,16 @@ public partial class Form1
             //强制提交活跃控件输入
             var ctrlActive = this.ActiveControl;
             if (ctrlActive != null) { this.ActiveControl = null; ctrlActive.Focus(); }
-            if (ctrlActive == null || string.IsNullOrEmpty(ctrlActive.Name))
-                ctrlActive = this.GetChildAtPoint(this.PointToClient(Cursor.Position));
             bool bSameWeapon = wCurrentLeft != null && wCurrentRight != null
                 && ReferenceEquals(wCurrentLeft, wCurrentRight);
             if (bSameWeapon)
             {
-                bool bFocusLeft = ctrlActive != null ? IsControlOnLeft(ctrlActive) : bLastFocusLeft;
+                bool bFocusLeft = ResolveSameWeaponFocus();
                 if (bFocusLeft)
                 {
                     if (bShowingAltStats)
                     {
-                        SyncAltStatFields(wCurrentLeft!, amCurrentAltStat);
+                        SyncAltStatFields(wCurrentLeft!, amCurrentAltStat, true);
                         var wOldClone = CloneTopLevelFields(wCurrentLeft!);
                         SyncAltStatsToMatchTopLevel(wOldClone, wCurrentLeft!);
                         LoadAltStatsToControls(true, amCurrentAltStat);
@@ -580,7 +591,7 @@ public partial class Form1
                 {
                     if (bShowingAltStats)
                     {
-                        SyncAltStatFields(wCurrentRight!, amCurrentAltStat);
+                        SyncAltStatFields(wCurrentRight!, amCurrentAltStat, false);
                         var wOldClone = CloneTopLevelFields(wCurrentRight!);
                         SyncAltStatsToMatchTopLevel(wOldClone, wCurrentRight!);
                         LoadAltStatsToControls(false, amCurrentAltStat);
