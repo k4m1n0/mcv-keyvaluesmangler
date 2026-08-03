@@ -57,7 +57,7 @@ public partial class Form1
         var lblUser = new Label { Text = "User", Location = new Point(12, 42), Size = new Size(38, 20), TextAlign = ContentAlignment.MiddleRight };
         var txtUser = new TextBox { Location = new Point(56, 40), Size = new Size(80, 22), Text = sLastWikiUser ?? "" };
         var lblPw = new Label { Text = "Pw", Location = new Point(142, 42), Size = new Size(24, 20), TextAlign = ContentAlignment.MiddleRight };
-        var txtPw = new TextBox { Location = new Point(170, 40), Size = new Size(80, 22), PasswordChar = '*', Text = sLastWikiPw ?? "" };
+        var txtPw = new TextBox { Location = new Point(170, 40), Size = new Size(80, 22), PasswordChar = '*' };
         var btnDryRun = new Button { Text = "DryRun", Location = new Point(256, 39), Size = new Size(75, 24) };
         var btnBatchDR = new Button { Text = "BatchDR", Location = new Point(336, 39), Size = new Size(75, 24) };
         var btnGenerate = new Button { Text = "Generate", Location = new Point(416, 39), Size = new Size(75, 24) };
@@ -678,7 +678,6 @@ public partial class Form1
         lblStatus.Text = "Logging in...";
         if (!await WikiApiService.LoginAsync(sUser, sPw)) { lblStatus.Text = "Login failed"; return false; }
         sLastWikiUser = sUser;
-        sLastWikiPw = sPw;
         lblStatus.Text = "Logged in";
         LogService.Info("Wiki EnsureLogin: logged in");
         return true;

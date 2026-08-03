@@ -18,7 +18,6 @@ public partial class Form1 : Form
     private WeaponData? wCurrentLeft = null;
     private WeaponData? wCurrentRight = null;
     private static string? sLastWikiUser = null;
-    private static string? sLastWikiPw = null;
 
     #nullable disable
     //放上面会爆warn
