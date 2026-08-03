@@ -899,8 +899,8 @@ public static class WeaponScriptService
                 TrySetInt(sBlock, "CrosshairMinDistance", out int? n3); w.ZombieCrosshairMinDistance = n3;
                 TrySetInt(sBlock, "CrosshairDeltaDistance", out int? n4); w.ZombieCrosshairDeltaDistance = n4;
                 TrySetDouble(sBlock, "weight", out double? f17); w.ZombieWeight = f17;
-                TrySetInt(sBlock, "ZMBuyPrice", out int? n5); w.ZombieZMBuyPrice = n5;
-                TrySetInt(sBlock, "ZMWeight", out int? n6); w.ZombieZMWeight = n6;
+                TrySetInt(sBlock, "ZMBuyPrice", out int? _);
+                TrySetInt(sBlock, "ZMWeight", out int? _);
                 TrySetDouble(sBlock, "recoilpushbackvalue", out double? f23); w.ZombieRecoilPushbackValue = f23;
                 TrySetDouble(sBlock, "ironsightwalkbobbingstrength", out double? f24); w.ZombieIronsightWalkBobbingStrength = f24;
                 TrySetDouble(sBlock, "MetalPenetrationDepth", out double? f25); w.ZombieMetalPenetrationDepth = f25;
@@ -966,8 +966,8 @@ public static class WeaponScriptService
         "CrosshairMinDistance" => AltI(w.CrosshairMinDistance, w.DovCrosshairMinDistance, w.ZombieCrosshairMinDistance, mode),
         "CrosshairDeltaDistance" => AltI(w.CrosshairDeltaDistance, w.DovCrosshairDeltaDistance, w.ZombieCrosshairDeltaDistance, mode),
         "weight" => AltF(w.Weight, w.DovWeight, w.ZombieWeight, mode),
-        "ZMBuyPrice" => AltI(w.ZMBuyPrice, w.DovZMBuyPrice, w.ZombieZMBuyPrice, mode),
-        "ZMWeight" => AltI(w.ZMWeight, w.DovZMWeight, w.ZombieZMWeight, mode),
+        "ZMBuyPrice" => AltI(w.ZMBuyPrice, w.DovZMBuyPrice, null, mode),
+        "ZMWeight" => AltI(w.ZMWeight, w.DovZMWeight, null, mode),
         "recoilpushbackvalue" => AltF(w.RecoilPushbackValue, w.DovRecoilPushbackValue, w.ZombieRecoilPushbackValue, mode),
         "ironsightwalkbobbingstrength" => AltF(w.IronsightWalkBobbingStrength, w.DovIronsightWalkBobbingStrength, w.ZombieIronsightWalkBobbingStrength, mode),
         "MetalPenetrationDepth" => AltF(w.MetalPenetrationDepth, w.DovMetalPenetrationDepth, w.ZombieMetalPenetrationDepth, mode),

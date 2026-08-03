@@ -130,7 +130,7 @@ public partial class Form1
 
     private static bool WeaponHasAltStats(WeaponData? wWeapon, WeaponScriptService.AltStatMode amMode) => amMode switch
     {
-        WeaponScriptService.AltStatMode.Dov => wWeapon?.DovDamageGeneric != null || wWeapon?.DovFireRate != null,
+        WeaponScriptService.AltStatMode.Dov => wWeapon?.DovDamageGeneric != null || wWeapon?.DovFireRate != null || wWeapon?.DovZMBuyPrice != null || wWeapon?.DovZMWeight != null,
         WeaponScriptService.AltStatMode.Zombie => wWeapon?.ZombieClipSize != null || wWeapon?.ZombieDamageGeneric != null || wWeapon?.ZombieFireRate != null || wWeapon?.ZombieWeight != null,
         _ => false
     };
@@ -176,8 +176,8 @@ public partial class Form1
         wTemp.CrosshairMinDistance = (bIsDov ? wWeapon.DovCrosshairMinDistance : wWeapon.ZombieCrosshairMinDistance) ?? wWeapon.CrosshairMinDistance;
         wTemp.CrosshairDeltaDistance = (bIsDov ? wWeapon.DovCrosshairDeltaDistance : wWeapon.ZombieCrosshairDeltaDistance) ?? wWeapon.CrosshairDeltaDistance;
         wTemp.Weight = (bIsDov ? wWeapon.DovWeight : wWeapon.ZombieWeight) ?? wWeapon.Weight;
-        wTemp.ZMBuyPrice = (bIsDov ? wWeapon.DovZMBuyPrice : wWeapon.ZombieZMBuyPrice) ?? wWeapon.ZMBuyPrice;
-        wTemp.ZMWeight = (bIsDov ? wWeapon.DovZMWeight : wWeapon.ZombieZMWeight) ?? wWeapon.ZMWeight;
+        wTemp.ZMBuyPrice = (bIsDov ? wWeapon.DovZMBuyPrice : null) ?? wWeapon.ZMBuyPrice;
+        wTemp.ZMWeight = (bIsDov ? wWeapon.DovZMWeight : null) ?? wWeapon.ZMWeight;
         wTemp.RecoilPushbackValue = (bIsDov ? wWeapon.DovRecoilPushbackValue : wWeapon.ZombieRecoilPushbackValue) ?? wWeapon.RecoilPushbackValue;
         wTemp.IronsightWalkBobbingStrength = (bIsDov ? wWeapon.DovIronsightWalkBobbingStrength : wWeapon.ZombieIronsightWalkBobbingStrength) ?? wWeapon.IronsightWalkBobbingStrength;
         wTemp.MetalPenetrationDepth = (bIsDov ? wWeapon.DovMetalPenetrationDepth : wWeapon.ZombieMetalPenetrationDepth) ?? wWeapon.MetalPenetrationDepth;

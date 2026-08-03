@@ -407,7 +407,7 @@ public partial class Form1 : Form
     //无焦点控件时回退到lastFocusLeft 有控件时先更新再返回
     private bool IsControlOnLeft(Control ctrl)
     {
-        if (ctrl != null)
+        if (ctrl != null && !string.IsNullOrEmpty(ctrl.Name))
         {
             int iFormX = this.PointToClient(ctrl.PointToScreen(Point.Empty)).X;
             bLastFocusLeft = iFormX < 525;
@@ -833,6 +833,10 @@ public partial class Form1 : Form
             (w, nV) => w.DovDefaultClip = nV, (w, nV) => w.ZombieDefaultClip = nV, wNew);
         SyncIntIfMatch(wOld.BulletsPerShot, wNew.BulletsPerShot, wNew.DovBulletsPerShot, wNew.ZombieBulletsPerShot,
             (w, nV) => w.DovBulletsPerShot = nV, (w, nV) => w.ZombieBulletsPerShot = nV, wNew);
+        SyncIntIfMatch(wOld.ZMBuyPrice, wNew.ZMBuyPrice, wNew.DovZMBuyPrice, null,
+            (w, nV) => w.DovZMBuyPrice = nV, null, wNew);
+        SyncIntIfMatch(wOld.ZMWeight, wNew.ZMWeight, wNew.DovZMWeight, null,
+            (w, nV) => w.DovZMWeight = nV, null, wNew);
         //string
         SyncStrIfMatch(wOld.ClipSize, wNew.ClipSize, wNew.DovClipSize, wNew.ZombieClipSize,
             (w, sV) => w.DovClipSize = sV, (w, sV) => w.ZombieClipSize = sV, wNew);

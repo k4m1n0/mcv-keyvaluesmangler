@@ -388,19 +388,20 @@ public partial class Form1
             //强制提交活跃控件的待定输入 防止NUD焦点未移走导致值未更新
             var ctrlActive = this.ActiveControl;
             if (ctrlActive != null) { this.ActiveControl = null; ctrlActive.Focus(); }
+            if (ctrlActive == null || string.IsNullOrEmpty(ctrlActive.Name))
+                ctrlActive = this.GetChildAtPoint(this.PointToClient(Cursor.Position));
             bool bSameWeapon = wCurrentLeft != null && wCurrentRight != null
                 && ReferenceEquals(wCurrentLeft, wCurrentRight);
             if (bSameWeapon)
             {
                 //同一武器时只保存焦点所在侧 防止后保存的一侧覆盖前一侧
-                bool bFocusLeft = IsControlOnLeft(ctrlActive);
+                bool bFocusLeft = ctrlActive != null ? IsControlOnLeft(ctrlActive) : bLastFocusLeft;
                 if (bFocusLeft)
                 {
                     if (bShowingAltStats)
                     {
                         SyncAltStatFields(wCurrentLeft!, amCurrentAltStat);
                         var wOldClone = CloneTopLevelFields(wCurrentLeft!);
-                        SaveControlsToWeapon(wCurrentLeft!, true);
                         SyncAltStatsToMatchTopLevel(wOldClone, wCurrentLeft!);
                         LoadAltStatsToControls(false, amCurrentAltStat);
                     }
@@ -418,7 +419,6 @@ public partial class Form1
                     {
                         SyncAltStatFields(wCurrentRight!, amCurrentAltStat);
                         var wOldClone = CloneTopLevelFields(wCurrentRight!);
-                        SaveControlsToWeapon(wCurrentRight!, false);
                         SyncAltStatsToMatchTopLevel(wOldClone, wCurrentRight!);
                         LoadAltStatsToControls(true, amCurrentAltStat);
                     }
@@ -453,14 +453,12 @@ public partial class Form1
                 {
                     SyncAltStatFields(wCurrentLeft, amCurrentAltStat);
                     var wOldCloneL = CloneTopLevelFields(wCurrentLeft);
-                    SaveControlsToWeapon(wCurrentLeft, true);
                     SyncAltStatsToMatchTopLevel(wOldCloneL, wCurrentLeft);
                 }
                 if (wCurrentRight != null && !ReferenceEquals(wCurrentLeft, wCurrentRight))
                 {
                     SyncAltStatFields(wCurrentRight, amCurrentAltStat);
                     var wOldCloneR = CloneTopLevelFields(wCurrentRight);
-                    SaveControlsToWeapon(wCurrentRight, false);
                     SyncAltStatsToMatchTopLevel(wOldCloneR, wCurrentRight);
                 }
             }
@@ -546,18 +544,19 @@ public partial class Form1
             //强制提交活跃控件输入
             var ctrlActive = this.ActiveControl;
             if (ctrlActive != null) { this.ActiveControl = null; ctrlActive.Focus(); }
+            if (ctrlActive == null || string.IsNullOrEmpty(ctrlActive.Name))
+                ctrlActive = this.GetChildAtPoint(this.PointToClient(Cursor.Position));
             bool bSameWeapon = wCurrentLeft != null && wCurrentRight != null
                 && ReferenceEquals(wCurrentLeft, wCurrentRight);
             if (bSameWeapon)
             {
-                bool bFocusLeft = IsControlOnLeft(ctrlActive);
+                bool bFocusLeft = ctrlActive != null ? IsControlOnLeft(ctrlActive) : bLastFocusLeft;
                 if (bFocusLeft)
                 {
                     if (bShowingAltStats)
                     {
                         SyncAltStatFields(wCurrentLeft!, amCurrentAltStat);
                         var wOldClone = CloneTopLevelFields(wCurrentLeft!);
-                        SaveControlsToWeapon(wCurrentLeft!, true);
                         SyncAltStatsToMatchTopLevel(wOldClone, wCurrentLeft!);
                         LoadAltStatsToControls(false, amCurrentAltStat);
                     }
@@ -575,7 +574,6 @@ public partial class Form1
                     {
                         SyncAltStatFields(wCurrentRight!, amCurrentAltStat);
                         var wOldClone = CloneTopLevelFields(wCurrentRight!);
-                        SaveControlsToWeapon(wCurrentRight!, false);
                         SyncAltStatsToMatchTopLevel(wOldClone, wCurrentRight!);
                         LoadAltStatsToControls(true, amCurrentAltStat);
                     }
@@ -610,14 +608,12 @@ public partial class Form1
                 {
                     SyncAltStatFields(wCurrentLeft, amCurrentAltStat);
                     var wOldCloneL = CloneTopLevelFields(wCurrentLeft);
-                    SaveControlsToWeapon(wCurrentLeft, true);
                     SyncAltStatsToMatchTopLevel(wOldCloneL, wCurrentLeft);
                 }
                 if (wCurrentRight != null && !ReferenceEquals(wCurrentLeft, wCurrentRight))
                 {
                     SyncAltStatFields(wCurrentRight, amCurrentAltStat);
                     var wOldCloneR = CloneTopLevelFields(wCurrentRight);
-                    SaveControlsToWeapon(wCurrentRight, false);
                     SyncAltStatsToMatchTopLevel(wOldCloneR, wCurrentRight);
                 }
             }

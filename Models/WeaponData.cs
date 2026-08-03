@@ -259,15 +259,11 @@ public class WeaponData
     public int? ZMBuyPrice { get; set; }
     [CsvColumn("dov_ZMBuyPrice")]
     public int? DovZMBuyPrice { get; set; }
-    [CsvColumn("zombie_ZMBuyPrice")]
-    public int? ZombieZMBuyPrice { get; set; }
 
     [CsvColumn("ZMWeight")]
     public int? ZMWeight { get; set; }
     [CsvColumn("dov_ZMWeight")]
     public int? DovZMWeight { get; set; }
-    [CsvColumn("zombie_ZMWeight")]
-    public int? ZombieZMWeight { get; set; }
 
     [CsvColumn("recoilpushbackvalue")]
     public double? RecoilPushbackValue { get; set; }
