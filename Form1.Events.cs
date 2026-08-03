@@ -359,7 +359,7 @@ public partial class Form1
             int iIv = (int)Math.Round((double)nud.Value / dSliderStep);
             iIv = Math.Max(tb.Minimum, Math.Min(tb.Maximum, iIv));
             tb.Value = iIv;
-            nud.Value = Math.Round(nud.Value, 2);
+            nud.Value = Math.Round(nud.Value / nud.Increment) * nud.Increment;
         }
         bUpdatingControls = false;
         UpdateAllDamage();
@@ -374,7 +374,7 @@ public partial class Form1
             int iIv = (int)Math.Round((double)nud.Value / dSliderStep);
             iIv = Math.Max(tb.Minimum, Math.Min(tb.Maximum, iIv));
             tb.Value = iIv;
-            nud.Value = Math.Round(nud.Value, 2);
+            nud.Value = Math.Round(nud.Value / nud.Increment) * nud.Increment;
         }
         bUpdatingControls = false;
         UpdateAllDamage();
@@ -498,6 +498,7 @@ public partial class Form1
             {
                 SetC64Status("SAVING...");
                 CsvService.SaveWeapons(Path.Combine(AppContext.BaseDirectory, "weapons.csv"), rgWeapons);
+                tmrSnapshotCheck?.Stop(); tmrSnapshotCheck?.Dispose(); tmrSnapshotCheck = null;
                 SetC64Status("SAVED.");
             }
             catch (Exception ex)
@@ -653,6 +654,7 @@ public partial class Form1
                     WeaponScriptService.ExportAltStatsToScripts(sCsv, sLastScriptsDir, WeaponScriptService.AltStatMode.Zombie);
                 });
                 if (btn != null) { btn.Text = "wpn_reload_script all"; btn.Tag = false; }
+                tmrSnapshotCheck?.Stop(); tmrSnapshotCheck?.Dispose(); tmrSnapshotCheck = null;
                 SetC64Status("EXPORTED.");
             }
             catch (Exception ex)

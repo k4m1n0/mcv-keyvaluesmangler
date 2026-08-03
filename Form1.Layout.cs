@@ -21,17 +21,19 @@ public partial class Form1
     private void StartC64Anim()
     {
         lblC64_2.TextAlign = ContentAlignment.MiddleCenter;
-        tmrC64 = new System.Windows.Forms.Timer { Interval = 2341 };
+        tmrC64 = new System.Windows.Forms.Timer { Interval = 2000 };
         tmrC64.Tick += (_, _) =>
         {
+            long lWs = Environment.WorkingSet / 1024;
             long lGcHeap = GC.GetTotalMemory(false) / 1024;
-            long lWsFree = (Environment.WorkingSet - GC.GetTotalMemory(false)) / 1024;
-            lblC64_2.Text = $"{lGcHeap}K GC HEAP  {lWsFree}K WORKING SET FREE";
+            long lUnmanaged = lWs > lGcHeap ? lWs - lGcHeap : 0;
+            lblC64_2.Text = $"{lWs / 1024}M RAM SYSTEM  {lUnmanaged}K NATIVE BYTES FREE";
         };
         tmrC64.Start();
+        long lWs = Environment.WorkingSet / 1024;
         long lGcHeap = GC.GetTotalMemory(false) / 1024;
-        long lWsFree = (Environment.WorkingSet - GC.GetTotalMemory(false)) / 1024;
-        lblC64_2.Text = $"{lGcHeap}K GC HEAP  {lWsFree}K WORKING SET FREE";
+        long lUnmanaged = lWs > lGcHeap ? lWs - lGcHeap : 0;
+        lblC64_2.Text = $"{lWs / 1024}M RAM SYSTEM  {lUnmanaged}K NATIVE BYTES FREE";
     }
 
     private void InitC64Labels()
@@ -60,12 +62,13 @@ public partial class Form1
         lblC64_3.Text = bHasData ? "READY." : "";
     }
 
-    private void SetC64Status(string sStatus)
+    private void SetC64Status(string sStatus, bool bAutoReset = true)
     {
         tmrC64Reset?.Stop();
         tmrC64Reset?.Dispose();
+        tmrC64Reset = null;
         lblC64_3.Text = sStatus;
-        if (sStatus == "SAVED." || sStatus == "EXPORTED." || sStatus == "UNDONE." || sStatus == "REDONE." || sStatus == "UNSAVED CHANGES.")
+        if (bAutoReset && (sStatus == "SAVED." || sStatus == "EXPORTED." || sStatus == "UNDONE." || sStatus == "REDONE."))
         {
             tmrC64Reset = new System.Windows.Forms.Timer { Interval = 1145 };
             tmrC64Reset.Tick += (_, _) => { lblC64_3.Text = "READY."; tmrC64Reset.Stop(); tmrC64Reset.Dispose(); tmrC64Reset = null; };
@@ -383,7 +386,7 @@ public partial class Form1
         nud.ValueChanged += (s, e) =>
         {
             ScheduleUndo();
-            LogService.DebugDebounce($"nud_{nud.Name ?? "?"}", $"NUD changed: {nud.Name} = {nud.Value} ({(bIsLeft ? "L" : "R")})", 500);
+            LogService.DebugDebounce($"nud_{nud.Name ?? "?"}", $"NUD changed: {nud.Name} = {nud.Text} ({(bIsLeft ? "L" : "R")})", 500);
             ehExtra?.Invoke(s, e);
         };
         nud.MouseUp += (_, _) => PushUndoNow();

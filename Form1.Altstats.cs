@@ -30,7 +30,8 @@ public partial class Form1
                 bUpdatingControls = true;
                 if (wCurrentLeft != null) { LoadWeaponToControls(wCurrentLeft, true); }
                 if (wCurrentRight != null) { LoadWeaponToControls(wCurrentRight, false); }
-                RestoreAllNudEnabled(true); RestoreAllNudEnabled(false);
+                RestoreAllNudEnabled(true);
+                RestoreAllNudEnabled(false);
                 bUpdatingControls = false;
                 ResetAltStatButtons();
                 StoreSnapshot();
@@ -52,7 +53,7 @@ public partial class Form1
                 if (bLeftHas) { LoadAltStatsToControls(true, amMode); SetAltStatReadonly(true, amMode); }
                 else { LoadWeaponToControls(wCurrentLeft!, true); RestoreAllNudEnabled(true); SetAltStatReadonly(true, amMode); }
                 if (bRightHas) { LoadAltStatsToControls(false, amMode); SetAltStatReadonly(false, amMode); }
-                else if (!ReferenceEquals(wCurrentLeft, wCurrentRight)) { LoadWeaponToControls(wCurrentRight!, false); RestoreAllNudEnabled(false); SetAltStatReadonly(false, amMode); }
+                else { LoadWeaponToControls(wCurrentRight!, false); RestoreAllNudEnabled(false); SetAltStatReadonly(false, amMode); }
                 bUpdatingControls = false;
                 StoreSnapshot();
             }
