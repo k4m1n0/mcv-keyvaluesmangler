@@ -55,7 +55,7 @@
     - Windows 7 SP1 with KB3063858 (use the self contained one)
     - Wine/Proton 9.0+ for the OS of evil
     - Pentium 4 630 with SVGA graphics
-    - 720 KiB floppy (Desktop Runtime) or 64 MiB drive space available
+    - 1.44 MiB floppy (Desktop Runtime) or 64 MiB drive space available
     - A keyboard. A mouse. Fingers optional but recommended
 
   RECOMMENDED:
@@ -129,10 +129,10 @@
 ================================================================================
 
   GUI MODE:
-  WeaponDamageCalc.exe [--darkmode|--lightmode] [--log-level <level>]
+  {sExeName}.exe [--darkmode|--lightmode] [--log-level <level>]
 
   CLI MODE:
-  WeaponDamageCalc.exe [command] [options]
+  {sExeName}.exe [command] [options]
 
   --log-level <debug|info|warn|error>
     Minimum log level written to mangler.log
