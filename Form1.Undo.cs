@@ -191,7 +191,6 @@ public partial class Form1
         {
             var ueEntry = llRedoStack.Last!.Value;
             llRedoStack.RemoveLast();
-            if (llRedoStack.Count > iMaxUndo) llRedoStack.RemoveFirst();
 
             var ueUndoEntry = new UndoEntry
             {
@@ -289,7 +288,7 @@ public partial class Form1
         LogService.Debug("ClearUndoHistory");
         llUndoStack.Clear();
         llRedoStack.Clear();
-
+        tmrSnapshotCheck?.Stop(); tmrSnapshotCheck?.Dispose(); tmrSnapshotCheck = null;
         //清空历史时也结束未完成的rapid 否则残留的sRapidStart会阻止下次武器切换的入栈
         sRapidStartLeft = null;
         sRapidStartRight = null;
