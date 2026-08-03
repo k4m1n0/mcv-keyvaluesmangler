@@ -541,27 +541,47 @@ public partial class Form1 : Form
 
     private void PopUndo()
     {
-        if (bUndoPending) { tmrUndo?.Stop(); bUndoPending = false; PushUndo(); }
-        if (llUndoStack.Count == 0) return;
+        if (bUndoInProgress) return;
+        if (bUndoPending) { tmrUndo?.Stop(); bUndoPending = false; }
+        else PushUndo(false);
+        if (llUndoStack.Count < 2) return;
         bUndoInProgress = true;
         try
         {
+            var ueCurrent = llUndoStack.Last!.Value;
+            llUndoStack.RemoveLast();
             var ueRedoEntry = new UndoEntry
             {
-                LeftScriptName = wCurrentLeft?.ScriptName,
-                RightScriptName = wCurrentRight?.ScriptName,
-                LeftData = new WeaponData(),
-                RightData = new WeaponData(),
-                ShowingAltStats = bShowingAltStats,
-                AltMode = amCurrentAltStat
+                LeftScriptName = ueCurrent.LeftScriptName,
+                RightScriptName = ueCurrent.RightScriptName,
+                LeftData = ueCurrent.LeftData,
+                RightData = ueCurrent.RightData,
+                ShowingAltStats = ueCurrent.ShowingAltStats,
+                AltMode = ueCurrent.AltMode
             };
-            SaveControlsToWeapon(ueRedoEntry.LeftData, true);
-            SaveControlsToWeapon(ueRedoEntry.RightData, false);
             llRedoStack.AddLast(ueRedoEntry);
 
             var ueEntry = llUndoStack.Last!.Value;
             llUndoStack.RemoveLast();
+            var wOldSnapL = wSnapshotLeft;
+            var wOldSnapR = wSnapshotRight;
             RestoreUndoEntry(ueEntry);
+            SetC64Status("UNDONE.");
+            if (wOldSnapL != null)
+            {
+                var wSnapL = wOldSnapL;
+                var wSnapR = wOldSnapR;
+                var tmrCheck = new System.Windows.Forms.Timer { Interval = 1145 };
+                tmrCheck.Tick += (_, _) =>
+                {
+                    tmrCheck.Stop(); tmrCheck.Dispose();
+                    var wTempL = new WeaponData(); SaveControlsToWeapon(wTempL, true);
+                    var wTempR = new WeaponData(); SaveControlsToWeapon(wTempR, false);
+                    bool bChanged = !WeaponDataEquals(wTempL, wSnapL) || !WeaponDataEquals(wTempR, wSnapR);
+                    if (bChanged) SetC64Status("UNSAVED CHANGES.");
+                };
+                tmrCheck.Start();
+            }
             LogService.Debug($"PopUndo: stack={llUndoStack.Count}, redo={llRedoStack.Count}");
         }
         catch (Exception ex)
@@ -573,6 +593,7 @@ public partial class Form1 : Form
 
     private void PopRedo()
     {
+        if (bUndoInProgress) return;
         if (bUndoPending) { tmrUndo?.Stop(); bUndoPending = false; PushUndo(); }
         if (llRedoStack.Count == 0) return;
         bUndoInProgress = true;
@@ -595,7 +616,25 @@ public partial class Form1 : Form
             llUndoStack.AddLast(ueUndoEntry);
             if (llUndoStack.Count > iMaxUndo) llUndoStack.RemoveFirst();
 
+            var wOldSnapL = wSnapshotLeft;
+            var wOldSnapR = wSnapshotRight;
             RestoreUndoEntry(ueEntry);
+            SetC64Status("REDONE.");
+            if (wOldSnapL != null)
+            {
+                var wSnapL = wOldSnapL;
+                var wSnapR = wOldSnapR;
+                var tmrCheck = new System.Windows.Forms.Timer { Interval = 1145 };
+                tmrCheck.Tick += (_, _) =>
+                {
+                    tmrCheck.Stop(); tmrCheck.Dispose();
+                    var wTempL = new WeaponData(); SaveControlsToWeapon(wTempL, true);
+                    var wTempR = new WeaponData(); SaveControlsToWeapon(wTempR, false);
+                    bool bChanged = !WeaponDataEquals(wTempL, wSnapL) || !WeaponDataEquals(wTempR, wSnapR);
+                    if (bChanged) SetC64Status("UNSAVED CHANGES.");
+                };
+                tmrCheck.Start();
+            }
             LogService.Debug($"PopRedo: stack={llUndoStack.Count}, redo={llRedoStack.Count}");
         }
         catch (Exception ex)
@@ -769,7 +808,7 @@ public partial class Form1 : Form
     }
 
     #endregion
-    #region 备选值联动同步
+    #region 联动同步
 
     private static WeaponData CloneTopLevelFields(WeaponData wSrc)
     {

@@ -65,7 +65,7 @@ public partial class Form1
         tmrC64Reset?.Stop();
         tmrC64Reset?.Dispose();
         lblC64_3.Text = sStatus;
-        if (sStatus == "SAVED." || sStatus == "EXPORTED.")
+        if (sStatus == "SAVED." || sStatus == "EXPORTED." || sStatus == "UNDONE." || sStatus == "REDONE.")
         {
             tmrC64Reset = new System.Windows.Forms.Timer { Interval = 1145 };
             tmrC64Reset.Tick += (_, _) => { lblC64_3.Text = "READY."; tmrC64Reset.Stop(); tmrC64Reset.Dispose(); tmrC64Reset = null; };

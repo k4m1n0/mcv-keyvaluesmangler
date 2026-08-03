@@ -816,6 +816,8 @@ public partial class Form1
     {
         if (e.Control && e.Shift && e.KeyCode == Keys.S) { LogService.Debug("Hotkey: Ctrl+Shift+S"); e.SuppressKeyPress = true; FlashButton(btnQuickExport); BtnQuickExport_Click(sender, e); }
         else if (e.Control && e.KeyCode == Keys.S) { LogService.Debug("Hotkey: Ctrl+S"); e.SuppressKeyPress = true; FlashButton(btnSave); BtnSave_Click(sender, e); }
+        else if (e.Control && e.KeyCode == Keys.Y) { LogService.Debug("Hotkey: Ctrl+Y (redo)"); e.SuppressKeyPress = true; PopRedo(); }
+        else if (e.Control && e.KeyCode == Keys.Z) { LogService.Debug("Hotkey: Ctrl+Z (undo)"); e.SuppressKeyPress = true; PopUndo(); }
         else if (e.Control && e.KeyCode == Keys.D1) { LogService.Debug("Hotkey: Ctrl+1 (focus L)"); e.SuppressKeyPress = true; cmbWeaponsL.Focus(); cmbWeaponsL.DroppedDown = true; }
         else if (e.Control && e.KeyCode == Keys.D2) { LogService.Debug("Hotkey: Ctrl+2 (focus R)"); e.SuppressKeyPress = true; cmbWeaponsR.Focus(); cmbWeaponsR.DroppedDown = true; }
         else if (e.Control && e.KeyCode == Keys.R) { LogService.Debug("Hotkey: Ctrl+R (refresh)"); e.SuppressKeyPress = true; FlashButton(btnRefresh); RefreshWeaponList(); }
