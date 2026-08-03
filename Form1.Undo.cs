@@ -167,7 +167,7 @@ public partial class Form1
             wSnapshotLeft = ueEntry.LeftData;
             wSnapshotRight = ueEntry.RightData;
             SetC64Status("UNDONE.");
-            ScheduleSnapshotCheck(wSnapshotLeft, wSnapshotRight, "PopUndo");
+            ScheduleSnapshotCheck(ueEntry.LeftData, ueEntry.RightData, "PopUndo");
             LogService.Debug($"PopUndo: stack={llUndoStack.Count}, redo={llRedoStack.Count}");
         }
         catch (Exception ex)
@@ -213,7 +213,7 @@ public partial class Form1
             wSnapshotLeft = ueEntry.LeftData;
             wSnapshotRight = ueEntry.RightData;
             SetC64Status("REDONE.");
-            ScheduleSnapshotCheck(wSnapshotLeft, wSnapshotRight, "PopRedo");
+            ScheduleSnapshotCheck(ueEntry.LeftData, ueEntry.RightData, "PopRedo");
             LogService.Debug($"PopRedo: stack={llUndoStack.Count}, redo={llRedoStack.Count}");
         }
         catch (Exception ex)
@@ -260,27 +260,20 @@ public partial class Form1
             if (bShowingAltStats) HighlightAltStatButton(amCurrentAltStat);
             else ResetAltStatButtons();
         }
-
-        if (bShowingAltStats)
-        {
-            if (WeaponHasAltStats(wCurrentLeft, amCurrentAltStat))
-                LoadAltStatsToControls(true, amCurrentAltStat);
-            else
-                RestoreAllNudEnabled(true);
-            if (WeaponHasAltStats(wCurrentRight, amCurrentAltStat))
-                LoadAltStatsToControls(false, amCurrentAltStat);
-            else
-                RestoreAllNudEnabled(false);
-        }
-        else
-        {
-            RestoreAllNudEnabled(true);
-            RestoreAllNudEnabled(false);
-        }
-
+        RestoreAltStatState(true);
+        RestoreAltStatState(false);
         UpdateAllDamage();
         pnlSpread.Invalidate();
         pnlRecoil.Invalidate();
+    }
+
+    private void RestoreAltStatState(bool bIsLeft)
+    {
+        var w = bIsLeft ? wCurrentLeft : wCurrentRight;
+        if (bShowingAltStats && WeaponHasAltStats(w, amCurrentAltStat))
+            LoadAltStatsToControls(bIsLeft, amCurrentAltStat);
+        else
+            RestoreAllNudEnabled(bIsLeft);
     }
 
     #endregion
