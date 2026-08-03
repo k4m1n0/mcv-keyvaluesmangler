@@ -570,7 +570,7 @@ public partial class Form1 : Form
             {
                 var wSnapL = wOldSnapL;
                 var wSnapR = wOldSnapR;
-                var tmrCheck = new System.Windows.Forms.Timer { Interval = 1145 };
+                var tmrCheck = new System.Windows.Forms.Timer { Interval = 80 };
                 tmrCheck.Tick += (_, _) =>
                 {
                     tmrCheck.Stop(); tmrCheck.Dispose();
@@ -623,7 +623,7 @@ public partial class Form1 : Form
             {
                 var wSnapL = wOldSnapL;
                 var wSnapR = wOldSnapR;
-                var tmrCheck = new System.Windows.Forms.Timer { Interval = 1145 };
+                var tmrCheck = new System.Windows.Forms.Timer { Interval = 80 };
                 tmrCheck.Tick += (_, _) =>
                 {
                     tmrCheck.Stop(); tmrCheck.Dispose();
