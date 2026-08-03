@@ -114,12 +114,13 @@ public partial class Form1 : Form
             LogService.Info($"Weapons loaded: {rgWeapons.Count}");
 
             tmrUndo = new System.Windows.Forms.Timer { Interval = 300 };
-            tmrUndo.Tick += (_, _) => { tmrUndo.Stop(); if (bUndoPending) { PushUndo(); bUndoPending = false; } };
+            tmrUndo.Tick += (_, _) => { tmrUndo.Stop(); if (bUndoPending) { bUndoPending = false; PushUndo(); } };
 
             InitCenterPanels();
             InitLeftPanel(rgWeapons);
             InitRightPanel(rgWeapons);
             InitC64Labels();
+            StartC64Anim();
             InitTopButtons();
             MarkPanelControls();
             if (SystemUsesDarkMode())
@@ -182,7 +183,7 @@ public partial class Form1 : Form
                 }
 
                 var sOriginalTitle = this.Text;
-                this.Text = "Keyvalues Mangler™ 5000 — Ctrl+T to toggle topmost/minimize";
+                this.Text = "Keyvalues Mangler™ 5000 - Ctrl+T to toggle topmost/minimize";
                 var tmrTitle = new System.Windows.Forms.Timer { Interval = 1919 };
                 tmrTitle.Tick += (_, _) => { this.Text = sOriginalTitle; tmrTitle.Stop(); tmrTitle.Dispose(); };
                 tmrTitle.Start();
@@ -270,7 +271,7 @@ public partial class Form1 : Form
         btnScriptsToCsv.Click += BtnScriptsToCsv_Click;
         this.Controls.Add(btnScriptsToCsv);
 
-        var btnRefresh = new Button { Text = "Rfsh", Location = new Point(iCx + 241, 6), Size = new Size(59, 26) };
+        btnRefresh = new Button { Text = "Rfsh", Location = new Point(iCx + 241, 6), Size = new Size(59, 26) };
         btnRefresh.Click += BtnRefresh_Click;
         this.Controls.Add(btnRefresh);
 
@@ -279,15 +280,15 @@ public partial class Form1 : Form
         this.Controls.Add(btnCopy);
 
         //glory to our coders all i dont need to write a hook myself but just call a cvar
-        var btnCopyCvar = new Button { Text = "wpn_reload_script all", Location = new Point(iCx + 73, 618), Size = new Size(152, 26) };
-        btnCopyCvar.Tag = false;
-        btnCopyCvar.Click += BtnQuickExport_Click;
-        btnCopyCvar.MouseLeave += (s, e) => CancelConfirm(btnCopyCvar);
-        btnCopyCvar.MouseUp += (s, e) =>
+        btnQuickExport = new Button { Text = "wpn_reload_script all", Location = new Point(iCx + 73, 618), Size = new Size(152, 26) };
+        btnQuickExport.Tag = false;
+        btnQuickExport.Click += BtnQuickExport_Click;
+        btnQuickExport.MouseLeave += (s, e) => CancelConfirm(btnQuickExport);
+        btnQuickExport.MouseUp += (s, e) =>
         {
-            if (e.Button == MouseButtons.Right) CancelConfirm(btnCopyCvar);
+            if (e.Button == MouseButtons.Right) CancelConfirm(btnQuickExport);
         };
-        this.Controls.Add(btnCopyCvar);
+        this.Controls.Add(btnQuickExport);
         
         var btnConvertToTemplate = new Button { Text = "Tmpl", Location = new Point(iCx + 22, 646), Size = new Size(48, 26) };
         btnConvertToTemplate.Click += BtnConvertToTemplate_Click;
@@ -315,7 +316,7 @@ public partial class Form1 : Form
         ttTooltip.SetToolTip(btnScriptsToCsv, "Import weapon script files to CSV");
         ttTooltip.SetToolTip(btnRefresh, "Reload weapon list from CSV (Ctrl+R)");
         ttTooltip.SetToolTip(btnCopy, "Copy left panel values to right");
-        ttTooltip.SetToolTip(btnCopyCvar, "Quick export: save CSV and export to scripts (Ctrl+Shift+S)\nRight-click to cancel");
+        ttTooltip.SetToolTip(btnQuickExport, "Quick export: save CSV and export to scripts (Ctrl+Shift+S)\nRight-click to cancel");
         ttTooltip.SetToolTip(btnConvertToTemplate, "Convert old scripts to preset_file template format");
         ttTooltip.SetToolTip(btnToggleDov, "Toggle Day of Victory alternate stats");
         ttTooltip.SetToolTip(btnToggleZombie, "Toggle Zombie Mode alternate stats");
@@ -400,7 +401,7 @@ public partial class Form1 : Form
         {
             int iFormX = this.PointToClient(ctrl.PointToScreen(Point.Empty)).X;
             bLastFocusLeft = iFormX < 525;
-            LogService.DebugDebounce("focus_side", $"Focus side: {(bLastFocusLeft ? "L" : "R")} ({ctrl.GetType().Name})", 300);
+            LogService.Debug($"Focus side: {(bLastFocusLeft ? "L" : "R")} ({ctrl.GetType().Name})");
         }
     }
     
@@ -496,7 +497,6 @@ public partial class Form1 : Form
         bUndoPending = true;
         tmrUndo?.Stop();
         tmrUndo?.Start();
-        LogService.DebugDebounce("schedule_undo", "ScheduleUndo", 200);
     }
 
     public void PushUndoNow()
@@ -527,12 +527,21 @@ public partial class Form1 : Form
 
         llUndoStack.AddLast(ueEntry);
         if (llUndoStack.Count > iMaxUndo) llUndoStack.RemoveFirst();
+        if (!bUndoPending)
+        {
+            bool bLeftChanged = wSnapshotLeft != null && !WeaponDataEquals(ueEntry.LeftData, wSnapshotLeft);
+            bool bRightChanged = wSnapshotRight != null && !WeaponDataEquals(ueEntry.RightData, wSnapshotRight);
+            if (!bLeftChanged && !bRightChanged)
+                SetC64Status("READY.");
+            else
+                SetC64Status("UNSAVED CHANGES.");
+        }
         LogService.Debug($"PushUndo: stack={llUndoStack.Count}, redo={llRedoStack.Count}, altStats={bShowingAltStats}");
     }
 
     private void PopUndo()
     {
-        if (bUndoPending) { tmrUndo?.Stop(); PushUndo(); bUndoPending = false; }
+        if (bUndoPending) { tmrUndo?.Stop(); bUndoPending = false; PushUndo(); }
         if (llUndoStack.Count == 0) return;
         bUndoInProgress = true;
         try
@@ -564,7 +573,7 @@ public partial class Form1 : Form
 
     private void PopRedo()
     {
-        if (bUndoPending) { tmrUndo?.Stop(); PushUndo(); bUndoPending = false; }
+        if (bUndoPending) { tmrUndo?.Stop(); bUndoPending = false; PushUndo(); }
         if (llRedoStack.Count == 0) return;
         bUndoInProgress = true;
         try
@@ -905,8 +914,10 @@ public partial class Form1 : Form
             null, ctrl, new object[] { true });
     }
 
-    private static bool SystemUsesDarkMode()
+    private bool SystemUsesDarkMode()
     {
+        if (bForceLightMode) return false;
+        if (bForceDarkMode) return true;
         try
         {
             using var rkKey = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
@@ -1140,6 +1151,14 @@ public partial class Form1 : Form
         }
         bDarkMode = true;
         SetTitleBarDark();
+    }
+
+    private async void FlashButton(Button btn)
+    {
+        Color cOld = btn.BackColor;
+        btn.BackColor = Color.FromArgb(80, 180, 80);
+        await Task.Delay(810);
+        btn.BackColor = cOld;
     }
 
     private void PnlSpread_Paint(object sender, PaintEventArgs e)

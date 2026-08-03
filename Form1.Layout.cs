@@ -8,11 +8,31 @@ public partial class Form1
     private Button btnSave = null!;
     private Button btnCsvToScripts = null!;
     private Button btnScriptsToCsv = null!;
+    private Button btnQuickExport = null!;
+    private Button btnRefresh = null!;
     private Panel pnlSpread = null!;
     private Panel pnlRecoil = null!;
     private Label lblC64_1 = null!;
     private Label lblC64_2 = null!;
     private Label lblC64_3 = null!;
+
+    private System.Windows.Forms.Timer? tmrC64;
+    private System.Windows.Forms.Timer? tmrC64Reset;
+    private void StartC64Anim()
+    {
+        lblC64_2.TextAlign = ContentAlignment.MiddleCenter;
+        tmrC64 = new System.Windows.Forms.Timer { Interval = 2341 };
+        tmrC64.Tick += (_, _) =>
+        {
+            long lGcHeap = GC.GetTotalMemory(false) / 1024;
+            long lWsFree = (Environment.WorkingSet - GC.GetTotalMemory(false)) / 1024;
+            lblC64_2.Text = $"{lGcHeap}K GC HEAP  {lWsFree}K WORKING SET FREE";
+        };
+        tmrC64.Start();
+        long lGcHeap = GC.GetTotalMemory(false) / 1024;
+        long lWsFree = (Environment.WorkingSet - GC.GetTotalMemory(false)) / 1024;
+        lblC64_2.Text = $"{lGcHeap}K GC HEAP  {lWsFree}K WORKING SET FREE";
+    }
 
     private void InitC64Labels()
     {
@@ -37,8 +57,20 @@ public partial class Form1
     private void UpdateC64Labels(bool bHasData)
     {
         lblC64_1.Text = bHasData ? "         **** COMMODORE 64 BASIC V2 ****" : "";
-        lblC64_2.Text = bHasData ? "     64K RAM SYSTEM  38911 BASIC BYTES FREE" : "";
         lblC64_3.Text = bHasData ? "READY." : "";
+    }
+
+    private void SetC64Status(string sStatus)
+    {
+        tmrC64Reset?.Stop();
+        tmrC64Reset?.Dispose();
+        lblC64_3.Text = sStatus;
+        if (sStatus == "SAVED." || sStatus == "EXPORTED.")
+        {
+            tmrC64Reset = new System.Windows.Forms.Timer { Interval = 1145 };
+            tmrC64Reset.Tick += (_, _) => { lblC64_3.Text = "READY."; tmrC64Reset.Stop(); tmrC64Reset.Dispose(); tmrC64Reset = null; };
+            tmrC64Reset.Start();
+        }
     }
 
     #region 伤害倍率和衰减

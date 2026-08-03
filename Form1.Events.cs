@@ -10,7 +10,7 @@ namespace WeaponDamageCalc;
 
 public partial class Form1
 {
-    #region 选择保存检测
+    #region 武器选择
     private void WeaponSelectedL(object? sender, EventArgs e)
     {
         try
@@ -211,6 +211,9 @@ public partial class Form1
         }
     }
 
+    #endregion
+    #region 未保存检测
+
     private bool HasUnsavedChanges(bool bIsLeft, bool bCheckBothSides = false)
     {
         var wSnap = bIsLeft ? wSnapshotLeft : wSnapshotRight;
@@ -309,7 +312,7 @@ public partial class Form1
     }
 
     #endregion
-    #region 联动刷新
+    #region 滑块联动
 
     private void SliderChangedL(object? sender, EventArgs e)
     {
@@ -377,9 +380,9 @@ public partial class Form1
     private void RangeModifierChangedR(object? sender, EventArgs e) { UpdateAllDamage(); }
 
     #endregion
-    #region 保存导入导出
+    #region 保存导出
 
-    private async void BtnSave_Click(object? sender, EventArgs e)
+    private void BtnSave_Click(object? sender, EventArgs e)
     {
         if (System.Threading.Interlocked.Exchange(ref iSaveLock, 1) != 0) return;
         try
@@ -403,6 +406,7 @@ public partial class Form1
                         SyncAltStatFields(wCurrentLeft!, amCurrentAltStat);
                         var wOldClone = CloneTopLevelFields(wCurrentLeft!);
                         SyncAltStatsToMatchTopLevel(wOldClone, wCurrentLeft!);
+                        LoadAltStatsToControls(true, amCurrentAltStat);
                         LoadAltStatsToControls(false, amCurrentAltStat);
                     }
                     else
@@ -420,6 +424,7 @@ public partial class Form1
                         SyncAltStatFields(wCurrentRight!, amCurrentAltStat);
                         var wOldClone = CloneTopLevelFields(wCurrentRight!);
                         SyncAltStatsToMatchTopLevel(wOldClone, wCurrentRight!);
+                        LoadAltStatsToControls(false, amCurrentAltStat);
                         LoadAltStatsToControls(true, amCurrentAltStat);
                     }
                     else
@@ -476,19 +481,18 @@ public partial class Form1
             StoreSnapshot();
             if (bShowingAltStats)
                 HighlightAltStatButton(amCurrentAltStat);
-            var sSavedTitle = this.Text;
-            this.Text = "Saved!";
             try
             {
+                SetC64Status("SAVING...");
                 CsvService.SaveWeapons(Path.Combine(AppContext.BaseDirectory, "weapons.csv"), rgWeapons);
-                await Task.Delay(1145);
+                SetC64Status("SAVED.");
             }
             catch (Exception ex)
             {
                 LogService.Error(ex, "BtnSave");
+                SetC64Status("SAVE FAILED.");
                 MessageBox.Show($"Save failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
-            finally { this.Text = sSavedTitle; }
         }
         catch (Exception ex)
         {
@@ -496,6 +500,9 @@ public partial class Form1
         }
         finally { System.Threading.Interlocked.Exchange(ref iSaveLock, 0); }
     }
+
+    #endregion
+    #region 导入与转换
 
     private void BtnCsvToScripts_Click(object? sender, EventArgs e)
     {
@@ -558,6 +565,7 @@ public partial class Form1
                         SyncAltStatFields(wCurrentLeft!, amCurrentAltStat);
                         var wOldClone = CloneTopLevelFields(wCurrentLeft!);
                         SyncAltStatsToMatchTopLevel(wOldClone, wCurrentLeft!);
+                        LoadAltStatsToControls(true, amCurrentAltStat);
                         LoadAltStatsToControls(false, amCurrentAltStat);
                     }
                     else
@@ -575,6 +583,7 @@ public partial class Form1
                         SyncAltStatFields(wCurrentRight!, amCurrentAltStat);
                         var wOldClone = CloneTopLevelFields(wCurrentRight!);
                         SyncAltStatsToMatchTopLevel(wOldClone, wCurrentRight!);
+                        LoadAltStatsToControls(false, amCurrentAltStat);
                         LoadAltStatsToControls(true, amCurrentAltStat);
                     }
                     else
@@ -621,9 +630,9 @@ public partial class Form1
             StoreSnapshot();
             if (bShowingAltStats)
                 HighlightAltStatButton(amCurrentAltStat);
-            var sOriginalTitle = this.Text;
             try
             {
+                SetC64Status("SAVING...");
                 CsvService.SaveWeapons(Path.Combine(AppContext.BaseDirectory, "weapons.csv"), rgWeapons);
                 string sCsv = Path.Combine(AppContext.BaseDirectory, "weapons.csv");
                 await Task.Run(() =>
@@ -633,15 +642,15 @@ public partial class Form1
                     WeaponScriptService.ExportAltStatsToScripts(sCsv, sLastScriptsDir, WeaponScriptService.AltStatMode.Zombie);
                 });
                 if (btn != null) { btn.Text = "wpn_reload_script all"; btn.Tag = false; }
-                this.Text = "Exported!"; await Task.Delay(1145);
+                SetC64Status("EXPORTED.");
             }
             catch (Exception ex)
             {
                 LogService.Error(ex, "BtnQuickExport");
                 if (btn != null) { btn.Text = "wpn_reload_script all"; btn.Tag = false; }
+                SetC64Status("EXPORT FAILED.");
                 MessageBox.Show($"Quick export failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
-            finally { this.Text = sOriginalTitle; }
         }
         catch (Exception ex)
         {
@@ -700,6 +709,9 @@ public partial class Form1
         });
     }
 
+    #endregion
+    #region 刷新和快捷键
+
     private void BtnRefresh_Click(object? sender, EventArgs e)
     {
         LogService.Debug("BtnRefresh clicked");
@@ -710,6 +722,7 @@ public partial class Form1
     {
         if (bRefreshing) return;
         bRefreshing = true;
+        SetC64Status("LOADING...");
         string sLeftName = wCurrentLeft?.ScriptName ?? "";
         string sRightName = wCurrentRight?.ScriptName ?? "";
         LogService.Info($"RefreshWeaponList: from CSV, restoring {sLeftName} / {sRightName}");
@@ -788,7 +801,7 @@ public partial class Form1
             LogService.Error(ex, "RefreshWeaponList");
             this.Invoke(() => MessageBox.Show($"Refresh failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error));
         }
-        finally { bRefreshing = false; }
+        finally { bRefreshing = false; SetC64Status("READY."); }
     }
 
     private static void RestoreComboSelection(ComboBox cmb, string sScriptName)
@@ -801,13 +814,12 @@ public partial class Form1
 
     private void Form1_KeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Control && e.Shift && e.KeyCode == Keys.S) { LogService.Debug("Hotkey: Ctrl+Shift+S"); e.SuppressKeyPress = true; BtnQuickExport_Click(sender, e); }
-        else if (e.Control && e.KeyCode == Keys.S) { LogService.Debug("Hotkey: Ctrl+S"); e.SuppressKeyPress = true; BtnSave_Click(sender, e); }
-        else if (e.Control && e.KeyCode == Keys.Y) { LogService.Debug("Hotkey: Ctrl+Y (redo)"); e.SuppressKeyPress = true; PopRedo(); }
-        else if (e.Control && e.KeyCode == Keys.Z) { LogService.Debug("Hotkey: Ctrl+Z (undo)"); e.SuppressKeyPress = true; PopUndo(); }
+        if (e.Control && e.Shift && e.KeyCode == Keys.S) { LogService.Debug("Hotkey: Ctrl+Shift+S"); e.SuppressKeyPress = true; FlashButton(btnQuickExport); BtnQuickExport_Click(sender, e); }
+        else if (e.Control && e.KeyCode == Keys.S) { LogService.Debug("Hotkey: Ctrl+S"); e.SuppressKeyPress = true; FlashButton(btnSave); BtnSave_Click(sender, e); }
         else if (e.Control && e.KeyCode == Keys.D1) { LogService.Debug("Hotkey: Ctrl+1 (focus L)"); e.SuppressKeyPress = true; cmbWeaponsL.Focus(); cmbWeaponsL.DroppedDown = true; }
         else if (e.Control && e.KeyCode == Keys.D2) { LogService.Debug("Hotkey: Ctrl+2 (focus R)"); e.SuppressKeyPress = true; cmbWeaponsR.Focus(); cmbWeaponsR.DroppedDown = true; }
-        else if (e.Control && e.KeyCode == Keys.R) { LogService.Debug("Hotkey: Ctrl+R (refresh)"); e.SuppressKeyPress = true; RefreshWeaponList(); }
+        else if (e.Control && e.KeyCode == Keys.R) { LogService.Debug("Hotkey: Ctrl+R (refresh)"); e.SuppressKeyPress = true; FlashButton(btnRefresh); RefreshWeaponList(); }
+        else if (e.KeyCode == Keys.F5) { LogService.Debug("Hotkey: F5 (refresh)"); e.SuppressKeyPress = true; FlashButton(btnRefresh); RefreshWeaponList(); }
     }
     #endregion
 }

@@ -8,6 +8,7 @@ namespace WeaponDamageCalc;
 
 public partial class Form1
 {
+    #region 模式切换
     private void ToggleAltStats(WeaponScriptService.AltStatMode amMode)
     {
         try
@@ -26,9 +27,11 @@ public partial class Form1
                     if (drResult != DialogResult.Yes) return;
                 }
                 bShowingAltStats = false;
+                bUpdatingControls = true;
                 if (wCurrentLeft != null) { LoadWeaponToControls(wCurrentLeft, true); }
                 if (wCurrentRight != null) { LoadWeaponToControls(wCurrentRight, false); }
                 RestoreAllNudEnabled(true); RestoreAllNudEnabled(false);
+                bUpdatingControls = false;
                 ResetAltStatButtons();
                 StoreSnapshot();
             }
@@ -47,9 +50,9 @@ public partial class Form1
                 HighlightAltStatButton(amMode);
                 bUpdatingControls = true;
                 if (bLeftHas) { LoadAltStatsToControls(true, amMode); SetAltStatReadonly(true, amMode); }
-                else { LoadWeaponToControls(wCurrentLeft!, true); SetAltStatReadonly(true, amMode); }
+                else { LoadWeaponToControls(wCurrentLeft!, true); RestoreAllNudEnabled(true); SetAltStatReadonly(true, amMode); }
                 if (bRightHas) { LoadAltStatsToControls(false, amMode); SetAltStatReadonly(false, amMode); }
-                else if (!ReferenceEquals(wCurrentLeft, wCurrentRight)) { LoadWeaponToControls(wCurrentRight!, false); SetAltStatReadonly(false, amMode); }
+                else if (!ReferenceEquals(wCurrentLeft, wCurrentRight)) { LoadWeaponToControls(wCurrentRight!, false); RestoreAllNudEnabled(false); SetAltStatReadonly(false, amMode); }
                 bUpdatingControls = false;
                 StoreSnapshot();
             }
@@ -106,6 +109,9 @@ public partial class Form1
             if (ctrl is Button btn && (btn.Text == "DoV" || btn.Text == "Zmb")) btn.BackColor = cInactive;
     }
 
+    #endregion
+    #region 控件状态
+
     private void SetAltStatReadonly(bool bIsLeft, WeaponScriptService.AltStatMode amMode)
     {
         var wWeapon = bIsLeft ? wCurrentLeft : wCurrentRight;
@@ -135,6 +141,49 @@ public partial class Form1
         _ => false
     };
 
+    #endregion
+    #region 背景颜色
+
+    private Color GetDefaultBackColor(bool bIsDark)
+    {
+        return bIsDark ? Color.FromArgb(50, 50, 50) : SystemColors.Window;
+    }
+
+    private Color GetAltStatBackColor(bool bIsDark, bool bIsDov)
+    {
+        return bIsDark
+            ? (bIsDov ? Color.FromArgb(40, 50, 80) : Color.FromArgb(80, 50, 30))
+            : (bIsDov ? Color.FromArgb(200, 220, 255) : Color.FromArgb(255, 220, 180));
+    }
+
+    private void SetAltStatBackColor(NumericUpDown nud, bool bHasAltValue, bool bIsDov)
+    {
+        nud.BackColor = bHasAltValue ? GetAltStatBackColor(bDarkMode, bIsDov) : GetDefaultBackColor(bDarkMode);
+    }
+
+    private void SetAltStatBackColor(TextBox txt, bool bHasAltValue, bool bIsDov)
+    {
+        txt.BackColor = bHasAltValue ? GetAltStatBackColor(bDarkMode, bIsDov) : GetDefaultBackColor(bDarkMode);
+    }
+
+    private void RestoreAltStatBackColors(bool bIsLeft)
+    {
+        Color cDefault = GetDefaultBackColor(bDarkMode);
+        if (bIsLeft)
+        {
+            txtFireModesL.BackColor = cDefault;
+            txtCapacityL.BackColor = cDefault;
+        }
+        else
+        {
+            txtFireModesR.BackColor = cDefault;
+            txtCapacityR.BackColor = cDefault;
+        }
+    }
+
+    #endregion
+    #region 备选值加载
+
     private void LoadAltStatsToControls(bool bIsLeft, WeaponScriptService.AltStatMode amMode)
     {
         try
@@ -146,38 +195,159 @@ public partial class Form1
         CopyWeaponDataFields(wWeapon, wTemp);
 
         bool bIsDov = amMode == WeaponScriptService.AltStatMode.Dov;
-        wTemp.ExtraBulletChamber = (bIsDov ? wWeapon.DovExtraBulletChamber : wWeapon.ZombieExtraBulletChamber) ?? wWeapon.ExtraBulletChamber;
-        wTemp.FireRate = (bIsDov ? wWeapon.DovFireRate : wWeapon.ZombieFireRate) ?? wWeapon.FireRate;
-        wTemp.BulletSpread = (bIsDov ? wWeapon.DovBulletSpread : wWeapon.ZombieBulletSpread) ?? wWeapon.BulletSpread;
-        wTemp.BulletSpreadDegreesIronsighted = (bIsDov ? wWeapon.DovBulletSpreadDegreesIronsighted : wWeapon.ZombieBulletSpreadDegreesIronsighted) ?? wWeapon.BulletSpreadDegreesIronsighted;
-        wTemp.BulletSpreadDegreesBipod = (bIsDov ? wWeapon.DovBulletSpreadDegreesBipod : wWeapon.ZombieBulletSpreadDegreesBipod) ?? wWeapon.BulletSpreadDegreesBipod;
-        wTemp.BulletSpreadDegreesBipodIronsighted = (bIsDov ? wWeapon.DovBulletSpreadDegreesBipodIronsighted : wWeapon.ZombieBulletSpreadDegreesBipodIronsighted) ?? wWeapon.BulletSpreadDegreesBipodIronsighted;
-        wTemp.RangeModifier = (bIsDov ? wWeapon.DovRangeModifier : wWeapon.ZombieRangeModifier) ?? wWeapon.RangeModifier;
-        wTemp.IronsightSpeedScale = (bIsDov ? wWeapon.DovIronsightSpeedScale : wWeapon.ZombieIronsightSpeedScale) ?? wWeapon.IronsightSpeedScale;
-        wTemp.CrouchSpreadMultiplier = (bIsDov ? wWeapon.DovCrouchSpreadMultiplier : wWeapon.ZombieCrouchSpreadMultiplier) ?? wWeapon.CrouchSpreadMultiplier;
-        wTemp.ProneSpreadMultiplier = (bIsDov ? wWeapon.DovProneSpreadMultiplier : wWeapon.ZombieProneSpreadMultiplier) ?? wWeapon.ProneSpreadMultiplier;
-        wTemp.StandMoveSpreadMultiplier = (bIsDov ? wWeapon.DovStandMoveSpreadMultiplier : wWeapon.ZombieStandMoveSpreadMultiplier) ?? wWeapon.StandMoveSpreadMultiplier;
-        wTemp.SneakMoveSpreadMultiplier = (bIsDov ? wWeapon.DovSneakMoveSpreadMultiplier : wWeapon.ZombieSneakMoveSpreadMultiplier) ?? wWeapon.SneakMoveSpreadMultiplier;
-        wTemp.CrouchMoveSpreadMultiplier = (bIsDov ? wWeapon.DovCrouchMoveSpreadMultiplier : wWeapon.ZombieCrouchMoveSpreadMultiplier) ?? wWeapon.CrouchMoveSpreadMultiplier;
-        wTemp.JumpSpreadMultiplier = (bIsDov ? wWeapon.DovJumpSpreadMultiplier : wWeapon.ZombieJumpSpreadMultiplier) ?? wWeapon.JumpSpreadMultiplier;
-        wTemp.ViewSlideRecoilUp = (bIsDov ? wWeapon.DovViewSlideRecoilUp : wWeapon.ZombieViewSlideRecoilUp) ?? wWeapon.ViewSlideRecoilUp;
-        wTemp.ViewSlideRecoilRight = (bIsDov ? wWeapon.DovViewSlideRecoilRight : wWeapon.ZombieViewSlideRecoilRight) ?? wWeapon.ViewSlideRecoilRight;
-        wTemp.ViewSlideRecoilIronsightUp = (bIsDov ? wWeapon.DovViewSlideRecoilIronsightUp : wWeapon.ZombieViewSlideRecoilIronsightUp) ?? wWeapon.ViewSlideRecoilIronsightUp;
-        wTemp.ViewSlideRecoilIronsightRight = (bIsDov ? wWeapon.DovViewSlideRecoilIronsightRight : wWeapon.ZombieViewSlideRecoilIronsightRight) ?? wWeapon.ViewSlideRecoilIronsightRight;
-        wTemp.DamageHeadMultiplier = (bIsDov ? wWeapon.DovDamageHeadMultiplier : wWeapon.ZombieDamageHeadMultiplier) ?? wWeapon.DamageHeadMultiplier;
-        wTemp.DamageChestMultiplier = (bIsDov ? wWeapon.DovDamageChestMultiplier : wWeapon.ZombieDamageChestMultiplier) ?? wWeapon.DamageChestMultiplier;
-        wTemp.DamageStomachMultiplier = (bIsDov ? wWeapon.DovDamageStomachMultiplier : wWeapon.ZombieDamageStomachMultiplier) ?? wWeapon.DamageStomachMultiplier;
-        wTemp.DamageLegMultiplier = (bIsDov ? wWeapon.DovDamageLegMultiplier : wWeapon.ZombieDamageLegMultiplier) ?? wWeapon.DamageLegMultiplier;
-        wTemp.DamageArmMultiplier = (bIsDov ? wWeapon.DovDamageArmMultiplier : wWeapon.ZombieDamageArmMultiplier) ?? wWeapon.DamageArmMultiplier;
-        wTemp.DamageGeneric = (bIsDov ? wWeapon.DovDamageGeneric : wWeapon.ZombieDamageGeneric) ?? wWeapon.DamageGeneric;
+
+        int? nAltExtraBulletChamber = bIsDov ? wWeapon.DovExtraBulletChamber : wWeapon.ZombieExtraBulletChamber;
+        wTemp.ExtraBulletChamber = nAltExtraBulletChamber ?? wWeapon.ExtraBulletChamber;
+        SetAltStatBackColor(bIsLeft ? nudExtraBulletChamberL : nudExtraBulletChamberR,
+            nAltExtraBulletChamber != null && nAltExtraBulletChamber != wWeapon.ExtraBulletChamber, bIsDov);
+
+        int? nAltFireRate = bIsDov ? wWeapon.DovFireRate : wWeapon.ZombieFireRate;
+        wTemp.FireRate = nAltFireRate ?? wWeapon.FireRate;
+        SetAltStatBackColor(bIsLeft ? nudFireRateL : nudFireRateR,
+            nAltFireRate != null && nAltFireRate != wWeapon.FireRate, bIsDov);
+
+        double? fAltBulletSpread = bIsDov ? wWeapon.DovBulletSpread : wWeapon.ZombieBulletSpread;
+        wTemp.BulletSpread = fAltBulletSpread ?? wWeapon.BulletSpread;
+        SetAltStatBackColor(bIsLeft ? nudHipSpreadL : nudHipSpreadR,
+            fAltBulletSpread != null && Math.Abs(fAltBulletSpread.Value - (wWeapon.BulletSpread ?? 0)) > 0.001, bIsDov);
+
+        double? fAltBulletSpreadAds = bIsDov ? wWeapon.DovBulletSpreadDegreesIronsighted : wWeapon.ZombieBulletSpreadDegreesIronsighted;
+        wTemp.BulletSpreadDegreesIronsighted = fAltBulletSpreadAds ?? wWeapon.BulletSpreadDegreesIronsighted;
+        SetAltStatBackColor(bIsLeft ? nudAdsSpreadL : nudAdsSpreadR,
+            fAltBulletSpreadAds != null && Math.Abs(fAltBulletSpreadAds.Value - (wWeapon.BulletSpreadDegreesIronsighted ?? 0)) > 0.001, bIsDov);
+
+        double? fAltBulletSpreadBipod = bIsDov ? wWeapon.DovBulletSpreadDegreesBipod : wWeapon.ZombieBulletSpreadDegreesBipod;
+        wTemp.BulletSpreadDegreesBipod = fAltBulletSpreadBipod ?? wWeapon.BulletSpreadDegreesBipod;
+        SetAltStatBackColor(bIsLeft ? nudBipodHipSpreadL : nudBipodHipSpreadR,
+            fAltBulletSpreadBipod != null && Math.Abs(fAltBulletSpreadBipod.Value - (wWeapon.BulletSpreadDegreesBipod ?? 0)) > 0.001, bIsDov);
+
+        double? fAltBulletSpreadBipodAds = bIsDov ? wWeapon.DovBulletSpreadDegreesBipodIronsighted : wWeapon.ZombieBulletSpreadDegreesBipodIronsighted;
+        wTemp.BulletSpreadDegreesBipodIronsighted = fAltBulletSpreadBipodAds ?? wWeapon.BulletSpreadDegreesBipodIronsighted;
+        SetAltStatBackColor(bIsLeft ? nudBipodAdsSpreadL : nudBipodAdsSpreadR,
+            fAltBulletSpreadBipodAds != null && Math.Abs(fAltBulletSpreadBipodAds.Value - (wWeapon.BulletSpreadDegreesBipodIronsighted ?? 0)) > 0.001, bIsDov);
+
+        double? fAltRangeModifier = bIsDov ? wWeapon.DovRangeModifier : wWeapon.ZombieRangeModifier;
+        wTemp.RangeModifier = fAltRangeModifier ?? wWeapon.RangeModifier;
+        SetAltStatBackColor(bIsLeft ? nudRangeModifierL : nudRangeModifierR,
+            fAltRangeModifier != null && Math.Abs(fAltRangeModifier.Value - (wWeapon.RangeModifier ?? 0)) > 0.001, bIsDov);
+
+        double? fAltIronsightSpeedScale = bIsDov ? wWeapon.DovIronsightSpeedScale : wWeapon.ZombieIronsightSpeedScale;
+        wTemp.IronsightSpeedScale = fAltIronsightSpeedScale ?? wWeapon.IronsightSpeedScale;
+        SetAltStatBackColor(bIsLeft ? nudIronsightSpeedScaleL : nudIronsightSpeedScaleR,
+            fAltIronsightSpeedScale != null && Math.Abs(fAltIronsightSpeedScale.Value - (wWeapon.IronsightSpeedScale ?? 0)) > 0.001, bIsDov);
+
+        double? fAltCrouchSpread = bIsDov ? wWeapon.DovCrouchSpreadMultiplier : wWeapon.ZombieCrouchSpreadMultiplier;
+        wTemp.CrouchSpreadMultiplier = fAltCrouchSpread ?? wWeapon.CrouchSpreadMultiplier;
+        SetAltStatBackColor(bIsLeft ? nudCrouchSpreadL : nudCrouchSpreadR,
+            fAltCrouchSpread != null && Math.Abs(fAltCrouchSpread.Value - (wWeapon.CrouchSpreadMultiplier ?? 0)) > 0.001, bIsDov);
+
+        double? fAltProneSpread = bIsDov ? wWeapon.DovProneSpreadMultiplier : wWeapon.ZombieProneSpreadMultiplier;
+        wTemp.ProneSpreadMultiplier = fAltProneSpread ?? wWeapon.ProneSpreadMultiplier;
+        SetAltStatBackColor(bIsLeft ? nudProneSpreadL : nudProneSpreadR,
+            fAltProneSpread != null && Math.Abs(fAltProneSpread.Value - (wWeapon.ProneSpreadMultiplier ?? 0)) > 0.001, bIsDov);
+
+        double? fAltStandMoveSpread = bIsDov ? wWeapon.DovStandMoveSpreadMultiplier : wWeapon.ZombieStandMoveSpreadMultiplier;
+        wTemp.StandMoveSpreadMultiplier = fAltStandMoveSpread ?? wWeapon.StandMoveSpreadMultiplier;
+        SetAltStatBackColor(bIsLeft ? nudStandMoveSpreadL : nudStandMoveSpreadR,
+            fAltStandMoveSpread != null && Math.Abs(fAltStandMoveSpread.Value - (wWeapon.StandMoveSpreadMultiplier ?? 0)) > 0.001, bIsDov);
+
+        double? fAltSneakMoveSpread = bIsDov ? wWeapon.DovSneakMoveSpreadMultiplier : wWeapon.ZombieSneakMoveSpreadMultiplier;
+        wTemp.SneakMoveSpreadMultiplier = fAltSneakMoveSpread ?? wWeapon.SneakMoveSpreadMultiplier;
+        SetAltStatBackColor(bIsLeft ? nudSneakMoveSpreadL : nudSneakMoveSpreadR,
+            fAltSneakMoveSpread != null && Math.Abs(fAltSneakMoveSpread.Value - (wWeapon.SneakMoveSpreadMultiplier ?? 0)) > 0.001, bIsDov);
+
+        double? fAltCrouchMoveSpread = bIsDov ? wWeapon.DovCrouchMoveSpreadMultiplier : wWeapon.ZombieCrouchMoveSpreadMultiplier;
+        wTemp.CrouchMoveSpreadMultiplier = fAltCrouchMoveSpread ?? wWeapon.CrouchMoveSpreadMultiplier;
+        SetAltStatBackColor(bIsLeft ? nudCrouchMoveSpreadL : nudCrouchMoveSpreadR,
+            fAltCrouchMoveSpread != null && Math.Abs(fAltCrouchMoveSpread.Value - (wWeapon.CrouchMoveSpreadMultiplier ?? 0)) > 0.001, bIsDov);
+
+        double? fAltJumpSpread = bIsDov ? wWeapon.DovJumpSpreadMultiplier : wWeapon.ZombieJumpSpreadMultiplier;
+        wTemp.JumpSpreadMultiplier = fAltJumpSpread ?? wWeapon.JumpSpreadMultiplier;
+        SetAltStatBackColor(bIsLeft ? nudJumpSpreadL : nudJumpSpreadR,
+            fAltJumpSpread != null && Math.Abs(fAltJumpSpread.Value - (wWeapon.JumpSpreadMultiplier ?? 0)) > 0.001, bIsDov);
+
+        double? fAltRecoilUp = bIsDov ? wWeapon.DovViewSlideRecoilUp : wWeapon.ZombieViewSlideRecoilUp;
+        wTemp.ViewSlideRecoilUp = fAltRecoilUp ?? wWeapon.ViewSlideRecoilUp;
+        SetAltStatBackColor(bIsLeft ? nudHipRecoilUpL : nudHipRecoilUpR,
+            fAltRecoilUp != null && Math.Abs(fAltRecoilUp.Value - (wWeapon.ViewSlideRecoilUp ?? 0)) > 0.001, bIsDov);
+
+        double? fAltRecoilRight = bIsDov ? wWeapon.DovViewSlideRecoilRight : wWeapon.ZombieViewSlideRecoilRight;
+        wTemp.ViewSlideRecoilRight = fAltRecoilRight ?? wWeapon.ViewSlideRecoilRight;
+        SetAltStatBackColor(bIsLeft ? nudHipRecoilRightL : nudHipRecoilRightR,
+            fAltRecoilRight != null && Math.Abs(fAltRecoilRight.Value - (wWeapon.ViewSlideRecoilRight ?? 0)) > 0.001, bIsDov);
+
+        double? fAltRecoilAdsUp = bIsDov ? wWeapon.DovViewSlideRecoilIronsightUp : wWeapon.ZombieViewSlideRecoilIronsightUp;
+        wTemp.ViewSlideRecoilIronsightUp = fAltRecoilAdsUp ?? wWeapon.ViewSlideRecoilIronsightUp;
+        SetAltStatBackColor(bIsLeft ? nudAdsRecoilUpL : nudAdsRecoilUpR,
+            fAltRecoilAdsUp != null && Math.Abs(fAltRecoilAdsUp.Value - (wWeapon.ViewSlideRecoilIronsightUp ?? 0)) > 0.001, bIsDov);
+
+        double? fAltRecoilAdsRight = bIsDov ? wWeapon.DovViewSlideRecoilIronsightRight : wWeapon.ZombieViewSlideRecoilIronsightRight;
+        wTemp.ViewSlideRecoilIronsightRight = fAltRecoilAdsRight ?? wWeapon.ViewSlideRecoilIronsightRight;
+        SetAltStatBackColor(bIsLeft ? nudAdsRecoilRightL : nudAdsRecoilRightR,
+            fAltRecoilAdsRight != null && Math.Abs(fAltRecoilAdsRight.Value - (wWeapon.ViewSlideRecoilIronsightRight ?? 0)) > 0.001, bIsDov);
+
+        double? fAltDmgGeneric = bIsDov ? wWeapon.DovDamageGeneric : wWeapon.ZombieDamageGeneric;
+        wTemp.DamageGeneric = fAltDmgGeneric ?? wWeapon.DamageGeneric;
+        SetAltStatBackColor(bIsLeft ? nudDamageGenericL : nudDamageGenericR,
+            fAltDmgGeneric != null && Math.Abs(fAltDmgGeneric.Value - (wWeapon.DamageGeneric ?? 0)) > 0.001, bIsDov);
+
+        double? fAltDmgHead = bIsDov ? wWeapon.DovDamageHeadMultiplier : wWeapon.ZombieDamageHeadMultiplier;
+        wTemp.DamageHeadMultiplier = fAltDmgHead ?? wWeapon.DamageHeadMultiplier;
+        SetAltStatBackColor(bIsLeft ? nudHeadL : nudHeadR,
+            fAltDmgHead != null && Math.Abs(fAltDmgHead.Value - (wWeapon.DamageHeadMultiplier ?? 0)) > 0.001, bIsDov);
+        double? fAltDmgChest = bIsDov ? wWeapon.DovDamageChestMultiplier : wWeapon.ZombieDamageChestMultiplier;
+        wTemp.DamageChestMultiplier = fAltDmgChest ?? wWeapon.DamageChestMultiplier;
+        SetAltStatBackColor(bIsLeft ? nudChestL : nudChestR,
+            fAltDmgChest != null && Math.Abs(fAltDmgChest.Value - (wWeapon.DamageChestMultiplier ?? 0)) > 0.001, bIsDov);
+        double? fAltDmgStomach = bIsDov ? wWeapon.DovDamageStomachMultiplier : wWeapon.ZombieDamageStomachMultiplier;
+        wTemp.DamageStomachMultiplier = fAltDmgStomach ?? wWeapon.DamageStomachMultiplier;
+        SetAltStatBackColor(bIsLeft ? nudStomachL : nudStomachR,
+            fAltDmgStomach != null && Math.Abs(fAltDmgStomach.Value - (wWeapon.DamageStomachMultiplier ?? 0)) > 0.001, bIsDov);
+        double? fAltDmgLeg = bIsDov ? wWeapon.DovDamageLegMultiplier : wWeapon.ZombieDamageLegMultiplier;
+        wTemp.DamageLegMultiplier = fAltDmgLeg ?? wWeapon.DamageLegMultiplier;
+        SetAltStatBackColor(bIsLeft ? nudLegL : nudLegR,
+            fAltDmgLeg != null && Math.Abs(fAltDmgLeg.Value - (wWeapon.DamageLegMultiplier ?? 0)) > 0.001, bIsDov);
+        double? fAltDmgArm = bIsDov ? wWeapon.DovDamageArmMultiplier : wWeapon.ZombieDamageArmMultiplier;
+        wTemp.DamageArmMultiplier = fAltDmgArm ?? wWeapon.DamageArmMultiplier;
+        SetAltStatBackColor(bIsLeft ? nudArmL : nudArmR,
+            fAltDmgArm != null && Math.Abs(fAltDmgArm.Value - (wWeapon.DamageArmMultiplier ?? 0)) > 0.001, bIsDov);
+
+        double? fAltWeight = bIsDov ? wWeapon.DovWeight : wWeapon.ZombieWeight;
+        wTemp.Weight = fAltWeight ?? wWeapon.Weight;
+        SetAltStatBackColor(bIsLeft ? nudWeightL : nudWeightR,
+            fAltWeight != null && Math.Abs(fAltWeight.Value - (wWeapon.Weight ?? 0)) > 0.001, bIsDov);
+
+        int? nAltZMBuyPrice = bIsDov ? wWeapon.DovZMBuyPrice : null;
+        wTemp.ZMBuyPrice = nAltZMBuyPrice ?? wWeapon.ZMBuyPrice;
+        SetAltStatBackColor(bIsLeft ? nudZMBuyPriceL : nudZMBuyPriceR,
+            nAltZMBuyPrice != null && nAltZMBuyPrice != wWeapon.ZMBuyPrice, bIsDov);
+
+        int? nAltZMWeight = bIsDov ? wWeapon.DovZMWeight : null;
+        wTemp.ZMWeight = nAltZMWeight ?? wWeapon.ZMWeight;
+        SetAltStatBackColor(bIsLeft ? nudZMWeightL : nudZMWeightR,
+            nAltZMWeight != null && nAltZMWeight != wWeapon.ZMWeight, bIsDov);
+
+        string? sAltClipSize = bIsDov ? wWeapon.DovClipSize : wWeapon.ZombieClipSize;
+        wTemp.ClipSize = sAltClipSize ?? wWeapon.ClipSize;
+        SetAltStatBackColor(bIsLeft ? txtCapacityL : txtCapacityR,
+            sAltClipSize != null && sAltClipSize != wWeapon.ClipSize, bIsDov);
+
+        int? nAltSecondaryFireRate = bIsDov ? wWeapon.DovSecondaryFireRate : wWeapon.ZombieSecondaryFireRate;
+        wTemp.SecondaryFireRate = nAltSecondaryFireRate ?? wWeapon.SecondaryFireRate;
+        SetAltStatBackColor(bIsLeft ? nudSecondaryFireRateL : nudSecondaryFireRateR,
+            nAltSecondaryFireRate != null && nAltSecondaryFireRate != wWeapon.SecondaryFireRate, bIsDov);
+
+        int? nAltIronSight = bIsDov ? wWeapon.DovIronSight : wWeapon.ZombieIronSight;
+        wTemp.IronSight = nAltIronSight ?? wWeapon.IronSight;
+        SetAltStatBackColor(bIsLeft ? nudIronSightL : nudIronSightR,
+            nAltIronSight != null && nAltIronSight != wWeapon.IronSight, bIsDov);
+
+        //无gui控件的备选字段直接赋值 不设背景色
         wTemp.ShakeScale = (bIsDov ? wWeapon.DovShakeScale : wWeapon.ZombieShakeScale) ?? wWeapon.ShakeScale;
         wTemp.ShakeFreq = (bIsDov ? wWeapon.DovShakeFreq : wWeapon.ZombieShakeFreq) ?? wWeapon.ShakeFreq;
         wTemp.ShakeDuration = (bIsDov ? wWeapon.DovShakeDuration : wWeapon.ZombieShakeDuration) ?? wWeapon.ShakeDuration;
         wTemp.CrosshairMinDistance = (bIsDov ? wWeapon.DovCrosshairMinDistance : wWeapon.ZombieCrosshairMinDistance) ?? wWeapon.CrosshairMinDistance;
         wTemp.CrosshairDeltaDistance = (bIsDov ? wWeapon.DovCrosshairDeltaDistance : wWeapon.ZombieCrosshairDeltaDistance) ?? wWeapon.CrosshairDeltaDistance;
-        wTemp.Weight = (bIsDov ? wWeapon.DovWeight : wWeapon.ZombieWeight) ?? wWeapon.Weight;
-        wTemp.ZMBuyPrice = (bIsDov ? wWeapon.DovZMBuyPrice : null) ?? wWeapon.ZMBuyPrice;
-        wTemp.ZMWeight = (bIsDov ? wWeapon.DovZMWeight : null) ?? wWeapon.ZMWeight;
         wTemp.RecoilPushbackValue = (bIsDov ? wWeapon.DovRecoilPushbackValue : wWeapon.ZombieRecoilPushbackValue) ?? wWeapon.RecoilPushbackValue;
         wTemp.IronsightWalkBobbingStrength = (bIsDov ? wWeapon.DovIronsightWalkBobbingStrength : wWeapon.ZombieIronsightWalkBobbingStrength) ?? wWeapon.IronsightWalkBobbingStrength;
         wTemp.MetalPenetrationDepth = (bIsDov ? wWeapon.DovMetalPenetrationDepth : wWeapon.ZombieMetalPenetrationDepth) ?? wWeapon.MetalPenetrationDepth;
@@ -191,15 +361,15 @@ public partial class Form1
         wTemp.WoodDamageModifier = (bIsDov ? wWeapon.DovWoodDamageModifier : wWeapon.ZombieWoodDamageModifier) ?? wWeapon.WoodDamageModifier;
         wTemp.OtherDamageModifier = (bIsDov ? wWeapon.DovOtherDamageModifier : wWeapon.ZombieOtherDamageModifier) ?? wWeapon.OtherDamageModifier;
         wTemp.NearwallDistance = (bIsDov ? wWeapon.DovNearwallDistance : wWeapon.ZombieNearwallDistance) ?? wWeapon.NearwallDistance;
-        wTemp.ClipSize = (bIsDov ? wWeapon.DovClipSize : wWeapon.ZombieClipSize) ?? wWeapon.ClipSize;
-        wTemp.SecondaryFireRate = (bIsDov ? wWeapon.DovSecondaryFireRate : wWeapon.ZombieSecondaryFireRate) ?? wWeapon.SecondaryFireRate;
-        wTemp.IronSight = (bIsDov ? wWeapon.DovIronSight : wWeapon.ZombieIronSight) ?? wWeapon.IronSight;
 
         LoadWeaponToControls(wTemp, bIsLeft);
 
         string? sAltFireModes = bIsDov ? wWeapon.DovFireModes : wWeapon.ZombieFireModes;
         if (!string.IsNullOrEmpty(sAltFireModes))
         { if (bIsLeft) txtFireModesL.Text = sAltFireModes; else txtFireModesR.Text = sAltFireModes; }
+        SetAltStatBackColor(bIsLeft ? txtFireModesL : txtFireModesR,
+            sAltFireModes != null && sAltFireModes != wWeapon.FireModes, bIsDov);
+
         }
         catch (Exception ex)
         {
@@ -209,21 +379,31 @@ public partial class Form1
 
     private void RestoreAllNudEnabled(bool bIsLeft)
     {
+        Color cDefault = GetDefaultBackColor(bDarkMode);
         var rgNuds = bIsLeft
-            ? new[] { nudExtraBulletChamberL, nudBulletsPerShotL, nudIronsightSpeedScaleL, nudWeightL, nudZMBuyPriceL, nudZMWeightL,
+            ? new[] { nudHeadL, nudChestL, nudStomachL, nudLegL, nudArmL,
+                      nudExtraBulletChamberL, nudBulletsPerShotL, nudIronsightSpeedScaleL, nudWeightL, nudZMBuyPriceL, nudZMWeightL,
                       nudMetalPenL, nudGlassPenL, nudConcretePenL, nudWoodPenL, nudOtherPenL,
                       nudMetalDmgModL, nudGlassDmgModL, nudConcreteDmgModL, nudWoodDmgModL, nudOtherDmgModL,
                       nudCrouchSpreadL, nudProneSpreadL, nudStandMoveSpreadL, nudSneakMoveSpreadL, nudCrouchMoveSpreadL, nudJumpSpreadL,
-                      nudSecondaryFireRateL, nudIronSightL, nudAdsSpreadL, nudAdsRecoilUpL, nudAdsRecoilRightL, nudIronsightSpeedScaleL }
-            : new[] { nudExtraBulletChamberR, nudBulletsPerShotR, nudIronsightSpeedScaleR, nudWeightR, nudZMBuyPriceR, nudZMWeightR,
+                      nudSecondaryFireRateL, nudIronSightL, nudFireRateL, nudDamageGenericL, nudRangeModifierL,
+                      nudHipSpreadL, nudAdsSpreadL, nudBipodHipSpreadL, nudBipodAdsSpreadL,
+                      nudHipRecoilUpL, nudHipRecoilRightL, nudAdsRecoilUpL, nudAdsRecoilRightL }
+            : new[] { nudHeadR, nudChestR, nudStomachR, nudLegR, nudArmR,
+                      nudExtraBulletChamberR, nudBulletsPerShotR, nudIronsightSpeedScaleR, nudWeightR, nudZMBuyPriceR, nudZMWeightR,
                       nudMetalPenR, nudGlassPenR, nudConcretePenR, nudWoodPenR, nudOtherPenR,
                       nudMetalDmgModR, nudGlassDmgModR, nudConcreteDmgModR, nudWoodDmgModR, nudOtherDmgModR,
                       nudCrouchSpreadR, nudProneSpreadR, nudStandMoveSpreadR, nudSneakMoveSpreadR, nudCrouchMoveSpreadR, nudJumpSpreadR,
-                      nudSecondaryFireRateR, nudIronSightR, nudAdsSpreadR, nudAdsRecoilUpR, nudAdsRecoilRightR, nudIronsightSpeedScaleR };
-        foreach (var nud in rgNuds) nud.Enabled = true;
+                      nudSecondaryFireRateR, nudIronSightR, nudFireRateR, nudDamageGenericR, nudRangeModifierR,
+                      nudHipSpreadR, nudAdsSpreadR, nudBipodHipSpreadR, nudBipodAdsSpreadR,
+                      nudHipRecoilUpR, nudHipRecoilRightR, nudAdsRecoilUpR, nudAdsRecoilRightR };
+        foreach (var nud in rgNuds) { nud.Enabled = true; nud.BackColor = cDefault; }
+        RestoreAltStatBackColors(bIsLeft);
     }
 
-    //将控件当前值同步回备选数值字段
+    #endregion
+    #region 备选值同步
+
     private void SyncAltStatFields(WeaponData wWeapon, WeaponScriptService.AltStatMode amMode)
     {
         try
@@ -344,4 +524,5 @@ public partial class Form1
     private NumericUpDown GetNud(bool bIsLeft, NumericUpDown nudL, NumericUpDown nudR) => bIsLeft ? nudL : nudR;
 
     private TextBox GetTextBox(bool bIsLeft, TextBox txtL, TextBox txtR) => bIsLeft ? txtL : txtR;
+    #endregion
 }
