@@ -166,7 +166,7 @@ public static class CsvMapper
     #region CSV解析
 
     //引号内超过此阈值仍未闭合则强制退出 防止损坏的csv吞掉后续所有行
-    private const int iMaxQuotedFieldLength = 100_000;
+    private const int iMaxQuotedFieldLength = 500;
 
     private static readonly char[] s_rgLetters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".ToCharArray();
 
