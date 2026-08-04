@@ -10,7 +10,6 @@ namespace WeaponDamageCalc.Tools;
 public static class CsvMapper
 {
     #region 列反射与缓存
-
     private static readonly Dictionary<Type, ColumnMap[]> mpCache = new();
 
     public static ColumnMap[] GetColumns<T>()
@@ -66,7 +65,7 @@ public static class CsvMapper
             if (!string.IsNullOrWhiteSpace(sFirstField))
             {
                 //如果首字段不含任何字母 文件可能缺少header行
-                if (sFirstField.IndexOfAny("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".ToCharArray()) < 0)
+                if (sFirstField.IndexOfAny(s_rgLetters) < 0)
                     LogWarn($"Header row's first field '{sFirstField}' contains no letters. File may be missing a header row.");
 
                 iHeaderIdx = i;
@@ -169,6 +168,8 @@ public static class CsvMapper
     //引号内超过此阈值仍未闭合则强制退出 防止损坏的csv吞掉后续所有行
     private const int iMaxQuotedFieldLength = 100_000;
 
+    private static readonly char[] s_rgLetters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".ToCharArray();
+
     private static List<string> SplitLines(string sContent)
     {
         var rgLines = new List<string>();
@@ -202,7 +203,8 @@ public static class CsvMapper
             }
             else if (c == '\n' && !bInQuotes)
             {
-                rgLines.Add(sb.ToString().TrimEnd('\r'));
+                var sLine = sb.ToString();
+                rgLines.Add(sLine.Length > 0 && sLine[^1] == '\r' ? sLine[..^1] : sLine);
                 sb.Clear();
             }
             else if (c == '\r' && !bInQuotes)
@@ -276,8 +278,8 @@ public static class CsvMapper
         for (int i = 0; i < rgFields.Count; i++)
         {
             var sF = rgFields[i].Trim();
-            if (sF.Length >= 2 && sF.StartsWith("\"") && sF.EndsWith("\""))
-                rgFields[i] = sF.Substring(1, sF.Length - 2);
+            if (sF.Length >= 2 && sF[0] == '"' && sF[^1] == '"')
+                rgFields[i] = sF[1..^1];
             else
                 rgFields[i] = sF;
         }
@@ -373,30 +375,33 @@ public static class CsvMapper
     #endregion
     #region 日志桥接
 
-    private static void LogWarn(string sMsg)
+    private static readonly Action<string>? s_actWarn = GetLogMethod("Warn");
+    private static readonly Action<string>? s_actError = GetLogMethod("Error");
+
+    private static Action<string>? GetLogMethod(string sMethod)
     {
         try
         {
             var tLogType = Type.GetType("WeaponDamageCalc.LogService, WeaponDamageCalc");
-            tLogType?.GetMethod("Warn", new[] { typeof(string) })
-                     ?.Invoke(null, new object[] { "[CsvMapper] " + sMsg });
+            if (tLogType == null) return null;
+            var mi = tLogType.GetMethod(sMethod, new[] { typeof(string) });
+            if (mi == null) return null;
+            return (Action<string>)Delegate.CreateDelegate(typeof(Action<string>), mi);
         }
-        catch { }
+        catch { return null; }
+    }
+
+    private static void LogWarn(string sMsg)
+    {
+        s_actWarn?.Invoke("[CsvMapper] " + sMsg);
         System.Diagnostics.Debug.WriteLine($"[CsvMapper WARN] {sMsg}");
     }
 
     private static void LogError(string sMsg)
     {
-        try
-        {
-            var tLogType = Type.GetType("WeaponDamageCalc.LogService, WeaponDamageCalc");
-            tLogType?.GetMethod("Error", new[] { typeof(string) })
-                     ?.Invoke(null, new object[] { "[CsvMapper] " + sMsg });
-        }
-        catch { }
+        s_actError?.Invoke("[CsvMapper] " + sMsg);
         System.Diagnostics.Debug.WriteLine($"[CsvMapper ERROR] {sMsg}");
     }
-
     #endregion
 }
 
