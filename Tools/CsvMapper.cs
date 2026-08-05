@@ -50,7 +50,7 @@ public static class CsvMapper
         }
         catch (Exception ex)
         {
-            LogError($"Failed to read file: {sPath} — {ex.Message}");
+            LogError($"Failed to read file: {sPath} - {ex.Message}");
             return rgResult;
         }
 

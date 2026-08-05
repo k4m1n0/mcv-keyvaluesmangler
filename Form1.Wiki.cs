@@ -243,7 +243,7 @@ public partial class Form1
                     var rgFiles = Directory.GetFiles(sGenDir, "*.txt");
                     int iUpOk = 0, iUpFail = 0;
                     txtOutput.Clear();
-                    Out($"Upload — {rgFiles.Length} files — {DateTime.Now:HH:mm:ss}");
+                    Out($"Upload - {rgFiles.Length} files - {DateTime.Now:HH:mm:ss}");
                     Out(new string('-', 40));
                     foreach (string sFp in rgFiles)
                     {
@@ -299,7 +299,7 @@ public partial class Form1
             {
                 ctsGen.Token.ThrowIfCancellationRequested();
                 txtOutput.Clear();
-                Out($"Generate started — {DateTime.Now:HH:mm:ss}");
+                Out($"Generate started - {DateTime.Now:HH:mm:ss}");
                 var mpTokens = LocalizationService.LoadTokens(Path.Combine(sResourceDir, "vietnam_english.txt"));
                 Out($"Tokens loaded: {mpTokens.Count}");
                 lblStatus.Text = "Loading loadout...";
@@ -530,7 +530,7 @@ public partial class Form1
                 {
                     if (!await EnsureLogin(txtUser.Text, txtPw.Text, lblStatus)) { ExitCancel(btnBatchDR, "BatchDR", cWikiInactive, ehCancel); return; }
                     string sResumeTag = chkSkipCached.Checked ? " [skip cached]" : "";
-                    Out($"Batch DryRun — {rgLinks.Count} pages — {DateTime.Now:HH:mm:ss}{sResumeTag}");
+                    Out($"Batch DryRun - {rgLinks.Count} pages - {DateTime.Now:HH:mm:ss}{sResumeTag}");
                     Out(new string('-', 40));
                     int iSkippedCached = 0;
                     foreach (var sLink in rgLinks)
@@ -576,7 +576,7 @@ public partial class Form1
                 else
                 {
                     if (!await EnsureLogin(txtUser.Text, txtPw.Text, lblStatus)) { ExitCancel(btnBatchDR, "BatchUp", cWikiActive, ehCancel); return; }
-                    Out($"Batch Upload — {rgLinks.Count} pages — {DateTime.Now:HH:mm:ss}");
+                    Out($"Batch Upload - {rgLinks.Count} pages - {DateTime.Now:HH:mm:ss}");
                     Out(new string('-', 40));
                     foreach (var sLink in rgLinks)
                     {

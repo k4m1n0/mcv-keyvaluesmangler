@@ -118,7 +118,7 @@ internal static class Program
     {
         string sExeName = Path.GetFileNameWithoutExtension(Environment.ProcessPath ?? "WeaponDamageCalc.exe");
         Console.WriteLine($@"
-Keyvalues Mangler(TM) 5000 — MCV Weapon Stats Tool
+Keyvalues Mangler(TM) 5000 - MCV Weapon Stats Tool
 
 Usage:
   {sExeName}.exe [command] [options]
