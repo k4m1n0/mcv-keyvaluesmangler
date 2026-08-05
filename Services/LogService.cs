@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 
-namespace WeaponDamageCalc;
+namespace WeaponDamageCalc.Services;
 
 public static class LogService
 {
@@ -12,7 +12,7 @@ public static class LogService
 #if DEBUG
     private static bool bEnabled = true;
 #else
-    private static bool bEnabled = false;//开关release日志
+    private static bool bEnabled = false;//手动开关
 #endif
 
     private static Level lvlMin = Level.Debug;

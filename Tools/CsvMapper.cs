@@ -39,6 +39,7 @@ public static class CsvMapper
     public static List<T> Read<T>(string sPath) where T : new()
     {
         var rgResult = new List<T>();
+        var rgWarnings = new List<string>();
         var rgColumns = GetColumns<T>();
         if (rgColumns.Length == 0) return rgResult;
 
@@ -53,6 +54,8 @@ public static class CsvMapper
             return rgResult;
         }
 
+        void Warn(string sMsg) { LogWarn(sMsg); rgWarnings.Add(sMsg); }
+
         var rgLines = SplitLines(sContent);
 
         int iHeaderIdx = -1;
@@ -61,12 +64,13 @@ public static class CsvMapper
             if (string.IsNullOrWhiteSpace(rgLines[i]))
                 continue;
 
-            var sFirstField = GetField(rgLines[i], 0);
+            var rgFirst = SplitRow(rgLines[i]);
+            var sFirstField = rgFirst.Count > 0 ? rgFirst[0] : "";
             if (!string.IsNullOrWhiteSpace(sFirstField))
             {
                 //如果首字段不含任何字母 文件可能缺少header行
                 if (sFirstField.IndexOfAny(s_rgLetters) < 0)
-                    LogWarn($"Header row's first field '{sFirstField}' contains no letters. File may be missing a header row.");
+                    Warn($"Header row's first field '{sFirstField}' contains no letters. File may be missing a header row.");
 
                 iHeaderIdx = i;
                 break;
@@ -86,7 +90,7 @@ public static class CsvMapper
             }
             else
             {
-                LogWarn($"Duplicate column '{sH}' at index {i}, using first occurrence at index {mpHeader[sH]}.");
+                Warn($"Duplicate column '{sH}' at index {i}, using first occurrence at index {mpHeader[sH]}.");
             }
         }
 
@@ -96,10 +100,10 @@ public static class CsvMapper
             if (string.IsNullOrWhiteSpace(sLine)) continue;
             if (sLine.Trim().Replace(",", "").Length == 0) continue;//整行都是逗号
 
-            var sFirstField = GetField(sLine, 0);
-            if (string.IsNullOrWhiteSpace(sFirstField)) continue;
-
             var rgFields = SplitRow(sLine);
+            if (rgFields.Count == 0) continue;
+            if (rgFields.Count == 1 && string.IsNullOrWhiteSpace(rgFields[0])) continue;
+            if (rgFields.All(f => string.IsNullOrWhiteSpace(f))) continue;
             var obj = new T();
             foreach (var col in rgColumns)
             {
@@ -112,6 +116,7 @@ public static class CsvMapper
             }
             rgResult.Add(obj);
         }
+        ShowWarnings(rgWarnings);
         return rgResult;
     }
 
@@ -141,6 +146,39 @@ public static class CsvMapper
         File.WriteAllText(sPath, sb.ToString(), new UTF8Encoding(false));
     }
 
+    internal static bool s_bSuppressMessageBox = false;
+
+    private static void ShowWarnings(List<string> rgWarnings)
+    {
+        if (rgWarnings.Count == 0) return;
+
+        var rgDeduped = rgWarnings
+            .GroupBy(s =>
+            {
+                int iColon = s.IndexOf(':');
+                if (iColon < 0) return s;
+                return s[..iColon].Replace("int", "number").Replace("double", "number");
+            })
+            .Select(g => g.Count() == 1 ? g.First() : $"{g.Count()} fields: {g.Key}")
+            .ToList();
+
+        var sb = new StringBuilder();
+        int nShow = Math.Min(rgDeduped.Count, 8);
+        for (int i = 0; i < nShow; i++)
+            sb.AppendLine(rgDeduped[i]);
+
+        if (rgDeduped.Count > 8)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"+ {rgDeduped.Count - 8} more issue types ({rgWarnings.Count} total).");
+            sb.AppendLine("Check the log file for full details.");
+        }
+
+        if (!s_bSuppressMessageBox)
+            MessageBox.Show(sb.ToString(), $"CSV Parse Warnings ({rgWarnings.Count})",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+    }
+
     #endregion
     #region 编码检测
 
@@ -166,7 +204,7 @@ public static class CsvMapper
     #region CSV解析
 
     //引号内超过此阈值仍未闭合则强制退出 防止损坏的csv吞掉后续所有行
-    private const int iMaxQuotedFieldLength = 500;
+    private const int iMaxQuotedFieldLength = 100;
 
     private static readonly char[] s_rgLetters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".ToCharArray();
 
@@ -183,13 +221,23 @@ public static class CsvMapper
 
             if (bInQuotes && iQuoteStart >= 0 && (i - iQuoteStart) > iMaxQuotedFieldLength)
             {
-                LogWarn($"Unclosed quote forced closure at position {i}.");
+                LogWarn($"Unclosed quote forced closure at position {i}. Discarding broken field, keeping remaining lines.");
                 bInQuotes = false;
                 iQuoteStart = -1;
+                var rgRemaining = sb.ToString().Split('\n');
+                for (int j = 1; j < rgRemaining.Length; j++)
+                {
+                    var sLine = rgRemaining[j];
+                    rgLines.Add(sLine.Length > 0 && sLine[^1] == '\r' ? sLine[..^1] : sLine);
+                }
+                sb.Clear();
+                while (i < sContent.Length && sContent[i] != '\n') i++;
+                continue;
             }
 
             if (c == '"')
             {
+                sb.Append(c);
                 if (bInQuotes && i + 1 < sContent.Length && sContent[i + 1] == '"')
                 {
                     sb.Append('"');
@@ -222,9 +270,19 @@ public static class CsvMapper
         }
 
         if (bInQuotes)
-            LogWarn($"Unclosed quote at end of file.");
-        if (sb.Length > 0)
+        {
+            LogWarn($"Unclosed quote at end of file. Discarding broken field, keeping remaining lines.");
+            var rgRemaining = sb.ToString().Split('\n');
+            for (int j = 1; j < rgRemaining.Length; j++)
+            {
+                var sLine = rgRemaining[j];
+                rgLines.Add(sLine.Length > 0 && sLine[^1] == '\r' ? sLine[..^1] : sLine);
+            }
+        }
+        else if (sb.Length > 0)
+        {
             rgLines.Add(sb.ToString());
+        }
         return rgLines;
     }
 
@@ -241,7 +299,7 @@ public static class CsvMapper
 
             if (bInQuotes && iQuoteStart >= 0 && (i - iQuoteStart) > iMaxQuotedFieldLength)
             {
-                LogWarn($"Unclosed quote forced closure in row at column ~{rgFields.Count + 1}.");
+                LogWarn($"Unclosed quote forced closure in row. Data may be incomplete.");
                 bInQuotes = false;
                 iQuoteStart = -1;
             }
@@ -271,10 +329,11 @@ public static class CsvMapper
         }
 
         if (bInQuotes)
-            LogWarn($"Unclosed quote at end of row.");
+            LogWarn($"Unclosed quote at end of row. Row may be incomplete.");
+
         rgFields.Add(sb.ToString());
 
-        //去掉外层引号 先Trim防行首空格
+        // 去掉外层引号 先Trim防行首空格
         for (int i = 0; i < rgFields.Count; i++)
         {
             var sF = rgFields[i].Trim();
@@ -285,12 +344,6 @@ public static class CsvMapper
         }
 
         return rgFields;
-    }
-
-    private static string GetField(string sRow, int iIndex)
-    {
-        var rgFields = SplitRow(sRow);
-        return iIndex < rgFields.Count ? rgFields[iIndex] : "";
     }
 
     private static string EscapeCsvField(string? sField)
@@ -328,7 +381,8 @@ public static class CsvMapper
                 else
                 {
                     LogWarn($"Failed to parse int '{piProp.Name}': '{sRaw}'. Set to null.");
-                    piProp.SetValue(obj, null);
+                    if (IsNullable(piProp.PropertyType))
+                        piProp.SetValue(obj, null);
                 }
             }
             else if (tTarget == typeof(double))
@@ -340,7 +394,8 @@ public static class CsvMapper
                 else
                 {
                     LogWarn($"Failed to parse double '{piProp.Name}': '{sRaw}'. Set to null.");
-                    piProp.SetValue(obj, null);
+                    if (IsNullable(piProp.PropertyType))
+                        piProp.SetValue(obj, null);
                 }
             }
         }

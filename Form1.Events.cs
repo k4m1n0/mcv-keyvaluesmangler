@@ -731,7 +731,7 @@ public partial class Form1
         RefreshWeaponList();
     }
 
-    private async void RefreshWeaponList()
+    public async void RefreshWeaponList()
     {
         if (bRefreshing) return;
         bRefreshing = true;
@@ -835,6 +835,14 @@ public partial class Form1
         else if (e.Control && e.KeyCode == Keys.D2) { LogService.Debug("Hotkey: Ctrl+2 (focus R)"); e.SuppressKeyPress = true; cmbWeaponsR.Focus(); cmbWeaponsR.DroppedDown = true; }
         else if (e.Control && e.KeyCode == Keys.R) { LogService.Debug("Hotkey: Ctrl+R (refresh)"); e.SuppressKeyPress = true; FlashButton(btnRefresh); RefreshWeaponList(); }
         else if (e.KeyCode == Keys.F5) { LogService.Debug("Hotkey: F5 (refresh)"); e.SuppressKeyPress = true; FlashButton(btnRefresh); RefreshWeaponList(); }
+        #if DEBUG
+                else if (e.Control && e.Shift && e.KeyCode == Keys.F12)
+                {
+                    e.SuppressKeyPress = true;
+                    WeaponDamageCalc.Tools.CsvMapperTests.RunAll();
+                    WeaponDamageCalc.Tools.UndoTests.RunAll(this);
+                }
+        #endif
     }
     #endregion
 }

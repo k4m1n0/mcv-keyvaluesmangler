@@ -141,11 +141,10 @@ public partial class Form1
     {
         LogService.Debug($"PopUndo entry: pending={bUndoPending}, inProgress={bUndoInProgress}, stack={llUndoStack.Count}");
 
-        //停掉防抖和状态Timer防止在撤销过程中干扰C64显示
-        tmrUndo?.Stop(); bUndoPending = false;
         tmrC64Reset?.Stop(); tmrC64Reset?.Dispose(); tmrC64Reset = null;
 
         if (bUndoInProgress) return;
+        if (bUndoPending) { tmrUndo?.Stop(); bUndoPending = false; PushUndo(false); }
         if (llUndoStack.Count < 2)
         {
             LogService.Debug($"PopUndo: stack<2, aborted. stack={llUndoStack.Count}");
@@ -181,10 +180,10 @@ public partial class Form1
     {
         LogService.Debug($"PopRedo entry: pending={bUndoPending}, inProgress={bUndoInProgress}, redo={llRedoStack.Count}");
 
-        tmrUndo?.Stop(); bUndoPending = false;
         tmrC64Reset?.Stop(); tmrC64Reset?.Dispose(); tmrC64Reset = null;
 
         if (bUndoInProgress) return;
+        if (bUndoPending) { tmrUndo?.Stop(); bUndoPending = false; PushUndo(false); }
         if (llRedoStack.Count == 0) return;
         bUndoInProgress = true;
         try
@@ -261,6 +260,8 @@ public partial class Form1
         }
         RestoreAltStatState(true);
         RestoreAltStatState(false);
+        SetAdsEnabledByIronSight(true);
+        SetAdsEnabledByIronSight(false);
         UpdateAllDamage();
         pnlSpread.Invalidate();
         pnlRecoil.Invalidate();
@@ -273,6 +274,15 @@ public partial class Form1
             LoadAltStatsToControls(bIsLeft, amCurrentAltStat);
         else
             RestoreAllNudEnabled(bIsLeft);
+    }
+
+    private void SetAdsEnabledByIronSight(bool bIsLeft)
+    {
+        bool bNoAds = (bIsLeft ? nudIronSightL : nudIronSightR).Value == 0;
+        (bIsLeft ? nudAdsSpreadL : nudAdsSpreadR).Enabled = !bNoAds;
+        (bIsLeft ? nudAdsRecoilUpL : nudAdsRecoilUpR).Enabled = !bNoAds;
+        (bIsLeft ? nudAdsRecoilRightL : nudAdsRecoilRightR).Enabled = !bNoAds;
+        (bIsLeft ? nudIronsightSpeedScaleL : nudIronsightSpeedScaleR).Enabled = !bNoAds;
     }
 
     #endregion

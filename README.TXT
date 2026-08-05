@@ -30,7 +30,7 @@
                    \______/  \______/  \______/  \______/
 
 ================================================================================
-  1. WHAT IS THIS
+  0. WHAT IS THIS
 ================================================================================
 
   Keyvalues Mangler (TM) 5000 is a weapon data editor and wiki publishing
@@ -48,7 +48,7 @@
       (Win/GTK/KDE/Xfce)
 
 ================================================================================
-  2. SYSTEM REQUIREMENTS
+  0. SYSTEM REQUIREMENTS
 ================================================================================
 
   MINIMUM:
@@ -65,7 +65,7 @@
     - Internet connection for wiki stuff
 
 ================================================================================
-  3. QUICK START
+  2. QUICK START
 ================================================================================
 
   GUI MODE:
@@ -84,7 +84,7 @@
     keyvaluesmangler_x.x.x.x_win_amd64[-selfcontained].exe --help
 
 ================================================================================
-  4. KEYBOARD SHORTCUTS
+  3. KEYBOARD SHORTCUTS
 ================================================================================
 
   Ctrl+S            Save changes to weapons.csv (do this often)
@@ -97,7 +97,7 @@
   Ctrl+T            Toggle always on top / minimize
 
 ================================================================================
-  5. FILE REFERENCE
+  4. FILE REFERENCE
 ================================================================================
 
   weapons.csv       Master weapon database
@@ -107,7 +107,7 @@
   wiki\             Wiki conversion cache directory
 
 ================================================================================
-  6. WIKI INTEGRATION
+  5. WIKI INTEGRATION
 ================================================================================
 
   The Wiki Stats Updater (press the Wiki button) provides three functions:
@@ -125,7 +125,7 @@
   Wiki credentials are stored in memory only and cleared on exit
 
 ================================================================================
-  7. PARAMETERS USAGE
+  6. PARAMETERS USAGE
 ================================================================================
 
   GUI MODE:
@@ -157,7 +157,7 @@
   RETURN CODES: 0=OK  1=Usage  2=Login  3=Not Found  4=Unknown  5=Error
 
 ================================================================================
-  8. LIMITATIONS
+  7. LIMITATIONS
 ================================================================================
 
   - Self contained build is ~60 MiB and blame Microsoft not me
@@ -166,7 +166,7 @@
   - Two copies from the same folder will not open, this is intentional
 
 ================================================================================
-  9. BUILD FROM SOURCE
+  8. BUILD FROM SOURCE
 ================================================================================
 
   It just needs a .NET 8.0 SDK
@@ -183,6 +183,28 @@
       -p:InvariantGlobalization=true -o ./publish
 
   Then grab the EXE from .\publish\ and do whatever you want with it
+
+================================================================================
+  9. DEBUG BUILD
+================================================================================
+
+  Debug builds include integrated tests and print results to mangler.log
+  Ctrl+Shift+F12 to run tests at any time without restarting
+
+  BUILD WITH:
+    dotnet publish -c Debug -r win-x64
+    --no-self-contained -p:PublishSingleFile=true -o ./publish
+
+  WHAT IT DOES:
+    - CSV round trip, BOM handling, quoted fields, error recovery, and
+      other you hopefully will never encounter but some crazy MFs will
+    - Verifies that 100 levels of Undo/Redo actually work instead of just
+      looking good in the feature list so you can break 100 things then
+      spam Ctrl+ZZZ and they still get back home in one piece somehow
+
+  WHAT IT DOES NOT DO:
+    - Fix your broken CSV file
+    - Pass magically because you really need this build right now
 
 ================================================================================
   A. CREDITS
