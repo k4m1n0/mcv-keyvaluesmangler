@@ -21,6 +21,22 @@
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 
+  <Target Name="PublishStub" BeforeTargets="Publish">
+    <Exec Command="dotnet publish &quot;$(ProjectDir)Lamarr&quot; -c $(Configuration) -r $(RuntimeIdentifier) --no-self-contained -p:PublishSingleFile=true -p:DebugType=none -p:DebugSymbols=false -o &quot;$(PublishDir)&quot;" />
+    <Exec Command="dotnet build &quot;$(ProjectDir)LamarrPacker&quot; -c $(Configuration)" />
+  </Target>
+
+  <Target Name="LamarrPack" AfterTargets="Publish">
+    <Exec Command="&quot;$(ProjectDir)LamarrPacker\bin\$(Configuration)\net8.0-windows\LamarrPacker.exe&quot; --stub &quot;$(PublishDir)Lamarr.exe&quot; --input &quot;$(PublishDir)WeaponDamageCalc.exe&quot; --output &quot;$(PublishDir)WeaponDamageCalc.exe&quot;" />
+  </Target>
+
+  <ItemGroup>
+    <Compile Remove="Lamarr\**" />
+    <Compile Remove="LamarrPacker\**" />
+    <EmbeddedResource Remove="Lamarr\**" />
+    <EmbeddedResource Remove="LamarrPacker\**" />
+  </ItemGroup>
+
   <ItemGroup>
     <None Update="weapons.csv">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
