@@ -29,33 +29,33 @@ public class PaulaMixer
     #endregion
     #region 字段与初始化
 
-    private readonly Voice[] _rgVoices;
-    private readonly int _iNumVoices;
-    private readonly int _iOutputRate;
+    private readonly Voice[] rgVoices;
+    private readonly int iNumVoices;
+    private readonly int iOutputRate;
     private const int AmigaClock = 3546895;//AMIGA_CLOCK_PAL
 
     //word_8773C0 @ sub_804C70 ; mov word_8773C0[edx*2], ax
-    private readonly int[] _rgMix16 = new int[256];
+    private readonly int[] rgMix16 = new int[256];
 
-    private int _iSamplesPerTick;   //word_8773AA mov word_8773AA, dx
-    private int _iSamplesPerTickPnt;//dword_8773B0 mov dword_8773B0, edx
-    private int _iSamplesAdd;       //dword_8773A0 mov dword_8773A0, ebx
-    private int _iToFill;           //sub_804C70
+    private int iSamplesPerTick;   //word_8773AA mov word_8773AA, dx
+    private int iSamplesPerTickPnt;//dword_8773B0 mov dword_8773B0, edx
+    private int iSamplesAdd;       //dword_8773A0 mov dword_8773A0, ebx
+    private int iToFill;           //sub_804C70
 
     public PaulaMixer(int iNumVoices, int iOutputRate)
     {
-        _iNumVoices = iNumVoices;
-        _iOutputRate = iOutputRate;
-        _rgVoices = new Voice[iNumVoices];
+        this.iNumVoices = iNumVoices;
+        this.iOutputRate = iOutputRate;
+        rgVoices = new Voice[iNumVoices];
         for (int i = 0; i < iNumVoices; i++)
-            _rgVoices[i] = new Voice();
+            rgVoices[i] = new Voice();
 
         //@dumped__00804D12 loc_804D12 ; idiv ecx; mov word_8773C0[edx*2], ax
-        float fVoicesPerChannel = (float)_iNumVoices;
+        float fVoicesPerChannel = (float)this.iNumVoices;
         for (int i = 0; i < 128; i++)
-            _rgMix16[i] = (int)(i * 256 / fVoicesPerChannel);
+            rgMix16[i] = (int)(i * 256 / fVoicesPerChannel);
         for (int i = 0; i < 128; i++)
-            _rgMix16[128 + i] = (int)((-128 + i) * 256 / fVoicesPerChannel);
+            rgMix16[128 + i] = (int)((-128 + i) * 256 / fVoicesPerChannel);
 
         InitVoices();
         SetReplayingSpeed(50);//mov ecx, 32h ; div ecx
@@ -64,7 +64,7 @@ public class PaulaMixer
     //@dumped__00804DA9 loc_804DA9 ; mov [eax-4], ecx; mov [eax], edx
     private void InitVoices()
     {
-        foreach (var v in _rgVoices)
+        foreach (var v in rgVoices)
         {
             v.rgSampleData = null;
             v.iSampleStart = 0;
@@ -85,13 +85,13 @@ public class PaulaMixer
     //@dumped__00804C70 sub_804C70 ; mov eax, 51EB851Fh; imul ecx; sar edx, 4
     public void SetReplayingSpeed(int iTicksPerSecond)
     {
-        _iSamplesPerTick = _iOutputRate / iTicksPerSecond;
-        _iSamplesPerTickPnt = ((_iOutputRate % iTicksPerSecond) * 65536) / iTicksPerSecond;
-        _iSamplesAdd = 0;
-        _iToFill = 0;
+        iSamplesPerTick = iOutputRate / iTicksPerSecond;
+        iSamplesPerTickPnt = ((iOutputRate % iTicksPerSecond) * 65536) / iTicksPerSecond;
+        iSamplesAdd = 0;
+        iToFill = 0;
     }
 
-    public Voice GetVoice(int iIndex) => _rgVoices[iIndex];
+    public Voice GetVoice(int iIndex) => rgVoices[iIndex];
 
     #endregion
     #region 混音填充
@@ -102,31 +102,31 @@ public class PaulaMixer
         //loc_804F66 ; cmp word ptr dword_8773AC, bx ; jbe loc_80503F
         while (iSampleCount > 0)
         {
-            int n = Math.Min(_iToFill, iSampleCount);
+            int n = Math.Min(iToFill, iSampleCount);
             if (n > 0)
             {
                 Fill16bitMonoBlock(rgBuffer, iOffset, n);
                 iOffset += n;
-                _iToFill -= n;
+                iToFill -= n;
                 iSampleCount -= n;
             }
 
-            if (_iToFill == 0)
+            if (iToFill == 0)
             {
                 updateCallback();//call player->run()
 
-                //add _iSamplesAdd, _iSamplesPerTickPnt ; cmp 65535 ; sbb edx, edx ; neg edx
-                int iTemp = _iSamplesAdd + _iSamplesPerTickPnt;
-                _iSamplesAdd = iTemp & 0xFFFF;
-                _iToFill = _iSamplesPerTick + (iTemp > 65535 ? 1 : 0);
+                //add iSamplesAdd, iSamplesPerTickPnt ; cmp 65535 ; sbb edx, edx ; neg edx
+                int iTemp = iSamplesAdd + iSamplesPerTickPnt;
+                iSamplesAdd = iTemp & 0xFFFF;
+                iToFill = iSamplesPerTick + (iTemp > 65535 ? 1 : 0);
 
                 //loc_804F75 ; stepSpeed calc
-                foreach (var v in _rgVoices)
+                foreach (var v in rgVoices)
                 {
                     if (v.bIsOn && v.iCurPeriod != 0)
                     {
-                        v.iStepSpeed = (AmigaClock / _iOutputRate) / v.iCurPeriod;
-                        v.iStepSpeedPnt = (((AmigaClock / _iOutputRate) % v.iCurPeriod) * 65536) / v.iCurPeriod;
+                        v.iStepSpeed = (AmigaClock / iOutputRate) / v.iCurPeriod;
+                        v.iStepSpeedPnt = (((AmigaClock / iOutputRate) % v.iCurPeriod) * 65536) / v.iCurPeriod;
                     }
                     else
                     {
@@ -144,9 +144,9 @@ public class PaulaMixer
     {
         Array.Clear(rgBuffer, iOffset, iSampleCount);//rep stosd
 
-        for (int v = 0; v < _iNumVoices; v++)
+        for (int v = 0; v < iNumVoices; v++)
         {
-            var pv = _rgVoices[v];
+            var pv = rgVoices[v];
             if (!pv.bIsOn || pv.rgSampleData == null) continue;
 
             int iVol = pv.iVolume;            //word_8769BA[ecx]
@@ -170,7 +170,7 @@ public class PaulaMixer
                 if (iPos < iEnd)
                 {
                     //mov dl, [esi] ; movsx edx, byte_877298[edx]
-                    iSample = _rgMix16[rgData[iPos]];
+                    iSample = rgMix16[rgData[iPos]];
                 }
                 //cmp byte_8769C5[ecx], bl ; jz loc_80501D
                 else if (pv.bLooping)
@@ -180,7 +180,7 @@ public class PaulaMixer
                     iEnd = pv.iRepeatEnd;
                     //cmp esi, edx ; jnb loc_80501D
                     if (iPos < iEnd)
-                        iSample = _rgMix16[rgData[iPos]];
+                        iSample = rgMix16[rgData[iPos]];
                     else
                         continue;
                 }

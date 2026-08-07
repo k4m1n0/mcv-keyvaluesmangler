@@ -126,80 +126,80 @@ public class FcPlayer
         }
     }
 
-    private byte[] _rgData = Array.Empty<byte>();//off_8763EC ; fcBuf
-    private int _iDataLen;
-    private readonly Sound[] _rgSounds = new Sound[MaxSamples + MaxWaveforms];
-    private readonly Channel[] _rgCh = new Channel[Channels];
+    private byte[] rgData = Array.Empty<byte>();//off_8763EC ; fcBuf
+    private int iDataLen;
+    private readonly Sound[] rgSounds = new Sound[MaxSamples + MaxWaveforms];
+    private readonly Channel[] rgCh = new Channel[Channels];
     public PaulaMixer Mixer { get; private set; } = null!;
 
-    private int _iTrackTableOffs;  //dword_8763D8
-    private int _iPatternsOffs;    //dword_8763DC
-    private int _iSndModSeqsOffs;  //dword_8763E0
-    private int _iVolModSeqsOffs;  //dword_8763E4
-    private int _iSilenceOffs;     //dword_8763E8
-    private int _iUsedPatterns;    //dword_8763F4
-    private int _iUsedSndModSeqs;  //dword_8763F8
-    private int _iUsedVolModSeqs;  //dword_876400
+    private int iTrackTableOffs;  //dword_8763D8
+    private int iPatternsOffs;    //dword_8763DC
+    private int iSndModSeqsOffs;  //dword_8763E0
+    private int iVolModSeqsOffs;  //dword_8763E4
+    private int iSilenceOffs;     //dword_8763E8
+    private int iUsedPatterns;    //dword_8763F4
+    private int iUsedSndModSeqs;  //dword_8763F8
+    private int iUsedVolModSeqs;  //dword_876400
 
-    private byte _bCount;       //byte_8763F1
-    private byte _bSpeed;       //byte_876840
-    private byte _bRsCount;
-    private bool _bIsEnabled;   //byte_8763F0
-    private bool _bIsFC14;      //byte_8763FC
-    private int _iReadModRecurse;
-    private int _iDmaFlags;     //word_8763F2
+    private byte bCount;       //byte_8763F1
+    private byte bSpeed;       //byte_876840
+    private byte bRsCount;
+    private bool bIsEnabled;   //byte_8763F0
+    private bool bIsFC14;      //byte_8763FC
+    private int iReadModRecurse;
+    private int iDmaFlags;     //word_8763F2
     public bool SongEnd { get; private set; }//byte_8763D4
 
-    public int UsedPatterns => _iUsedPatterns;      //dword_8763F4
-    public int UsedSndModSeqs => _iUsedSndModSeqs;  //dword_8763F8
-    public int UsedVolModSeqs => _iUsedVolModSeqs;  //dword_876400
-    public bool IsFC14 => _bIsFC14;                  //byte_8763FC
+    public int UsedPatterns => iUsedPatterns;      //dword_8763F4
+    public int UsedSndModSeqs => iUsedSndModSeqs;  //dword_8763F8
+    public int UsedVolModSeqs => iUsedVolModSeqs;  //dword_876400
+    public bool IsFC14 => bIsFC14;                  //byte_8763FC
 
     #endregion
     #region 初始化
 
     public FcPlayer()
     {
-        for (int i = 0; i < _rgSounds.Length; i++)
-            _rgSounds[i] = new Sound();
+        for (int i = 0; i < rgSounds.Length; i++)
+            rgSounds[i] = new Sound();
         for (int i = 0; i < Channels; i++)
-            _rgCh[i] = new Channel();
+            rgCh[i] = new Channel();
     }
 
     public void SetMixer(PaulaMixer mixer)
     {
         Mixer = mixer;
         for (int i = 0; i < Channels; i++)
-            _rgCh[i].Voice = mixer.GetVoice(i);
+            rgCh[i].Voice = mixer.GetVoice(i);
     }
 
     //@dumped__00803C30 sub_803C30
-    public bool Init(byte[] rgData)
+    public bool Init(byte[] rgDataIn)
     {
-        _rgData = rgData;
-        _iDataLen = rgData.Length;
+        rgData = rgDataIn;
+        iDataLen = rgDataIn.Length;
 
-        if (_iDataLen < 5) return false;
+        if (iDataLen < 5) return false;
         //loc_803C77
-        _bIsFC14 = (_rgData[0] == 0x46 && _rgData[1] == 0x43 && _rgData[2] == 0x31 && _rgData[3] == 0x34);//FC14
+        bIsFC14 = (rgData[0] == 0x46 && rgData[1] == 0x43 && rgData[2] == 0x31 && rgData[3] == 0x34);//FC14
 
         //loc_803CE6 ; neg al; sbb eax, eax; and al, 0B0h; add eax, 0B4h
-        _iTrackTableOffs = _bIsFC14 ? 0x00B4 : 0x0064;
+        iTrackTableOffs = bIsFC14 ? 0x00B4 : 0x0064;
 
-        _iPatternsOffs = Read32(8);
-        _iUsedPatterns = Read32(12) / PatternLength;
-        _iSndModSeqsOffs = Read32(16);
-        _iUsedSndModSeqs = Read32(20) / 64;
-        _iVolModSeqsOffs = Read32(24);
-        _iUsedVolModSeqs = Read32(28) / 64;
+        iPatternsOffs = Read32(8);
+        iUsedPatterns = Read32(12) / PatternLength;
+        iSndModSeqsOffs = Read32(16);
+        iUsedSndModSeqs = Read32(20) / 64;
+        iVolModSeqsOffs = Read32(24);
+        iUsedVolModSeqs = Read32(28) / 64;
 
         //loc_803CB0 ; add eax, 0FFFFFFF8h
-        _iSilenceOffs = _iDataLen;
-        byte[] rgNewData = new byte[_iDataLen + 8];
-        Array.Copy(_rgData, rgNewData, _iDataLen);
-        Array.Copy(SilenceData, 0, rgNewData, _iDataLen, 8);
-        _rgData = rgNewData;
-        _iDataLen = rgNewData.Length;
+        iSilenceOffs = iDataLen;
+        byte[] rgNewData = new byte[iDataLen + 8];
+        Array.Copy(rgData, rgNewData, iDataLen);
+        Array.Copy(SilenceData, 0, rgNewData, iDataLen, 8);
+        rgData = rgNewData;
+        iDataLen = rgNewData.Length;
 
         //loc_803E11
         int iSampleOffset = Read32(32);
@@ -207,28 +207,28 @@ public class FcPlayer
         for (int sam = 0; sam < 10; sam++)
         {
             int iSampleLength = Read16(iSampleHeader);
-            _rgSounds[sam].iStart = iSampleOffset;
-            _rgSounds[sam].iLen = iSampleLength;
-            _rgSounds[sam].iRepOffs = Read16(iSampleHeader + 2);
-            _rgSounds[sam].iRepLen = Read16(iSampleHeader + 4);
+            rgSounds[sam].iStart = iSampleOffset;
+            rgSounds[sam].iLen = iSampleLength;
+            rgSounds[sam].iRepOffs = Read16(iSampleHeader + 2);
+            rgSounds[sam].iRepLen = Read16(iSampleHeader + 4);
 
             iSampleOffset += iSampleLength * 2;
             iSampleHeader += 6;
         }
 
         //loc_803F6C
-        if (_bIsFC14)
+        if (bIsFC14)
         {
             int iWaveOffset = Read32(36);
             int iWaveHeader = 0x0064;
             for (int wave = 0; wave < 80; wave++)
             {
                 int sam = 10 + wave;
-                int iWaveLength = _rgData[iWaveHeader++];
-                _rgSounds[sam].iStart = iWaveOffset;
-                _rgSounds[sam].iLen = iWaveLength;
-                _rgSounds[sam].iRepOffs = 0;
-                _rgSounds[sam].iRepLen = iWaveLength;
+                int iWaveLength = rgData[iWaveHeader++];
+                rgSounds[sam].iStart = iWaveOffset;
+                rgSounds[sam].iLen = iWaveLength;
+                rgSounds[sam].iRepOffs = 0;
+                rgSounds[sam].iRepLen = iWaveLength;
                 iWaveOffset += iWaveLength;
             }
         }
@@ -238,19 +238,19 @@ public class FcPlayer
 
     public bool Restart(int iStartStep, int iEndStep)
     {
-        _bRsCount = 4;
+        bRsCount = 4;
 
         int iTrackTabLen = Read32(4);
         if (iTrackTabLen == 0)
-            iTrackTabLen = _iPatternsOffs - _iTrackTableOffs;
+            iTrackTabLen = iPatternsOffs - iTrackTableOffs;
 
         //loc_804021 ; channel init
         for (int c = 0; c < Channels; c++)
         {
-            var ch = _rgCh[c];
+            var ch = rgCh[c];
             ch.Reset();
             ch.iDmaMask = (1 << c);
-            ch.iTrackStart = _iTrackTableOffs + c * 3;
+            ch.iTrackStart = iTrackTableOffs + c * 3;
 
             if (iStartStep >= 0 && (iStartStep * TrackTabEntryLength) < iTrackTabLen)
                 ch.iTrackStart += iStartStep * TrackTabEntryLength;
@@ -260,26 +260,26 @@ public class FcPlayer
             else
                 ch.iTrackEnd = ch.iTrackStart + iTrackTabLen;
 
-            ch.iVolSeq = _iSilenceOffs;
-            ch.iSndSeq = _iSilenceOffs + 1;
+            ch.iVolSeq = iSilenceOffs;
+            ch.iSndSeq = iSilenceOffs + 1;
 
             int tt = ch.iTrackStart + ch.iTrackPos;
-            ch.iPattStart = _iPatternsOffs + (_rgData[tt++] << 6);
-            ch.bTranspose = (sbyte)_rgData[tt++];
-            ch.bSoundTranspose = (sbyte)_rgData[tt];
+            ch.iPattStart = iPatternsOffs + (rgData[tt++] << 6);
+            ch.bTranspose = (sbyte)rgData[tt++];
+            ch.bSoundTranspose = (sbyte)rgData[tt];
         }
 
         //loc_804153 ; speed init, default 3
-        _bSpeed = 3;
-        int t = _rgCh[0].iTrackStart;
-        while (t >= _iTrackTableOffs)
+        bSpeed = 3;
+        int t = rgCh[0].iTrackStart;
+        while (t >= iTrackTableOffs)
         {
-            byte s = _rgData[t + 12];
-            if (s > 0) { _bSpeed = s; break; }
+            byte s = rgData[t + 12];
+            if (s > 0) { bSpeed = s; break; }
             t -= TrackTabEntryLength;
         }
-        _bCount = _bSpeed;
-        _bIsEnabled = true;
+        bCount = bSpeed;
+        bIsEnabled = true;
         SongEnd = false;
         return true;
     }
@@ -291,26 +291,26 @@ public class FcPlayer
     public void Run()
     {
         //byte_8763F0 ; test al, al
-        if (!_bIsEnabled) return;
+        if (!bIsEnabled) return;
 
         //mov word_8763F2, 0
-        _iDmaFlags = 0;
+        iDmaFlags = 0;
 
         //byte_8763F1 ; dec al
-        if (--_bCount == 0)
+        if (--bCount == 0)
         {
             //byte_876840 ; mov byte_8763F1, al
-            _bCount = _bSpeed;
-            NextNote(_rgCh[0]);
-            NextNote(_rgCh[1]);
-            NextNote(_rgCh[2]);
-            NextNote(_rgCh[3]);
+            bCount = bSpeed;
+            NextNote(rgCh[0]);
+            NextNote(rgCh[1]);
+            NextNote(rgCh[2]);
+            NextNote(rgCh[3]);
         }
 
         //loc_8042A0 ; lea edi, [esi-4Ch]
         for (int c = 0; c < Channels; c++)
         {
-            var ch = _rgCh[c];
+            var ch = rgCh[c];
 
             //sub_804C00 ; repeatDelay
             if (ch.iRepeatDelay > 0)
@@ -337,8 +337,8 @@ public class FcPlayer
         //loc_804311 ; shl eax, cl; test ecx, eax
         for (int c = 0; c < Channels; c++)
         {
-            if ((_iDmaFlags & (1 << c)) != 0)
-                _rgCh[c].Voice.bIsOn = true;
+            if ((iDmaFlags & (1 << c)) != 0)
+                rgCh[c].Voice.bIsOn = true;
         }
     }
 
@@ -348,7 +348,7 @@ public class FcPlayer
         int iPattOffs = ch.iPattStart + ch.iPattPos;
 
         //PATTERN_BREAK 0x49
-        if (ch.iPattPos >= PatternLength || (_bIsFC14 && _rgData[iPattOffs] == 0x49))
+        if (ch.iPattPos >= PatternLength || (bIsFC14 && rgData[iPattOffs] == 0x49))
         {
             ch.iPattPos = 0;
             ch.iTrackPos += TrackTabEntryLength;
@@ -361,22 +361,22 @@ public class FcPlayer
                 SongEnd = true;
             }
 
-            if (++_bRsCount == 5)
+            if (++bRsCount == 5)
             {
-                _bRsCount = 1;
-                byte bNewSpeed = _rgData[iTrackOffs + 12];//RS
-                if (bNewSpeed != 0) _bCount = _bSpeed = bNewSpeed;
+                bRsCount = 1;
+                byte bNewSpeed = rgData[iTrackOffs + 12];//RS
+                if (bNewSpeed != 0) bCount = bSpeed = bNewSpeed;
             }
 
             //loc_8040F6
-            ch.iPattStart = _iPatternsOffs + (_rgData[iTrackOffs++] << 6);
-            ch.bTranspose = (sbyte)_rgData[iTrackOffs++];
-            ch.bSoundTranspose = (sbyte)_rgData[iTrackOffs];
+            ch.iPattStart = iPatternsOffs + (rgData[iTrackOffs++] << 6);
+            ch.bTranspose = (sbyte)rgData[iTrackOffs++];
+            ch.bSoundTranspose = (sbyte)rgData[iTrackOffs];
             iPattOffs = ch.iPattStart;
         }
 
-        byte bNote = _rgData[iPattOffs++];
-        byte bInfo1 = _rgData[iPattOffs];
+        byte bNote = rgData[iPattOffs++];
+        byte bInfo1 = rgData[iPattOffs];
 
         if (bNote != 0)
         {
@@ -384,31 +384,31 @@ public class FcPlayer
             ch.bPortaInfo = 0;
             ch.bNoteValue = (byte)(bNote & 0x7F);
 
-            _iDmaFlags |= ch.iDmaMask;
+            iDmaFlags |= ch.iDmaMask;
 
             int iSound = (bInfo1 & 0x3F) + ch.bSoundTranspose;
             iSound &= 0x3F;
 
             int iSeqOffs;
-            if (iSound > (_iUsedVolModSeqs - 1))
-                iSeqOffs = _iSilenceOffs;
+            if (iSound > (iUsedVolModSeqs - 1))
+                iSeqOffs = iSilenceOffs;
             else
-                iSeqOffs = _iVolModSeqsOffs + (iSound << 6);
+                iSeqOffs = iVolModSeqsOffs + (iSound << 6);
 
-            ch.bEnvelopeSpeed = ch.bEnvelopeCount = _rgData[iSeqOffs++];
-            iSound = _rgData[iSeqOffs++];
-            ch.bVibSpeed = _rgData[iSeqOffs++];
+            ch.bEnvelopeSpeed = ch.bEnvelopeCount = rgData[iSeqOffs++];
+            iSound = rgData[iSeqOffs++];
+            ch.bVibSpeed = rgData[iSeqOffs++];
             ch.bVibFlag = 0x40;
-            ch.bVibAmpl = ch.bVibCurOffs = _rgData[iSeqOffs++];
-            ch.bVibDelay = _rgData[iSeqOffs++];
+            ch.bVibAmpl = ch.bVibCurOffs = rgData[iSeqOffs++];
+            ch.bVibDelay = rgData[iSeqOffs++];
             ch.iVolSeq = iSeqOffs;
             ch.iVolSeqPos = 0;
             ch.bVolSustainTime = 0;
 
-            if (iSound > (_iUsedSndModSeqs - 1))
-                iSeqOffs = _iSilenceOffs + 1;
+            if (iSound > (iUsedSndModSeqs - 1))
+                iSeqOffs = iSilenceOffs + 1;
             else
-                iSeqOffs = _iSndModSeqsOffs + (iSound << 6);
+                iSeqOffs = iSndModSeqsOffs + (iSound << 6);
 
             ch.iSndSeq = iSeqOffs;
             ch.iSndSeqPos = 0;
@@ -417,7 +417,7 @@ public class FcPlayer
 
         //loc_804340
         if ((bInfo1 & 0x40) != 0) ch.bPortaInfo = 0;
-        if ((bInfo1 & 0x80) != 0) ch.bPortaInfo = (byte)(_rgData[iPattOffs + 2] & 0x3F);
+        if ((bInfo1 & 0x80) != 0) ch.bPortaInfo = (byte)(rgData[iPattOffs + 2] & 0x3F);
 
         ch.iPattPos += 2;
     }
@@ -432,25 +432,25 @@ public class FcPlayer
             ProcessPerVol(ch);
             return;
         }
-        _iReadModRecurse = 0;
+        iReadModRecurse = 0;
         ReadModCommand(ch);
     }
 
     //@dumped__00804550 loc_804550 ; readModCommand
     private void ReadModCommand(Channel ch)
     {
-        if (++_iReadModRecurse > RecurseLimit) return;
+        if (++iReadModRecurse > RecurseLimit) return;
 
         int iSeqOffs = ch.iSndSeq + ch.iSndSeqPos;
 
         //SNDMOD_LOOP
-        if (_rgData[iSeqOffs] == SndModLoop)
+        if (rgData[iSeqOffs] == SndModLoop)
         {
-            ch.iSndSeqPos = _rgData[iSeqOffs + 1] & 0x3F;
+            ch.iSndSeqPos = rgData[iSeqOffs + 1] & 0x3F;
             iSeqOffs = ch.iSndSeq + ch.iSndSeqPos;
         }
 
-        byte bCmd = _rgData[iSeqOffs];
+        byte bCmd = rgData[iSeqOffs];
 
         if (bCmd == SndModEnd)
         {
@@ -460,11 +460,11 @@ public class FcPlayer
         {
             //loc_804603
             ch.Voice.bIsOn = false;
-            _iDmaFlags |= ch.iDmaMask;
+            iDmaFlags |= ch.iDmaMask;
             ch.iVolSeqPos = 0;
             ch.bEnvelopeCount = 1;
 
-            SetWave(ch, _rgData[iSeqOffs + 1]);
+            SetWave(ch, rgData[iSeqOffs + 1]);
             ch.iSndSeqPos += 2;
             ReadSeqTranspose(ch);
             ProcessPerVol(ch);
@@ -472,7 +472,7 @@ public class FcPlayer
         else if (bCmd == SndModChangeWave)
         {
             //loc_804690
-            SetWave(ch, _rgData[iSeqOffs + 1]);
+            SetWave(ch, rgData[iSeqOffs + 1]);
             ch.iSndSeqPos += 2;
             ReadSeqTranspose(ch);
             ProcessPerVol(ch);
@@ -480,15 +480,15 @@ public class FcPlayer
         else if (bCmd == SndModNewSeq)
         {
             //loc_8045B7 ; shl edx, 6
-            int iSeq = _rgData[iSeqOffs + 1];
-            ch.iSndSeq = _iSndModSeqsOffs + (iSeq << 6);
+            int iSeq = rgData[iSeqOffs + 1];
+            ch.iSndSeq = iSndModSeqsOffs + (iSeq << 6);
             ch.iSndSeqPos = 0;
             ReadModCommand(ch);
         }
         else if (bCmd == SndModSustain)
         {
             //loc_8045DB
-            ch.bSndModSustainTime = _rgData[iSeqOffs + 1];
+            ch.bSndModSustainTime = rgData[iSeqOffs + 1];
             ch.iSndSeqPos += 2;
             if (ch.bSndModSustainTime != 0)
             {
@@ -501,16 +501,16 @@ public class FcPlayer
         else if (bCmd == SndModNewVib)
         {
             //loc_8048A8
-            ch.bVibSpeed = _rgData[iSeqOffs + 1];
-            ch.bVibAmpl = _rgData[iSeqOffs + 2];
+            ch.bVibSpeed = rgData[iSeqOffs + 1];
+            ch.bVibAmpl = rgData[iSeqOffs + 2];
             ch.iSndSeqPos += 3;
             ProcessPerVol(ch);
         }
         else if (bCmd == SndModPitchBend)
         {
             //loc_8048D4
-            ch.bPitchBendSpeed = (sbyte)_rgData[iSeqOffs + 1];
-            ch.bPitchBendTime = _rgData[iSeqOffs + 2];
+            ch.bPitchBendSpeed = (sbyte)rgData[iSeqOffs + 1];
+            ch.bPitchBendTime = rgData[iSeqOffs + 2];
             ch.iSndSeqPos += 3;
             ReadSeqTranspose(ch);
             ProcessPerVol(ch);
@@ -526,17 +526,17 @@ public class FcPlayer
     //loc_804904 ; inc word ptr [esi+38h]; mov [esi+1Ch], al
     private void ReadSeqTranspose(Channel ch)
     {
-        ch.bSeqTranspose = (sbyte)_rgData[ch.iSndSeq + ch.iSndSeqPos];
+        ch.bSeqTranspose = (sbyte)rgData[ch.iSndSeq + ch.iSndSeqPos];
         ch.iSndSeqPos++;
     }
 
     //@dumped__00804603 loc_804603 ; setWave
     private void SetWave(Channel ch, byte bNum)
     {
-        var snd = _rgSounds[bNum];
+        var snd = rgSounds[bNum];
         ch.iPSampleStart = snd.iStart;
         ch.Voice.iSampleStart = snd.iStart;
-        ch.Voice.rgSampleData = _rgData;
+        ch.Voice.rgSampleData = rgData;
 
         if (bNum < 10)
         {
@@ -613,27 +613,27 @@ public class FcPlayer
                     if (++iJumpCount > RecurseLimit) break;
 
                     int iSeqOffs = ch.iVolSeq + ch.iVolSeqPos;
-                    byte bCmd = _rgData[iSeqOffs];
+                    byte bCmd = rgData[iSeqOffs];
 
                     //lea edi, [edx-0E0h]; cmp edi, 0Ah
                     if (bCmd == EnvelopeSustain)
                     {
-                        ch.bVolSustainTime = _rgData[iSeqOffs + 1];
+                        ch.bVolSustainTime = rgData[iSeqOffs + 1];
                         if (ch.bVolSustainTime == 0) ch.bVolSustainTime = 1;
                         ch.iVolSeqPos += 2;
                         bRepeat = true;
                     }
                     else if (bCmd == EnvelopeSlide)
                     {
-                        ch.bVolSlideSpeed = _rgData[iSeqOffs + 1];
-                        ch.bVolSlideTime = _rgData[iSeqOffs + 2];
+                        ch.bVolSlideSpeed = rgData[iSeqOffs + 1];
+                        ch.bVolSlideTime = rgData[iSeqOffs + 2];
                         ch.iVolSeqPos += 3;
                         VolSlide(ch);
                     }
                     else if (bCmd == EnvelopeLoop)
                     {
                         //sub al, 5; and eax, 3Fh
-                        ch.iVolSeqPos = _rgData[iSeqOffs + 1] & 0x3F;
+                        ch.iVolSeqPos = rgData[iSeqOffs + 1] & 0x3F;
                         if (ch.iVolSeqPos >= 5) ch.iVolSeqPos -= 5;
                         else ch.iVolSeqPos = 0;
                         bReadNext = true;
@@ -644,7 +644,7 @@ public class FcPlayer
                     }
                     else
                     {
-                        ch.bVolume = (sbyte)_rgData[iSeqOffs];
+                        ch.bVolume = (sbyte)rgData[iSeqOffs];
                         if (ch.bVolume > 64) ch.bVolume = 64;
                         if (ch.bVolume < 0) ch.bVolume = 0;
                         if (ch.bEnvelopeSpeed != 0) ch.iVolSeqPos++;
@@ -730,13 +730,13 @@ public class FcPlayer
 
     private int Read16(int iOffset)
     {
-        return (_rgData[iOffset] << 8) | _rgData[iOffset + 1];
+        return (rgData[iOffset] << 8) | rgData[iOffset + 1];
     }
 
     private int Read32(int iOffset)
     {
-        return (_rgData[iOffset] << 24) | (_rgData[iOffset + 1] << 16) |
-               (_rgData[iOffset + 2] << 8) | _rgData[iOffset + 3];
+        return (rgData[iOffset] << 24) | (rgData[iOffset + 1] << 16) |
+               (rgData[iOffset + 2] << 8) | rgData[iOffset + 3];
     }
     #endregion
 }

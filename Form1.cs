@@ -6,7 +6,6 @@ using System.Reflection;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
-using WeaponDamageCalc.Demo;
 using WeaponDamageCalc.Models;
 using WeaponDamageCalc.Services;
 using WeaponDamageCalc.Tools;
@@ -105,15 +104,7 @@ public partial class Form1 : Form
             MarkPanelControls();
             if (SystemUsesDarkMode())
                 ApplyDarkMode();
-
-            #if DEBUG
-                CsvMapper.s_bSuppressMessageBox = true;
-                var demo = new KeygenRenderer(pnlSpread);
-            #else
-                prSpreadRenderer = new PanelRenderer(pnlSpread);
-                prRecoilRenderer = new PanelRenderer(pnlRecoil);
-            #endif
-
+                
             this.KeyPreview = true;
             this.KeyDown += Form1_KeyDown;
             this.FormClosing += Form1_FormClosing;

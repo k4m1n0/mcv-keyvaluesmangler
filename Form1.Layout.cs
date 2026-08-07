@@ -1,5 +1,7 @@
 using System.Drawing;
+using System.Threading.Tasks;
 using System.Windows.Forms;
+using WeaponDamageCalc.Demo;
 using WeaponDamageCalc.Services;
 
 namespace WeaponDamageCalc;
@@ -16,6 +18,7 @@ public partial class Form1
     private Label lblC64_1 = null!;
     private Label lblC64_2 = null!;
     private Label lblC64_3 = null!;
+    private KeygenRenderer? _keygenRenderer;
 
     private System.Windows.Forms.Timer? tmrC64;
     private System.Windows.Forms.Timer? tmrC64Reset;
@@ -44,17 +47,26 @@ public partial class Form1
         lblC64_2 = new Label { Location = new Point(iCx, 686), Size = new Size(300, 13), Font = new Font("Consolas", 8, FontStyle.Bold), ForeColor = Color.FromArgb(200, 200, 255), BackColor = Color.FromArgb(60, 60, 160), TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0), Padding = new Padding(0) };
         lblC64_3 = new Label { Location = new Point(iCx, 697), Size = new Size(300, 13), Font = new Font("Consolas", 8, FontStyle.Bold), ForeColor = Color.FromArgb(200, 200, 255), BackColor = Color.FromArgb(60, 60, 160), TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0), Padding = new Padding(0) };
 
-        var sTadaPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Media", "tada.wav");
-        System.Media.SoundPlayer? spTada = File.Exists(sTadaPath) ? new System.Media.SoundPlayer(sTadaPath) : null;
-        void PlayTada() { try { spTada?.Play(); } catch { } }
-        lblC64_1.Click += (_, _) => PlayTada();
-        lblC64_2.Click += (_, _) => PlayTada();
-        lblC64_3.Click += (_, _) => PlayTada();
+        lblC64_1.Click += (_, _) => ToggleKeygenRenderer();
+        lblC64_2.Click += (_, _) => ToggleKeygenRenderer();
+        lblC64_3.Click += (_, _) => ToggleKeygenRenderer();
 
         this.Controls.Add(lblC64_1);
         this.Controls.Add(lblC64_2);
         this.Controls.Add(lblC64_3);
         UpdateC64Labels(rgWeapons.Count > 0);
+    }
+
+    private void ToggleKeygenRenderer()
+    {
+        if (_keygenRenderer != null)
+        {
+            _keygenRenderer.Dispose();
+            _keygenRenderer = null;
+            pnlSpread.Invalidate();
+            return;
+        }
+        _keygenRenderer = new KeygenRenderer(pnlSpread);
     }
 
     private void UpdateC64Labels(bool bHasData)

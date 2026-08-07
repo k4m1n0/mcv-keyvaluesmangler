@@ -48,13 +48,23 @@ public class KeygenRenderer : IDisposable
     private const double dblScrollAmp = 5504.0;             //dbl_806168
 
     // Sin 查找表
-    private const int _iSinLutSize = 1024;
-    private const double _dblSinLutFactor = _iSinLutSize / (Math.PI * 2);
-    private static readonly double[] _sinLut = InitSinLut();
+    private const int iSinLutSize = 1024;
+    private const double dblSinLutFactor = iSinLutSize / (Math.PI * 2);
+    private static readonly double[] dblSinLut = InitSinLut();
 
     private const string sScrollText =
-        "                                        Keyvalues Mangler (TM) 5000                                        Made with Visual Studio and spite" +
+        "                                        WeaponDamageCalc                                        Made with Visual Studio and spite" +
         "                                        礦ision 5                                        Error: Flash Download Failed                                        Target not created";
+
+    private const string sMainText =
+        " *******  ********        **   ******   **    **   ******   **    **              ******   ********  **    **        **   ******   **    **   **    **  ********  **    **" +
+        "**    **        **        **  **    **  **   ***  **    **  ***  ***             **    **        **  **    **        **  **    **  **    **   **    **        **   **   **" +
+        "**    **        **        **        **  **  ****  **    **  ***  ***                   **        **  **    **        **  **    **  **    **    **  **         **    **  **" +
+        " *******    ******        **  ****  **  ** ** **  ********  ** ** **              ******     ******  **    **        **  ********  **    **     ****      ******     *****" +
+        "**    **        **        **  **    **  ****  **  **    **  ** ** **             **              **  **    **        **  **    **   **  **       **           **    **  **" +
+        "**    **        **        **  **    **  ***   **  **    **  **    **             **    **        **  **    **        **  **    **   **  **       **           **   **   **" +
+        "**    **        **        **  **    **  **    **  **    **  **    **             **    **        **  **    **        **  **    **    ****        **           **  **    **" +
+        "**    **  ********  ********   ******   **    **  **    **  **    **              ******   ********   ******   ********  **    **     **         **     ********  **    **";
 
     private uint[] rgFramebuffer = new uint[iFbSize];
     private Bitmap? bmpFrame;
@@ -75,23 +85,13 @@ public class KeygenRenderer : IDisposable
     private int iScrollTextWidth;
     private int iScrollTextHeight;
 
-    private byte[]? _rgScrollPixels;
-    private int _iScrollStride;
-    private byte[]? _rgManaged;
+    private byte[]? rgScrollPixels;
+    private int iScrollStride;
+    private byte[]? rgManaged;
 
     private int iAnimCounter;//dword_82F4F0
     private bool bDisposed;
-    private FcAudioPlayer? _fcAudio;
-
-    private const string sMainText =
-        " *******  ********        **   ******   **    **   ******   **    **              ******   ********  **    **        **   ******   **    **   **    **  ********  **    **" +
-        "**    **        **        **  **    **  **   ***  **    **  ***  ***             **    **        **  **    **        **  **    **  **    **   **    **        **   **   **" +
-        "**    **        **        **        **  **  ****  **    **  ***  ***                   **        **  **    **        **  **    **  **    **    **  **         **    **  **" +
-        " *******    ******        **  ****  **  ** ** **  ********  ** ** **              ******     ******  **    **        **  ********  **    **     ****      ******     *****" +
-        "**    **        **        **  **    **  ****  **  **    **  ** ** **             **              **  **    **        **  **    **   **  **       **           **    **  **" +
-        "**    **        **        **  **    **  ***   **  **    **  **    **             **    **        **  **    **        **  **    **   **  **       **           **   **   **" +
-        "**    **        **        **  **    **  **    **  **    **  **    **             **    **        **  **    **        **  **    **    ****        **           **  **    **" +
-        "**    **  ********  ********   ******   **    **  **    **  **    **              ******   ********   ******   ********  **    **     **         **     ********  **    **";
+    private FcAudioPlayer? fcPlayer;
 
     public KeygenRenderer(Control ctrlTarget)
     {
@@ -101,7 +101,7 @@ public class KeygenRenderer : IDisposable
 
         InitParticles();
         InitScrollText();
-        _rgManaged = new byte[iFbSize * 4];
+        rgManaged = new byte[iFbSize * 4];
 
         bmpFrame = new Bitmap(iBmpWidth, iBmpHeight, PixelFormat.Format32bppArgb);
 
@@ -116,9 +116,11 @@ public class KeygenRenderer : IDisposable
             if (stream != null)
             {
                 var fcData = new byte[stream.Length];
-                stream.Read(fcData, 0, fcData.Length);
-                _fcAudio = new FcAudioPlayer(fcData);
-                _fcAudio.Play();
+                int iRead = 0;
+                while (iRead < fcData.Length)
+                    iRead += stream.Read(fcData, iRead, fcData.Length - iRead);
+                fcPlayer = new FcAudioPlayer(fcData);
+                fcPlayer.Play();
             }
         }
         catch (Exception ex)
@@ -131,33 +133,40 @@ public class KeygenRenderer : IDisposable
     {
         if (bDisposed) return;
         bDisposed = true;
+
         tmrFrame.Stop();
+        tmrFrame.Tick -= OnTick;
         tmrFrame.Dispose();
+
+        fcPlayer?.Dispose();
+        fcPlayer = null;
+
+        ctrlTarget.Paint -= OnPaint;
         bmpFrame?.Dispose();
         bmpScrollText?.Dispose();
-        _rgScrollPixels = null;
-        _rgManaged = null;
-        _fcAudio?.Dispose();
+        rgScrollPixels = null;
+        rgManaged = null;
     }
 
     private static double[] InitSinLut()
     {
-        var lut = new double[_iSinLutSize];
-        for (int i = 0; i < _iSinLutSize; i++)
-            lut[i] = Math.Sin(i * 2.0 * Math.PI / _iSinLutSize);
+        var lut = new double[iSinLutSize];
+        for (int i = 0; i < iSinLutSize; i++)
+            lut[i] = Math.Sin(i * 2.0 * Math.PI / iSinLutSize);
         return lut;
     }
 
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-    private static double Sin(double phase)
+    private static double Sin(double dblPhase)
     {
-        phase = phase % (Math.PI * 2);
-        int idx = (int)(phase * _dblSinLutFactor + _iSinLutSize * 1024.0) & (_iSinLutSize - 1);
-        return _sinLut[idx];
+        dblPhase %= Math.PI * 2;
+        if (dblPhase < 0) dblPhase += Math.PI * 2;
+        int idx = (int)(dblPhase * dblSinLutFactor) & (iSinLutSize - 1);
+        return dblSinLut[idx];
     }
 
-    private static int Ftol(double dblVal) => (int)Math.Truncate(dblVal);
     private int Rand() => rng.Next(0x10000);//nrandom, 0FFFFh
+    private static int Ftol(double dblVal) => (int)Math.Truncate(dblVal);
 
     //@dumped__0080200a
     private void InitParticles()
@@ -205,9 +214,9 @@ public class KeygenRenderer : IDisposable
         var bmpData = bmpScrollText.LockBits(
             new Rectangle(0, 0, iScrollTextWidth, iScrollTextHeight),
             ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
-        _rgScrollPixels = new byte[bmpData.Stride * iScrollTextHeight];
-        _iScrollStride = bmpData.Stride;
-        Marshal.Copy(bmpData.Scan0, _rgScrollPixels, 0, _rgScrollPixels.Length);
+        rgScrollPixels = new byte[bmpData.Stride * iScrollTextHeight];
+        iScrollStride = bmpData.Stride;
+        Marshal.Copy(bmpData.Scan0, rgScrollPixels, 0, rgScrollPixels.Length);
         bmpScrollText.UnlockBits(bmpData);
         if (iScrollTextWidth <= 0) iScrollTextWidth = 1;
         if (iScrollTextHeight <= 0) iScrollTextHeight = 1;
@@ -330,13 +339,13 @@ public class KeygenRenderer : IDisposable
                 if (sText[iIdx] != '*') continue;//cmp byte ptr [ebp], 02ah
 
                 //fild row+iAnimCounter*2, fmul dbl_806170, fsin, fmul dbl_806168, ftol, sar 8
-                float fArgY = (row + iAnimCounter * 2.0f) * 60f;
-                double dblSinY = Sin(fArgY * dblSineFreq) * dbl4096;
+                double dblArgY = (row + iAnimCounter * 2.0) * 60.0;
+                double dblSinY = Sin(dblArgY * dblSineFreq) * dbl4096;
                 int iY = (Ftol(dblSinY) >> 8) + col * 8 + 120;//sar eax,8; + col*8 + offset
 
                 //fild row+iAnimCounter, fmul dbl_806170, fsin, fmul dbl_806168, ftol, sar 5
-                float fArgX = (row + iAnimCounter * 0.5f) * 45f + iAnimCounter * 4f;
-                double dblSinX = Sin(fArgX * dblSineFreq) * dbl4096;
+                double dblArgX = (row + iAnimCounter * 0.5) * 45.0 + iAnimCounter * 4.0;
+                double dblSinX = Sin(dblArgX * dblSineFreq) * dbl4096;
                 int iX = 145 - (Ftol(dblSinX) >> 5);//0xAA - (sin>>5), sar eax,5
 
                 int iR = (int)(Sin((iX + iAnimCounter) * 0.02) * 40 + 40);
@@ -354,7 +363,7 @@ public class KeygenRenderer : IDisposable
 
     private void Draw_ScrollText()
     {
-        if (_rgScrollPixels == null) return;
+        if (rgScrollPixels == null) return;
 
         //dec dword_8759FC; cmp -10h
         dblScrollOffset -= 1.0;
@@ -371,8 +380,8 @@ public class KeygenRenderer : IDisposable
 
         double dblBaseX = dblScrollOffset - iScrollCharIdx * 9.0;//add ebx,9
 
-        byte[] rgPixels = _rgScrollPixels;
-        int iStride = _iScrollStride;
+        byte[] rgPixels = rgScrollPixels;
+        int iStride = iScrollStride;
         int iTextTop = (iBmpHeight - iScrollTextHeight) / 2;
 
         for (int iScreenX = 0; iScreenX < iBmpWidth; iScreenX++)
@@ -436,13 +445,13 @@ public class KeygenRenderer : IDisposable
 
     private void UpdateBitmapFromFramebuffer()
     {
-        if (bmpFrame == null || _rgManaged == null) return;
+        if (bmpFrame == null || rgManaged == null) return;
 
         var rect = new Rectangle(0, 0, iBmpWidth, iBmpHeight);
         var bmpData = bmpFrame.LockBits(rect, ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
 
-        Buffer.BlockCopy(rgFramebuffer, 0, _rgManaged, 0, iFbSize * 4);
-        Marshal.Copy(_rgManaged, 0, bmpData.Scan0, _rgManaged.Length);
+        Buffer.BlockCopy(rgFramebuffer, 0, rgManaged, 0, iFbSize * 4);
+        Marshal.Copy(rgManaged, 0, bmpData.Scan0, rgManaged.Length);
 
         bmpFrame.UnlockBits(bmpData);
     }

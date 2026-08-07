@@ -19,27 +19,27 @@ public class FcAudioPlayer : IDisposable
     private const int iBufferSampleFrames = 8192;
     private const int iBufferByteSize = iBufferSampleFrames * iBlockAlign;
 
-    private readonly FcPlayer _fcPlayer;
-    private readonly PaulaMixer _mixer;
+    private readonly FcPlayer fcPlayer;
+    private readonly PaulaMixer mixer;
 
-    private IntPtr _hWaveOut;
-    private WaveNative.WAVEFORMATEX _wfFormat;
-    private WaveNative.WaveOutCallback? _pfnCallback;
+    private IntPtr hWaveOut;
+    private WaveNative.WAVEFORMATEX wfFormat;
+    private WaveNative.WaveOutCallback? pfnCallback;
 
-    private readonly WaveNative.WAVEHDR[] _rgWaveHdr;
-    private readonly GCHandle[] _rgHdrHandle;
-    private readonly IntPtr[] _rgHdrPtr;
-    private readonly GCHandle[] _rgBufHandle;
-    private readonly byte[][] _rgPlayBuf;
+    private readonly WaveNative.WAVEHDR[] rgWaveHdr;
+    private readonly GCHandle[] rgHdrHandle;
+    private readonly IntPtr[] rgHdrPtr;
+    private readonly GCHandle[] rgBufHandle;
+    private readonly byte[][] rgPlayBuf;
 
-    private Thread? _thAudio;
-    private volatile bool _bAudioRunning;
-    private bool _bDisposed;
-    private readonly short[] _rgMixBuf;
+    private Thread? thAudio;
+    private volatile bool bAudioRunning;
+    private bool bDisposed;
+    private readonly short[] rgMixBuf;
 
-    public bool IsPlaying => _bAudioRunning;
-    public bool SongEnded => _fcPlayer.SongEnd;
-    public PaulaMixer Mixer => _mixer;
+    public bool IsPlaying => bAudioRunning;
+    public bool SongEnded => fcPlayer.SongEnd;
+    public PaulaMixer Mixer => mixer;
 
     #endregion
     #region 初始化
@@ -53,16 +53,16 @@ public class FcAudioPlayer : IDisposable
             rgFcData[2] != '1' || rgFcData[3] != '4')
             throw new ArgumentException("Not a valid FC14 file");
 
-        _fcPlayer = new FcPlayer();
-        _mixer = new PaulaMixer(4, iSampleRate);
-        _fcPlayer.SetMixer(_mixer);
+        fcPlayer = new FcPlayer();
+        mixer = new PaulaMixer(4, iSampleRate);
+        fcPlayer.SetMixer(mixer);
 
-        if (!_fcPlayer.Init(rgFcData))
+        if (!fcPlayer.Init(rgFcData))
             throw new InvalidOperationException("FC module init failed");
 
-        LogService.Info($"[FcAudio] FC module loaded: patterns={_fcPlayer.UsedPatterns}, samples=10, waveforms=80");
+        LogService.Info($"[FcAudio] FC module loaded: patterns={fcPlayer.UsedPatterns}, samples=10, waveforms=80");
 
-        _wfFormat = new WaveNative.WAVEFORMATEX
+        wfFormat = new WaveNative.WAVEFORMATEX
         {
             wFormatTag = 1,//WAVE_FORMAT_PCM
             nChannels = iOutputChannels,
@@ -73,21 +73,21 @@ public class FcAudioPlayer : IDisposable
             cbSize = 0
         };
 
-        _rgWaveHdr = new WaveNative.WAVEHDR[iBufferCount];
-        _rgHdrHandle = new GCHandle[iBufferCount];
-        _rgHdrPtr = new IntPtr[iBufferCount];
-        _rgBufHandle = new GCHandle[iBufferCount];
-        _rgPlayBuf = new byte[iBufferCount][];
-        _rgMixBuf = new short[iBufferSampleFrames];
+        rgWaveHdr = new WaveNative.WAVEHDR[iBufferCount];
+        rgHdrHandle = new GCHandle[iBufferCount];
+        rgHdrPtr = new IntPtr[iBufferCount];
+        rgBufHandle = new GCHandle[iBufferCount];
+        rgPlayBuf = new byte[iBufferCount][];
+        rgMixBuf = new short[iBufferSampleFrames];
 
         for (int i = 0; i < iBufferCount; i++)
         {
-            _rgPlayBuf[i] = new byte[iBufferByteSize];
-            _rgBufHandle[i] = GCHandle.Alloc(_rgPlayBuf[i], GCHandleType.Pinned);
+            rgPlayBuf[i] = new byte[iBufferByteSize];
+            rgBufHandle[i] = GCHandle.Alloc(rgPlayBuf[i], GCHandleType.Pinned);
 
-            _rgWaveHdr[i] = new WaveNative.WAVEHDR
+            rgWaveHdr[i] = new WaveNative.WAVEHDR
             {
-                lpData = _rgBufHandle[i].AddrOfPinnedObject(),
+                lpData = rgBufHandle[i].AddrOfPinnedObject(),
                 dwBufferLength = (uint)iBufferByteSize,
                 dwBytesRecorded = 0,
                 dwUser = IntPtr.Zero,
@@ -97,8 +97,8 @@ public class FcAudioPlayer : IDisposable
                 reserved = IntPtr.Zero
             };
 
-            _rgHdrHandle[i] = GCHandle.Alloc(_rgWaveHdr[i], GCHandleType.Pinned);
-            _rgHdrPtr[i] = _rgHdrHandle[i].AddrOfPinnedObject();
+            rgHdrHandle[i] = GCHandle.Alloc(rgWaveHdr[i], GCHandleType.Pinned);
+            rgHdrPtr[i] = rgHdrHandle[i].AddrOfPinnedObject();
         }
     }
 
@@ -111,14 +111,14 @@ public class FcAudioPlayer : IDisposable
 
     public void Play()
     {
-        if (_bDisposed) throw new ObjectDisposedException(nameof(FcAudioPlayer));
-        if (_bAudioRunning) return;
+        if (bDisposed) throw new ObjectDisposedException(nameof(FcAudioPlayer));
+        if (bAudioRunning) return;
 
         LogService.Info("[FcAudio] Starting FC playback");
 
-        _pfnCallback = OnWaveOutCallback;
-        int mmr = WaveNative.waveOutOpen(out _hWaveOut, -1, ref _wfFormat,//WAVE_MAPPER
-            Marshal.GetFunctionPointerForDelegate(_pfnCallback),
+        pfnCallback = OnWaveOutCallback;
+        int mmr = WaveNative.waveOutOpen(out hWaveOut, -1, ref wfFormat,//WAVE_MAPPER
+            Marshal.GetFunctionPointerForDelegate(pfnCallback),
             IntPtr.Zero, 0x30000);//CALLBACK_FUNCTION
         if (mmr != 0)
         {
@@ -129,66 +129,81 @@ public class FcAudioPlayer : IDisposable
         uint uHdrSize = (uint)Marshal.SizeOf<WaveNative.WAVEHDR>();
         for (int i = 0; i < iBufferCount; i++)
         {
-            mmr = WaveNative.waveOutPrepareHeaderPtr(_hWaveOut, _rgHdrPtr[i], uHdrSize);
+            mmr = WaveNative.waveOutPrepareHeaderPtr(hWaveOut, rgHdrPtr[i], uHdrSize);
             if (mmr != 0)
             {
                 LogService.Error($"[FcAudio] waveOutPrepareHeader[{i}] failed: {mmr}");
-                WaveNative.waveOutClose(_hWaveOut);
-                _hWaveOut = IntPtr.Zero;
+                WaveNative.waveOutClose(hWaveOut);
+                hWaveOut = IntPtr.Zero;
                 throw new InvalidOperationException($"waveOutPrepareHeader[{i}] failed: {mmr}");
             }
         }
 
-        _bAudioRunning = true;
+        bAudioRunning = true;
 
         for (int i = 0; i < iBufferCount; i++)
             FillAndSubmitBuffer(i);
 
-        _thAudio = new Thread(AudioThreadProc)
+        thAudio = new Thread(AudioThreadProc)
         {
             IsBackground = true,
             Name = "FcAudio"
         };
-        _thAudio.Start();
+        thAudio.Start();
 
         LogService.Info("[FcAudio] Playback started");
     }
 
     public void Stop()
     {
-        _bAudioRunning = false;
+        bAudioRunning = false;
+        pfnCallback = null;
 
-        if (_thAudio != null && _thAudio.IsAlive)
+        if (hWaveOut != IntPtr.Zero)
         {
-            NativeMethods.PostThreadMessageW((uint)_thAudio.ManagedThreadId, 0x0012, IntPtr.Zero, IntPtr.Zero);//WM_QUIT
-            _thAudio.Join(500);
-        }
-
-        if (_hWaveOut != IntPtr.Zero)
-        {
-            WaveNative.waveOutReset(_hWaveOut);
+            WaveNative.waveOutReset(hWaveOut);
 
             uint uHdrSize = (uint)Marshal.SizeOf<WaveNative.WAVEHDR>();
             for (int i = 0; i < iBufferCount; i++)
-                WaveNative.waveOutUnprepareHeaderPtr(_hWaveOut, _rgHdrPtr[i], uHdrSize);
+                WaveNative.waveOutUnprepareHeaderPtr(hWaveOut, rgHdrPtr[i], uHdrSize);
 
-            WaveNative.waveOutClose(_hWaveOut);
-            _hWaveOut = IntPtr.Zero;
+            WaveNative.waveOutClose(hWaveOut);
+            hWaveOut = IntPtr.Zero;
         }
     }
 
     public void Dispose()
     {
-        if (_bDisposed) return;
-        _bDisposed = true;
-        Stop();
+        if (bDisposed) return;
+        bDisposed = true;
+
+        bAudioRunning = false;
+        pfnCallback = null;
+
+        if (thAudio != null && thAudio.IsAlive)
+        {
+            NativeMethods.PostThreadMessageW((uint)thAudio.ManagedThreadId, 0x0012, IntPtr.Zero, IntPtr.Zero);
+            thAudio = null;
+        }
+
+        if (hWaveOut != IntPtr.Zero)
+        {
+            WaveNative.waveOutReset(hWaveOut);
+
+            uint uHdrSize = (uint)Marshal.SizeOf<WaveNative.WAVEHDR>();
+            for (int i = 0; i < iBufferCount; i++)
+                WaveNative.waveOutUnprepareHeaderPtr(hWaveOut, rgHdrPtr[i], uHdrSize);
+
+            WaveNative.waveOutClose(hWaveOut);
+            hWaveOut = IntPtr.Zero;
+        }
 
         for (int i = 0; i < iBufferCount; i++)
         {
-            if (_rgHdrHandle[i].IsAllocated)
-                _rgHdrHandle[i].Free();
-            if (_rgBufHandle[i].IsAllocated)
-                _rgBufHandle[i].Free();
+            if (rgHdrHandle[i].IsAllocated)
+                rgHdrHandle[i].Free();
+            if (rgBufHandle[i].IsAllocated)
+                rgBufHandle[i].Free();
         }
     }
 
@@ -198,11 +213,12 @@ public class FcAudioPlayer : IDisposable
     //WOM_DONE = 0x3BD
     private void OnWaveOutCallback(IntPtr hwo, int uMsg, IntPtr dwInstance, IntPtr dwParam1, IntPtr dwParam2)
     {
-        if (uMsg == 0x3BD)//WOM_DONE
+        if (!bAudioRunning) return;
+        if (uMsg == 0x3BD)
         {
             for (int i = 0; i < iBufferCount; i++)
             {
-                if (_rgHdrPtr[i] == dwParam1)
+                if (rgHdrPtr[i] == dwParam1)
                 {
                     FillAndSubmitBuffer(i);
                     return;
@@ -214,7 +230,7 @@ public class FcAudioPlayer : IDisposable
     private void AudioThreadProc()
     {
         var msg = new NativeMethods.MSG();
-        while (_bAudioRunning)
+        while (bAudioRunning)
         {
             if (NativeMethods.GetMessage(out msg, IntPtr.Zero, 0, 0))
             {
@@ -226,33 +242,33 @@ public class FcAudioPlayer : IDisposable
 
     private void FillAndSubmitBuffer(int iBufIdx)
     {
-        byte[] rgBuf = _rgPlayBuf[iBufIdx];
+        byte[] rgBuf = rgPlayBuf[iBufIdx];
         int iSampleFrames = iBufferSampleFrames;
 
-        if (_fcPlayer.SongEnd)
+        if (fcPlayer.SongEnd)
         {
-            _fcPlayer.Restart(0, 0);
+            fcPlayer.Restart(0, 0);
             LogService.Info("[FcAudio] Song restart");
         }
 
-        _mixer.FillBuffer16bitMono(_rgMixBuf, 0, iSampleFrames, () => _fcPlayer.Run());
+        mixer.FillBuffer16bitMono(rgMixBuf, 0, iSampleFrames, () => fcPlayer.Run());
 
         //16bit signed -> 8bit unsigned
         for (int i = 0; i < iSampleFrames; i++)
         {
-            int s = _rgMixBuf[i];
+            int s = rgMixBuf[i];
             s = s / 256 + 128;
             if (s < 0) s = 0;
             if (s > 255) s = 255;
             rgBuf[i] = (byte)s;
         }
 
-        _rgWaveHdr[iBufIdx].dwFlags = 0;
-        _rgWaveHdr[iBufIdx].dwBytesRecorded = 0;
-        _rgWaveHdr[iBufIdx].dwLoops = 0;
+        rgWaveHdr[iBufIdx].dwFlags = 0;
+        rgWaveHdr[iBufIdx].dwBytesRecorded = 0;
+        rgWaveHdr[iBufIdx].dwLoops = 0;
 
         uint uHdrSize = (uint)Marshal.SizeOf<WaveNative.WAVEHDR>();
-        int mmr = WaveNative.waveOutWritePtr(_hWaveOut, _rgHdrPtr[iBufIdx], uHdrSize);
+        int mmr = WaveNative.waveOutWritePtr(hWaveOut, rgHdrPtr[iBufIdx], uHdrSize);
         if (mmr != 0)
             LogService.Error($"[FcAudio] waveOutWrite[{iBufIdx}] failed: {mmr}");
     }   
