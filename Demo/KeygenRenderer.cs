@@ -81,6 +81,7 @@ public class KeygenRenderer : IDisposable
 
     private int iAnimCounter;//dword_82F4F0
     private bool bDisposed;
+    private FcAudioPlayer? _fcAudio;
 
     private const string sMainText =
         " *******  ********        **   ******   **    **   ******   **    **              ******   ********  **    **        **   ******   **    **   **    **  ********  **    **" +
@@ -107,6 +108,23 @@ public class KeygenRenderer : IDisposable
         tmrFrame = new System.Windows.Forms.Timer { Interval = 25 };//invoke Sleep,25
         tmrFrame.Tick += OnTick;
         tmrFrame.Start();
+
+        try
+        {
+            var asm = typeof(KeygenRenderer).Assembly;
+            using var stream = asm.GetManifestResourceStream("WeaponDamageCalc.Demo.keil.fc");
+            if (stream != null)
+            {
+                var fcData = new byte[stream.Length];
+                stream.Read(fcData, 0, fcData.Length);
+                _fcAudio = new FcAudioPlayer(fcData);
+                _fcAudio.Play();
+            }
+        }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, "FC audio init failed");
+        }
     }
 
     public void Dispose()
@@ -119,6 +137,7 @@ public class KeygenRenderer : IDisposable
         bmpScrollText?.Dispose();
         _rgScrollPixels = null;
         _rgManaged = null;
+        _fcAudio?.Dispose();
     }
 
     private static double[] InitSinLut()

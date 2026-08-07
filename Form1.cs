@@ -108,7 +108,7 @@ public partial class Form1 : Form
 
             #if DEBUG
                 CsvMapper.s_bSuppressMessageBox = true;
-                var demo = new KeygenRenderer(pnlSpread, pnlRecoil);
+                var demo = new KeygenRenderer(pnlSpread);
             #else
                 prSpreadRenderer = new PanelRenderer(pnlSpread);
                 prRecoilRenderer = new PanelRenderer(pnlRecoil);
