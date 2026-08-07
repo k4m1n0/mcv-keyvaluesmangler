@@ -29,6 +29,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Tools\preset_file.txt" />
+    <EmbeddedResource Include="Demo\keil.fc" />
   </ItemGroup>
 
 </Project>

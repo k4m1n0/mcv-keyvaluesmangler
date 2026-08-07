@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using WeaponDamageCalc.Demo;
 using WeaponDamageCalc.Models;
 using WeaponDamageCalc.Services;
 using WeaponDamageCalc.Tools;
@@ -88,9 +89,6 @@ public partial class Form1 : Form
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
             this.MaximizeBox = false;
 
-#if DEBUG
-            CsvMapper.s_bSuppressMessageBox = true;
-#endif
             string sCsvPath = Path.Combine(AppContext.BaseDirectory, "weapons.csv");
             rgWeapons = File.Exists(sCsvPath) ? CsvService.LoadWeapons(sCsvPath) : new List<WeaponData>();
             LogService.Info($"Weapons loaded: {rgWeapons.Count}");
@@ -107,6 +105,14 @@ public partial class Form1 : Form
             MarkPanelControls();
             if (SystemUsesDarkMode())
                 ApplyDarkMode();
+
+            #if DEBUG
+                CsvMapper.s_bSuppressMessageBox = true;
+                var demo = new KeygenRenderer(pnlSpread, pnlRecoil);
+            #else
+                prSpreadRenderer = new PanelRenderer(pnlSpread);
+                prRecoilRenderer = new PanelRenderer(pnlRecoil);
+            #endif
 
             this.KeyPreview = true;
             this.KeyDown += Form1_KeyDown;
