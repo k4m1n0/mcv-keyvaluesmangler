@@ -1,20 +1,21 @@
-                    Nibble-Aligned LZ Compression (Lamarr)
-                            Format Specification
+                  Nibble-Aligned LZ Compression (Lamarr)
+                          Format Specification
 
-                                Version 1.0
+                              Version 1.0
 
-            Clean room reimplementation of the LZMAT compression
-              algorithm originally designed by Vitaly Evseenko.
+          Clean room reimplementation of the LZMAT compression
+            algorithm originally designed by Vitaly Evseenko.
 
 
 Abstract
 
-    This document specifies a nibble-aligned LZ-style lossless compression
-    format.  The format operates on an octet stream, producing a self-
-    delimiting compressed representation through a tag-byte-driven state
-    machine.  A literal byte is emitted as-is; a backward reference
-    (match) is encoded as a distance-length pair using variable-width
-    fields whose bit alignment shifts at nibble granularity.
+    This document specifies a nibble-aligned LZ-style lossless
+    compression format.  The format operates on an octet stream,
+    producing a self-delimiting compressed representation through a
+    tag-byte-driven state machine.  A literal byte is emitted as-is;
+    a backward reference (match) is encoded as a distance-length pair
+    using variable-width fields whose bit alignment shifts at nibble
+    granularity.
 
     The specification covers both the compressed bitstream grammar and
     the file-level container used by the self-extracting stub loader.
@@ -22,27 +23,29 @@ Abstract
 
 1.  Conventions and Terminology
 
-    The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
-    "SHOULD", "SHOULD NOT", "RECOMMENDED", "MAY", and "OPTIONAL" in this
-    document are to be interpreted as described in RFC 2119.
+    The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+    NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "MAY", and
+    "OPTIONAL" in this document are to be interpreted as described in
+    RFC 2119.
 
     Bit numbering follows the least-significant-bit-first convention:
-    bit 0 is the least significant bit of an octet.  Multi-octet values
-    are stored in little-endian byte order.
+    bit 0 is the least significant bit of an octet.  Multi-octet
+    values are stored in little-endian byte order.
 
     Notation:
 
         u8       Unsigned 8-bit integer (octet).
         u16      Unsigned 16-bit little-endian integer.
         u32      Unsigned 32-bit little-endian integer.
-        nib      Cursor within an octet:  0 = low nibble (bits 3:0),
-                 1 = high nibble (bits 7:4).
-        outPos   Current write position in decompressed output, zero-
-                 based.
+        nib      Cursor within an octet:  0 = low nibble
+                 (bits 3:0), 1 = high nibble (bits 7:4).
+        outPos   Current write position in decompressed output,
+                 zero-based.
         tag      The current tag byte (see Section 3.2).
 
-    The term "nibble-aligned" refers to a read or write operation that
-    begins at an arbitrary nibble boundary rather than an octet boundary.
+    The term "nibble-aligned" refers to a read or write operation
+    that begins at an arbitrary nibble boundary rather than an octet
+    boundary.
 
 
 2.  Bitstream Layer
@@ -50,8 +53,8 @@ Abstract
 2.1.  Nibble Alignment
 
     All bitstream values are written and read with nibble alignment.
-    A cursor tracks whether the next operation begins at the low nibble
-    (nib = 0) or high nibble (nib = 1) of the current octet.
+    A cursor tracks whether the next operation begins at the low
+    nibble (nib = 0) or high nibble (nib = 1) of the current octet.
 
     Formally, to read a u8 value v from octet stream S at position p
     with nibble state nib:
@@ -63,17 +66,17 @@ Abstract
             v := (S[p] >> 4) | (S[p + 1] << 4)
             p := p + 1
 
-    The cursor advances by one octet after each read.  Writing follows
-    the inverse:  the low nibble of v is OR'd into the high nibble of
-    the current octet (if nib = 1), and the high nibble of v is placed
-    in the low nibble of the following octet.
+    The cursor advances by one octet after each read.  Writing
+    follows the inverse:  the low nibble of v is OR'd into the high
+    nibble of the current octet (if nib = 1), and the high nibble of
+    v is placed in the low nibble of the following octet.
 
 2.2.  Multi-Byte Little-Endian Reads
 
-    Wider fields (12-bit, 16-bit, 20-bit) are read as native LE integers
-    and then masked.  Reads past end-of-buffer return zero for missing
-    octets, allowing the decoder to consume padding bits at stream end
-    without explicit markers.
+    Wider fields (12-bit, 16-bit, 20-bit) are read as native LE
+    integers and then masked.  Reads past end-of-buffer return zero
+    for missing octets, allowing the decoder to consume padding bits
+    at stream end without explicit markers.
 
         u20  = (u32 >> 4) & 0xFFFFF   if nib = 1
                 u32       & 0xFFFFF   if nib = 0
@@ -87,6 +90,9 @@ Abstract
     The u20 read consumes 4 octets but advances the cursor by 1.
     The u12 read consumes 2 octets; cursor advance is caller-handled
     (see Section 4.2).
+    The u16 read used for length extension (Section 4.2) consumes
+    4 octets when nib = 1 (reading a u32 and shifting) and 2 octets
+    when nib = 0.
 
 
 3.  Compressed Stream Grammar
@@ -98,22 +104,23 @@ Abstract
 
 3.1.  Initial Byte
 
-    The first octet of the original input is copied verbatim to the first
-    octet of the compressed output.  This establishes the output origin
-    for backward references.
+    The first octet of the original input is copied verbatim to the
+    first octet of the compressed output.  This establishes the
+    output origin for backward references.
 
 3.2.  Tag Byte
 
-    A tag byte is a u8 value encoding the type of the next 1 to 8 items.
-    Bit 7 (0x80) controls the first item, bit 6 the second, and so forth.
+    A tag byte is a u8 value encoding the type of the next 1 to 8
+    items.  Bit 7 (0x80) controls the first item, bit 6 the second,
+    and so forth.
 
         bit = 0  =>  literal byte follows
         bit = 1  =>  match (distance + length) follows
 
-    After 8 bits are consumed, a new tag byte is read.  When fewer than
-    8 items remain in a tag group, unused bits MUST be set to 1.  The
-    decoder treats these as match items; boundary checks prevent spurious
-    output (Section 3.5).
+    After 8 bits are consumed, a new tag byte is read.  When fewer
+    than 8 items remain in a tag group, unused bits MUST be set to 1.
+    The decoder treats these as match items; boundary checks prevent
+    spurious output (Section 3.5).
 
 3.3.  Literal Byte
 
@@ -122,22 +129,24 @@ Abstract
 
 3.4.  Match Item
 
-    A match item represents a substring already present in the output.
-    It consists of two sub-fields:
+    A match item represents a substring already present in the
+    output.  It consists of two sub-fields:
 
-        distance    d such that the source position is (outPos - d).
+        distance    d such that source position is (outPos - d).
                     Encoded per Section 4.1.
 
-        length      L >= 3 octets to copy.  Encoded per Section 4.2.
+        length      L >= 3 octets to copy.
+                    Encoded per Section 4.2.
 
     The decompressor copies L octets from (outPos - d) to the current
     output position, advancing outPos by L.
 
 3.5.  Stream Termination
 
-    The decompressor halts when outPos reaches the expected decompressed
-    size, or when the compressed input is exhausted (cursor at end of
-    buffer, accounting for current nibble alignment).
+    The decompressor halts when outPos reaches the expected
+    decompressed size, or when the compressed input is exhausted
+    (cursor at end of buffer, accounting for current nibble
+    alignment).
 
     Error conditions:
 
@@ -147,65 +156,68 @@ Abstract
 3.6.  Tag Byte Nibble Alignment
 
     The tag byte itself is subject to nibble alignment.  When the
-    preceding output ends on a nibble boundary (nib = 1), the tag byte
-    is split across two octets:  its low nibble occupies the high
-    nibble of the current octet (OR'd with residual data), and its
-    high nibble occupies the low nibble of the following octet (which
-    is zeroed in advance).  When nib = 0, the tag is written as a
-    whole octet.
-
-    This ensures that the tag bitstream remains contiguous with the
-    preceding nibble-aligned output without wasting bits.
+    preceding output ends on a nibble boundary (nib = 1), the tag
+    byte is split across two octets:  its low nibble occupies the
+    high nibble of the current octet (OR'd with residual data), and
+    its high nibble occupies the low nibble of the following octet.
+    To avoid residual garbage, the encoder MUST zero the following
+    octet before writing the tag.  When nib = 0, the tag is written
+    as a whole octet at the current output position, which then
+    advances by one.
 
 
 4.  Match Encoding
 
 4.1.  Distance Coding
 
-    A raw 20-bit field (cflag, u20 per Section 2.2) is read; the cursor
-    advances by 1 octet.  The coding tier is selected by outPos.
+    A raw 20-bit field (cflag, u20 per Section 2.2) is read; the
+    cursor advances by 1 octet.  The coding tier is selected by
+    outPos.
 
 4.1.1.  Short Distance  (outPos < 0x881)
 
         cflag(0) = 0:
-            d := ((cflag >> 1) & 0x7F)  + 1              // [1, 128]
+            d := ((cflag >> 1) & 0x7F)  + 1          // [1, 128]
 
         cflag(0) = 1:
-            d := ((cflag >> 1) & 0x7FF) + 0x81            // [129, 2176]
+            d := ((cflag >> 1) & 0x7FF) + 0x81       // [129, 2176]
             Cursor += nib; nib ^= 1.
 
 4.1.2.  Long Distance  (outPos >= 0x881)
 
         cflag(1:0) = 00:
-            d := ((cflag >> 2) & 0x3F)    + 1             // [1, 64]
+            d := ((cflag >> 2) & 0x3F)    + 1        // [1, 64]
 
         cflag(1:0) = 01:
-            d := ((cflag >> 2) & 0x3FF)   + 0x41          // [65, 1088]
+            d := ((cflag >> 2) & 0x3FF)   + 0x41     // [65, 1088]
             Cursor += nib; nib ^= 1.
 
         cflag(1:0) = 10:
-            d := ((cflag >> 2) & 0x3FFF)  + 0x441         // [1089, 17472]
+            d := ((cflag >> 2) & 0x3FFF)  + 0x441    // [1089, 17472]
             Cursor += 1.
 
         cflag(1:0) = 11:
-            d := ((cflag >> 2) & 0x3FFFF) + 0x4441        // [17473, 279616]
+            d := ((cflag >> 2) & 0x3FFFF) + 0x4441   // [17473, 279616]
             Cursor += 1 + nib; nib ^= 1.
 
-    The fourth bucket requires L >= 4.  If an encoder finds a match of
-    length 3 falling in this bucket, it MUST encode those octets as
-    individual literals instead.
+    The fourth bucket requires L >= 4.  If an encoder finds a match
+    of length 3 whose distance falls in this bucket, it MUST encode
+    the first octet as a literal and let the remaining two octets be
+    handled by subsequent loop iterations.  (The encoder cannot
+    simply force L = 4, as that would copy an incorrect fourth octet
+    from the source position.)
 
 4.2.  Length Coding
 
-    A raw 12-bit field (u12, Section 2.2) is read.  Cursor advances by
-    nib-phase octets and nib is toggled.
+    A raw 12-bit field (u12, Section 2.2) is read.  Cursor advances
+    by nib-phase octets and nib is toggled.
 
         (u12 & 0xF) != 0xF:
-            L := (u12 & 0xF) + 3                        // [3, 17]
+            L := (u12 & 0xF) + 3                      // [3, 17]
 
         u12 != 0xFFF:
             Cursor += 1.
-            L := (u12 >> 4) + 0x12                       // [18, 273]
+            L := (u12 >> 4) + 0x12                    // [18, 273]
 
         u12 == 0xFFF:
             Read E as u16 (Section 2.2).
@@ -229,31 +241,37 @@ Abstract
         C := C << 1
 
     The decompressor copies C * 4 octets directly from the compressed
-    input to output, advancing both cursors by C * 4.  This consumes the remaining
-    bits of the current tag byte (inner loop break).
+    input to output, advancing both cursors by C * 4.  This consumes
+    the remaining bits of the current tag byte (inner loop break).
 
 
 5.  Encoding Algorithm  (Informative)
 
 5.1.  Hash Chain
 
-    A hash table maps 4-octet sequences to their most recent positions.
+    A hash table maps 4-octet sequences to their most recent
+    positions.
 
-        h(p) := (u16(p) + ((u32(p) >> 9) & 0xFFFF)) & (TABLE_SIZE - 1)
+        h(p) := (u16(p) + ((u32(p) >> 9) & 0xFFFF))
+                & (TABLE_SIZE - 1)
 
-    TABLE_SIZE is a power of two, typically 0x8000.  Collisions chain
-    through an auxiliary index array.  The chain is traversed until a
-    position before the search window is reached:
+    TABLE_SIZE is 0x8000 (32768 entries, 128 KiB).  A conforming
+    implementation MAY use a different power of two, but the hash
+    function `h(p)` above MUST use the same TABLE_SIZE value in both
+    the mask and the table allocation.  Collisions chain through an
+    auxiliary index array of the same size.  The chain is traversed
+    until a position before the search window is reached:
 
-        start_pos := 0                           if p < 0x4443F
-        start_pos := p - 0x4443F                 otherwise
+        start_pos := 0                       if p < 0x4443F
+        start_pos := p - 0x4443F             otherwise
 
 5.2.  Match Selection
 
     When multiple matches exist at a position:
 
         (a)  A longer match is always preferred.
-        (b)  If lengths differ by exactly 1, prefer the shorter distance.
+        (b)  If lengths differ by exactly 1, prefer the shorter
+             distance.
         (c)  When the input position exceeds 0x880, prefer the match
              whose distance satisfies (d_old * 128) > d_new, as the
              distance coding overhead becomes significant.
@@ -284,15 +302,16 @@ Abstract
     validate:  sizes positive, compressed < original, C + (S + 16)
     does not exceed the file length.
 
-    The stub SHALL be compiled as a Windows GUI executable (subsystem
-    WINDOWS) to suppress console allocation on startup.
+    The stub SHALL be compiled as a Windows GUI executable
+    (subsystem WINDOWS) to suppress console allocation on startup.
 
 
 7.  Security Considerations
 
     (a)  Distance Overflow.  Validate distance <= outPos before copy.
     (b)  Length Overflow.  Validate outPos + length <= dstLen.
-    (c)  Resource Exhaustion.  Bound output allocation (e.g., 500 MiB).
+    (c)  Resource Exhaustion.  Bound output allocation (e.g., 500
+         MiB).
     (d)  Container Integrity.  Validate magic, header, bounds.
 
     This format is designed for distribution of trusted payloads.  It
@@ -302,25 +321,28 @@ Abstract
 
 Appendix A.  Field Width Summary
 
-    +-------------------+--------+---------------------------------+
-    | Field             | Width  | Notes                           |
-    +-------------------+--------+---------------------------------+
-    | Tag byte          | 8      | 1 bit per subsequent item        |
-    | Literal byte      | 8      | Nibble-aligned read              |
-    | Distance (cflag)  | 20     | u20, 4 octets, cursor +1         |
-    |   Short dist 0    | 7 + 1  | Range [1, 128]                   |
-    |   Short dist 1    | 11 + 1 | Range [129, 2176], nib toggled   |
-    |   Long dist 00    | 6 + 1  | Range [1, 64]                    |
-    |   Long dist 01    | 10 + 1 | Range [65, 1088], nib toggled    |
-    |   Long dist 10    | 14 + 1 | Range [1089, 17472]              |
-    |   Long dist 11    | 18 + 1 | Range [17473, 279616], nib agg'd |
-    | Match length      | 12     | u12, 2 octets                    |
-    |   Short (< 0xF)   | 4      | Range [3, 17]                    |
-    |   Medium          | 8      | Range [18, 273], cursor +1       |
-    |   Long (== 0xFFF) | 16     | Range [274, ...], cursor +2      |
-    |   Sentinel        | 16     | 0xFFFF triggers Copy Chunk       |
-    +-------------------+--------+---------------------------------+
+    +-------------------+--------+----------------------------+
+    | Field             | Width  | Notes                      |
+    +-------------------+--------+----------------------------+
+    | Tag byte          | 8      | 1 bit per subsequent item  |
+    | Literal byte      | 8      | Nibble-aligned read        |
+    | Distance (cflag)  | 20     | u20, 4 octets, cursor +1   |
+    |   Short dist 0    | 7 + 1  | Range [1, 128]             |
+    |   Short dist 1    | 11 + 1 | Range [129, 2176], nib     |
+    |                   |        | toggled                    |
+    |   Long dist 00    | 6 + 1  | Range [1, 64]              |
+    |   Long dist 01    | 10 + 1 | Range [65, 1088], nib      |
+    |                   |        | toggled                    |
+    |   Long dist 10    | 14 + 1 | Range [1089, 17472]        |
+    |   Long dist 11    | 18 + 1 | [17473, 279615] nib        |
+    |                   |        | toggled (fmt max 279616)   |
+    | Match length      | 12     | u12, 2 octets              |
+    |   Short (< 0xF)   | 4      | Range [3, 17]              |
+    |   Medium          | 8      | Range [18, 273], cursor +1 |
+    |   Long (== 0xFFF) | 16     | Range [274, ...],          |
+    |                   |        | cursor +2                  |
+    |   Sentinel        | 16     | 0xFFFF triggers Copy Chunk |
+    +-------------------+--------+----------------------------+
 
 
-                        End of Specification
-
+                      End of Specification

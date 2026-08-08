@@ -1,4 +1,3 @@
-// WeaponDamageCalc/Lamarr/LamarrEncoder.cs
 using System;
 using System.Runtime.CompilerServices;
 
