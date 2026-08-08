@@ -144,6 +144,19 @@ Abstract
         (a)  Distance exceeds output:  d > outPos.
         (b)  Output buffer overflow:  outPos + L > expected size.
 
+3.6.  Tag Byte Nibble Alignment
+
+    The tag byte itself is subject to nibble alignment.  When the
+    preceding output ends on a nibble boundary (nib = 1), the tag byte
+    is split across two octets:  its low nibble occupies the high
+    nibble of the current octet (OR'd with residual data), and its
+    high nibble occupies the low nibble of the following octet (which
+    is zeroed in advance).  When nib = 0, the tag is written as a
+    whole octet.
+
+    This ensures that the tag bitstream remains contiguous with the
+    preceding nibble-aligned output without wasting bits.
+
 
 4.  Match Encoding
 
@@ -215,8 +228,8 @@ Abstract
         C := C + (tag & 0x7F) + 4
         C := C << 1
 
-    The decompressor copies C octets directly from the compressed input
-    to output, advancing both cursors by C.  This consumes the remaining
+    The decompressor copies C * 4 octets directly from the compressed
+    input to output, advancing both cursors by C * 4.  This consumes the remaining
     bits of the current tag byte (inner loop break).
 
 
