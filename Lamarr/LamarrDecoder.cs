@@ -35,17 +35,9 @@ public static class LamarrDecoder
                 {
                     uint r_pos, r_cnt, dist;
 
-                    uint cflag;
-                    if (cur_nib != 0)
-                    {
-                        if (inPos + 2 >= cbIn) break;
-                        cflag = (uint)((pbIn[inPos] >> 4) | ((ReadLE16Safe(pbIn, inPos + 1, cbIn) & 0xFFF) << 4));
-                    }
-                    else
-                    {
-                        if (inPos + 3 >= cbIn) break;
-                        cflag = ReadLE32Safe(pbIn, inPos, cbIn) & 0xFFFFF;
-                    }
+                    uint cflag = cur_nib != 0
+                        ? (ReadLE32Safe(pbIn, inPos, cbIn) >> 4) & 0xFFFFF
+                        : ReadLE32Safe(pbIn, inPos, cbIn) & 0xFFFFF;
                     inPos++;
 
                     if (outPos < 0x881)
@@ -92,7 +84,6 @@ public static class LamarrDecoder
                         }
                         else
                         {
-                            if (inPos + 4 > cbIn) break;
                             if (cur_nib != 0)
                                 r_cnt = (uint)((ReadLE32Safe(pbIn, inPos, cbIn) >> 4) & 0xFFFF) + LZ_1BYTE_CNT;
                             else
@@ -147,14 +138,20 @@ public static class LamarrDecoder
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static ushort ReadLE16Safe(byte[] rgBuf, uint uOff, uint cbIn)
     {
-        if (uOff + 1 >= cbIn) return 0;
-        return (ushort)(rgBuf[uOff] | (rgBuf[uOff + 1] << 8));
+        uint uVal = 0;
+        if (uOff < cbIn) uVal = rgBuf[uOff];
+        if (uOff + 1 < cbIn) uVal |= (uint)(rgBuf[uOff + 1] << 8);
+        return (ushort)uVal;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint ReadLE32Safe(byte[] rgBuf, uint uOff, uint cbIn)
     {
-        if (uOff + 3 >= cbIn) return 0;
-        return (uint)(rgBuf[uOff] | (rgBuf[uOff + 1] << 8) | (rgBuf[uOff + 2] << 16) | (rgBuf[uOff + 3] << 24));
+        uint uVal = 0;
+        if (uOff < cbIn) uVal = rgBuf[uOff];
+        if (uOff + 1 < cbIn) uVal |= (uint)(rgBuf[uOff + 1] << 8);
+        if (uOff + 2 < cbIn) uVal |= (uint)(rgBuf[uOff + 2] << 16);
+        if (uOff + 3 < cbIn) uVal |= (uint)(rgBuf[uOff + 3] << 24);
+        return uVal;
     }
 }

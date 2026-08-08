@@ -1,9 +1,13 @@
 using System.Reflection;
+using System.Runtime.InteropServices;
 
 namespace Lamarr;
 
 internal static class Program
 {
+    [DllImport("kernel32.dll")]
+    static extern bool AllocConsole();
+
     const int iOk = 0;
     const int iErrNoPayload = 1;
     const int iErrNoEntryPoint = 2;
@@ -12,15 +16,20 @@ internal static class Program
     static int Main(string[] rgArgs)
     {
         if (rgArgs.Length == 1 && rgArgs[0] == "--test-decode")
+        {
+            AllocConsole();
             return TestDecode();
+        }
 
         if (rgArgs.Length == 1 && rgArgs[0] == "--test-encode")
+        {
+            AllocConsole();
             return TestEncode();
+        }
 
         if (StubLoader.TryLoadFromTail(out var asmPayload, out var rgRawBytes))
             return RunPayload(asmPayload, rgRawBytes, rgArgs);
 
-        Console.Error.WriteLine("Lamarr stub: no payload found. Use LamarrPacker to pack an executable.");
         return iErrNoPayload;
     }
 

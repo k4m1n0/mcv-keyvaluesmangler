@@ -5,8 +5,8 @@ namespace Lamarr
 {
     public class LamarrEncoder
     {
-        private const int DICT_SIZE = 0x20000;
-        private const int IDX_SIZE  = 0x20000;
+        private const int DICT_SIZE = 0x8000;
+        private const int IDX_SIZE  = 0x8000;
         private const int DICT_MSK  = DICT_SIZE - 1;
         private const int IDX_MSK   = IDX_SIZE - 1;
         private const int RS_HASH_BITS = 9;
@@ -88,10 +88,12 @@ namespace Lamarr
                     goto set_next_tag;
                 }
 
-                EncodeDistance(uCurMatchCnt);
-                EncodeLength(uCurMatchCnt);
-
-                bThisTag |= bBitMsk;
+                EncodeDistance(ref uCurMatchCnt);
+                if (uCurMatchCnt >= 3)  // only encode length + set tag for real matches
+                {
+                    EncodeLength(uCurMatchCnt);
+                    bThisTag |= bBitMsk;
+                }
 
             set_next_tag:
                 bBitMsk >>= 1;
@@ -153,6 +155,7 @@ namespace Lamarr
                 FlushUCChunk();
                 uInPtr = uProcessedData;
                 iUCTagPos = iOutPos; iUCNib = 0;
+                iTagPos = iOutPos++;
                 iCpyTag = 0; cbUCData = 0; uProcessedData = uInPtr;
                 bBitMsk = 0x80; bThisTag = 0;
                 iTagNib = 0; iCurNib = 0;
@@ -170,7 +173,7 @@ namespace Lamarr
             return 0;
         }
 
-        private void EncodeDistance(uint uCurMatchCnt)
+        private void EncodeDistance(ref uint uCurMatchCnt)
         {
             if (uInPtr > SHORT_DIST1)
             {
@@ -189,7 +192,13 @@ namespace Lamarr
                 }
                 else
                 {
-                    if (uCurMatchCnt < 4) { uMatchCnt = 1; return; }
+                    // distance too large for match < 4 bytes: encode as literal
+                    if (uCurMatchCnt < 4)
+                    {
+                        WriteU8(rgOut, ref iOutPos, ref iCurNib, rgIn[uInPtr]);
+                        uCurMatchCnt = 1;  // consumed 1 byte as literal, no match tag
+                        return;
+                    }
                     uStoreDist -= LONG_DIST2 << 2; uStoreDist |= 3;
                     WriteLE20(rgOut, ref iOutPos, ref iCurNib, uStoreDist);
                 }
@@ -234,7 +243,7 @@ namespace Lamarr
 
             uint uHash = Hash(uInPtr);
 
-            if (uRemaining >= 4 && GetLE32(rgIn, uCurPtr) == GetLE32(rgIn, uCurPtr - 1))
+            if (uRemaining >= 4 && Read32LE(rgIn, uCurPtr) == Read32LE(rgIn, uCurPtr - 1))
             {
                 uint uRem = cbIn - 4 - uCurPtr;
                 uint uCur = uCurPtr + 4;
@@ -263,12 +272,11 @@ namespace Lamarr
             ushort uCmpVal = (ushort)(pIn[uCurPtr + 1] | (pIn[uCurPtr + 2] << 8));
 
             int iChainDepth = 0;
-            const int MAX_CHAIN = 256;
+            const int MAX_CHAIN = 65536;
             while (iDictPtr < (int)uCurPtr)
             {
                 iChainDepth++;
                 if (iChainDepth > MAX_CHAIN) break;
-
                 int iCurIdx = iDictPtr;
                 if ((ushort)(pIn[iDictPtr + 1] | (pIn[iDictPtr + 2] << 8)) == uCmpVal)
                 {
@@ -280,7 +288,7 @@ namespace Lamarr
                         uFound++;
 
                     uint uNewDist = uCurPtr - (uint)iDictPtr - 1;
-                    if (IsBetterMatch(uNewDist, uFound, uBestDist, uBestCnt))
+                    if (IsBetterMatch(uCurPtr, uNewDist, uFound, uBestDist, uBestCnt))
                     {
                         uBestDist = uNewDist; uBestCnt = uFound;
                         if (uBestCnt >= MAX_2BYTE_CNT) break;
@@ -424,26 +432,26 @@ namespace Lamarr
         private uint Hash(uint uPos)
         {
             if (uPos + 3 >= cbIn) return 0;
-            return ((uint)(rgIn[uPos] | (rgIn[uPos + 1] << 8)) +
-                    (uint)((GetLE32(rgIn, uPos) >> RS_HASH_BITS) & 0xFFFF)) & DICT_MSK;
+            uint u16 = (uint)(rgIn[uPos] | (rgIn[uPos + 1] << 8));
+            uint u32 = (uint)(rgIn[uPos] | (rgIn[uPos + 1] << 8) | (rgIn[uPos + 2] << 16) | (rgIn[uPos + 3] << 24));
+            return (u16 + ((u32 >> RS_HASH_BITS) & 0xFFFF)) & DICT_MSK;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static bool IsBetterMatch(uint uNewDist, uint uNewLen,
+        private static bool IsBetterMatch(uint uCurPos, uint uNewDist, uint uNewLen,
                                           uint uOldDist, uint uOldLen)
         {
             if (uNewLen <= uOldLen) return false;
             if (uNewLen > uOldLen + 1) return true;
             if (uOldDist == 0) return true;
-            if (uOldDist < 0x880 && (uOldDist << 7) > uNewDist) return true;
+            if (uCurPos > 0x880 && (uOldDist << 7) > uNewDist) return true;
             return (uOldDist << 3) > uNewDist;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static uint GetLE32(byte[] rg, uint uOff)
+        private static uint Read32LE(byte[] rg, uint uOff)
         {
-            return (uint)(rg[uOff] | (rg[uOff + 1] << 8) |
-                          (rg[uOff + 2] << 16) | (rg[uOff + 3] << 24));
+            return (uint)(rg[uOff] | (rg[uOff + 1] << 8) | (rg[uOff + 2] << 16) | (rg[uOff + 3] << 24));
         }
     }
 }
