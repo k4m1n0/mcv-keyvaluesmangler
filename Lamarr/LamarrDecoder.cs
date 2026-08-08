@@ -1,157 +1,123 @@
-// WeaponDamageCalc/Lamarr/LamarrDecoder.cs
-using System;
 using System.Runtime.CompilerServices;
 
 namespace Lamarr;
 
 public static class LamarrDecoder
 {
+    //编码阈值
     private const uint LZ_DEFAULT_CNT = 0x12;
-    private const uint LZ_1BYTE_CNT = 0xFF + LZ_DEFAULT_CNT;
-    private const uint LZ_2BYTE_CNT = 0xFFFF + LZ_1BYTE_CNT;
+    private const uint LZ_1BYTE_CNT  = 0xFF  + LZ_DEFAULT_CNT;
+    private const uint LZ_2BYTE_CNT  = 0xFFFF + LZ_1BYTE_CNT;
 
-    public static int Decode(byte[] pbOut, ref uint pcbOut, byte[] pbIn, uint cbIn)
+    public static int Decode(byte[] dst, ref uint dstLen, byte[] src, uint srcLen)
     {
         uint outPos = 1;
-        uint inPos = 1;
-        int cur_nib = 0;
+        //首字节直接复制 格式要求
+        dst[0] = src[0];
 
-        pbOut[0] = pbIn[0];
+        var r = new NibbleReader(src, srcLen, pos: 1, nib: 0);
 
-        while (inPos < (cbIn - (uint)cur_nib))
+        //一个tag byte用8个bit管后续8个item bit=1是match bit=0是literal
+        while (r.Pos < (srcLen - (uint)r.Nib))
         {
-            int bc;
-            uint tag;
+            uint tag = r.ReadByte();
 
-            if (cur_nib != 0)
-                tag = (uint)((pbIn[inPos] >> 4) | (pbIn[inPos + 1] << 4));
-            else
-                tag = pbIn[inPos];
-            inPos++;
-
-            for (bc = 0; bc < 8 && inPos < (cbIn - (uint)cur_nib) && outPos < pcbOut; bc++, tag <<= 1)
+            for (int bc = 0; bc < 8 && r.Pos < (srcLen - (uint)r.Nib) && outPos < dstLen; bc++, tag <<= 1)
             {
-                if ((tag & 0x80) != 0)
+                if ((tag & 0x80) == 0)
                 {
-                    uint r_pos, r_cnt, dist;
+                    dst[outPos++] = (byte)r.ReadByte();
+                    continue;
+                }
 
-                    uint cflag = cur_nib != 0
-                        ? (ReadLE32Safe(pbIn, inPos, cbIn) >> 4) & 0xFFFFF
-                        : ReadLE32Safe(pbIn, inPos, cbIn) & 0xFFFFF;
-                    inPos++;
+                uint cflag = r.ReadLE20();
+                uint dist;
 
-                    if (outPos < 0x881)
+                //outPos<0x881用短距离编码 少1bit分两个bucket
+                if (outPos < 0x881)
+                {
+                    dist = cflag >> 1;
+                    if ((cflag & 1) != 0)
                     {
-                        dist = cflag >> 1;
-                        if ((cflag & 1) != 0)
-                        {
-                            inPos += (uint)cur_nib;
-                            dist = (dist & 0x7FF) + 0x81;
-                            cur_nib ^= 1;
-                        }
-                        else
-                            dist = (dist & 0x7F) + 1;
+                        r.SkipNibble();
+                        dist = (dist & 0x7FF) + 0x81;
                     }
                     else
                     {
-                        dist = cflag >> 2;
-                        switch (cflag & 3)
-                        {
-                            case 0: dist = (dist & 0x3F) + 1; break;
-                            case 1: inPos += (uint)cur_nib; dist = (dist & 0x3FF) + 0x41; cur_nib ^= 1; break;
-                            case 2: dist = (dist & 0x3FFF) + 0x441; inPos++; break;
-                            case 3: inPos += (uint)(1 + cur_nib); dist = (dist & 0x3FFFF) + 0x4441; cur_nib ^= 1; break;
-                        }
+                        dist = (dist & 0x7F) + 1;
                     }
-
-                    if (cur_nib != 0)
-                        r_cnt = (uint)((ReadLE16Safe(pbIn, inPos, cbIn) >> 4) & 0xFFF);
-                    else
-                        r_cnt = (uint)(ReadLE16Safe(pbIn, inPos, cbIn) & 0xFFF);
-                    inPos += (uint)cur_nib;
-                    cur_nib ^= 1;
-
-                    if ((r_cnt & 0xF) != 0xF)
-                    {
-                        r_cnt = (r_cnt & 0xF) + 3;
-                    }
-                    else
-                    {
-                        inPos++;
-                        if (r_cnt != 0xFFF)
-                        {
-                            r_cnt = (r_cnt >> 4) + 0x12;
-                        }
-                        else
-                        {
-                            if (cur_nib != 0)
-                                r_cnt = (uint)((ReadLE32Safe(pbIn, inPos, cbIn) >> 4) & 0xFFFF) + LZ_1BYTE_CNT;
-                            else
-                                r_cnt = (uint)(ReadLE16Safe(pbIn, inPos, cbIn) + LZ_1BYTE_CNT);
-                            inPos += 2;
-                            if (r_cnt == LZ_2BYTE_CNT)
-                            {
-                                uint uCopyCnt;
-                                if (cur_nib != 0)
-                                {
-                                    uCopyCnt = ((uint)pbIn[inPos - 4] & 0xFC) << 5;
-                                    inPos++;
-                                    cur_nib = 0;
-                                }
-                                else
-                                {
-                                    uCopyCnt = (uint)((ReadLE16Safe(pbIn, inPos - 5, cbIn) & 0xFC0) << 1);
-                                }
-                                uCopyCnt += (tag & 0x7F) + 4;
-                                uCopyCnt <<= 1;
-                                while (uCopyCnt-- > 0 && outPos < pcbOut)
-                                {
-                                    pbOut[outPos++] = pbIn[inPos++];
-                                    pbOut[outPos++] = pbIn[inPos++];
-                                    pbOut[outPos++] = pbIn[inPos++];
-                                    pbOut[outPos++] = pbIn[inPos++];
-                                }
-                                break;
-                            }
-                        }
-                    }
-
-                    if (outPos < dist) return 0x104;
-                    if ((outPos + r_cnt) > pcbOut) return 0x111;
-
-                    r_pos = outPos - dist;
-                    while (r_cnt-- > 0 && outPos < pcbOut)
-                        pbOut[outPos++] = pbOut[r_pos++];
                 }
                 else
                 {
-                    pbOut[outPos++] = (byte)((cur_nib != 0) ? ((pbIn[inPos] >> 4) | (pbIn[inPos + 1] << 4)) : pbIn[inPos]);
-                    inPos++;
+                    dist = cflag >> 2;
+                    switch (cflag & 3)
+                    {
+                        case 0: dist = (dist & 0x3F)   + 1;     break;
+                        case 1: r.SkipNibble();     dist = (dist & 0x3FF) + 0x41;  break;
+                        case 2: r.Advance(1);       dist = (dist & 0x3FFF) + 0x441; break;
+                        case 3: r.SkipNibblePlusOne(); dist = (dist & 0x3FFFF) + 0x4441; break;
+                    }
                 }
+
+                uint r_cnt = r.ReadLE12();
+                r.SkipNibble();
+
+                //4bit<15直接+3 得到3..17
+                if ((r_cnt & 0xF) != 0xF)
+                {
+                    r_cnt = (r_cnt & 0xF) + 3;
+                }
+                else
+                {
+                    r.Advance(1);
+                    //4bit=15 读1字节扩展
+                    if (r_cnt != 0xFFF)
+                    {
+                        r_cnt = (r_cnt >> 4) + 0x12;
+                    }
+                    else
+                    {
+                        r_cnt = r.ReadLE16() + LZ_1BYTE_CNT;
+                        r.Advance(2);
+
+                        //哨兵值0x111+0xFFFF 触发非压缩块回退
+                        if (r_cnt == LZ_2BYTE_CNT)
+                        {
+                            uint copyCnt;
+                            if (r.Nib != 0)
+                            {
+                                copyCnt = ((uint)src[r.Pos - 4] & 0xFC) << 5;
+                                r.Advance(1);
+                                r.ClearNib();
+                            }
+                            else
+                            {
+                                copyCnt = (uint)((r.ReadU16At(r.Pos - 5) & 0xFC0) << 1);
+                            }
+                            copyCnt += (tag & 0x7F) + 4;
+                            copyCnt <<= 1;
+                            while (copyCnt-- > 0 && outPos < dstLen)
+                            {
+                                dst[outPos++] = src[r.Pos]; r.Advance(1);
+                                dst[outPos++] = src[r.Pos]; r.Advance(1);
+                                dst[outPos++] = src[r.Pos]; r.Advance(1);
+                                dst[outPos++] = src[r.Pos]; r.Advance(1);
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                if (outPos < dist) return 0x104;//距离越过输出起始 数据损坏
+                if ((outPos + r_cnt) > dstLen) return 0x111;//输出缓冲区不够
+
+                uint r_pos = outPos - dist;
+                while (r_cnt-- > 0 && outPos < dstLen)
+                    dst[outPos++] = dst[r_pos++];
             }
         }
 
-        pcbOut = outPos;
+        dstLen = outPos;
         return 0;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static ushort ReadLE16Safe(byte[] rgBuf, uint uOff, uint cbIn)
-    {
-        uint uVal = 0;
-        if (uOff < cbIn) uVal = rgBuf[uOff];
-        if (uOff + 1 < cbIn) uVal |= (uint)(rgBuf[uOff + 1] << 8);
-        return (ushort)uVal;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static uint ReadLE32Safe(byte[] rgBuf, uint uOff, uint cbIn)
-    {
-        uint uVal = 0;
-        if (uOff < cbIn) uVal = rgBuf[uOff];
-        if (uOff + 1 < cbIn) uVal |= (uint)(rgBuf[uOff + 1] << 8);
-        if (uOff + 2 < cbIn) uVal |= (uint)(rgBuf[uOff + 2] << 16);
-        if (uOff + 3 < cbIn) uVal |= (uint)(rgBuf[uOff + 3] << 24);
-        return uVal;
     }
 }

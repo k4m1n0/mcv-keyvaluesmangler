@@ -1,4 +1,3 @@
-// WeaponDamageCalc/Lamarr/StubLoader.cs
 using System.Reflection;
 using System.Runtime.Loader;
 
@@ -6,7 +5,7 @@ namespace Lamarr;
 
 internal static class StubLoader
 {
-    private static readonly byte[] rgMagic = [0x4C, 0x61, 0x6D, 0x61, 0x72, 0x72, 0x21, 0x21]; // "Lamarr!!"
+    private static readonly byte[] rgMagic = [0x4C, 0x61, 0x6D, 0x61, 0x72, 0x72, 0x21, 0x21];//Lamarr!!
 
     public static bool TryLoadFromTail(out Assembly asmPayload, out byte[] rgRawBytes)
     {
@@ -19,6 +18,7 @@ internal static class StubLoader
         try { rgSelf = File.ReadAllBytes(sSelfPath); }
         catch { return false; }
 
+        //从文件末尾反搜 避免依赖固定偏移
         int iTail = FindMagic(rgSelf);
         if (iTail < 0) return false;
 
@@ -47,6 +47,7 @@ internal static class StubLoader
         return true;
     }
 
+    //反搜同时验证头部有效性 跳过误匹配的假阳性
     private static int FindMagic(byte[] rgData)
     {
         int iLen = rgData.Length;

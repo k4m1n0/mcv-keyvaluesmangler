@@ -5,11 +5,12 @@ namespace Lamarr
 {
     public class LamarrEncoder
     {
+        //hash表条目数 平衡碰撞率与内存占用
         private const int DICT_SIZE = 0x8000;
         private const int IDX_SIZE  = 0x8000;
         private const int DICT_MSK  = DICT_SIZE - 1;
         private const int IDX_MSK   = IDX_SIZE - 1;
-        private const int RS_HASH_BITS = 9;
+        private const int RS_HASH_BITS = 9;//hash混入因子 经验值
 
         private const uint DEFAULT_CNT   = 0x12;
         private const uint _1BYTE_CNT    = 0xFF + DEFAULT_CNT;
@@ -27,6 +28,8 @@ namespace Lamarr
         private uint cbIn, cbOutCap;
         private int[] rgPtr = null!, rgIdx = null!;
 
+        #region 输出状态
+
         private int iOutPos;
         private int iCurNib;
         private int iTagNib;
@@ -36,6 +39,9 @@ namespace Lamarr
         private int iTagPos, iUCTagPos, iUCNib, iCpyTag;
         private uint cbUCData;
         private byte bBitMsk, bThisTag;
+
+        #endregion
+        #region 公开入口
 
         public static uint GetMaxEncodedSize(uint cbIn)
         {
@@ -89,7 +95,7 @@ namespace Lamarr
                 }
 
                 EncodeDistance(ref uCurMatchCnt);
-                if (uCurMatchCnt >= 3)  // only encode length + set tag for real matches
+                if (uCurMatchCnt >= 3)//仅真实匹配才写长度和tag位
                 {
                     EncodeLength(uCurMatchCnt);
                     bThisTag |= bBitMsk;
@@ -173,6 +179,10 @@ namespace Lamarr
             return 0;
         }
 
+        #endregion
+        #region 距离编码
+
+        //短距离用1bit分两档 长距离用2bit分四档 第四档20bit编码要求match>=4字节 不够写成literal
         private void EncodeDistance(ref uint uCurMatchCnt)
         {
             if (uInPtr > SHORT_DIST1)
@@ -192,11 +202,11 @@ namespace Lamarr
                 }
                 else
                 {
-                    // distance too large for match < 4 bytes: encode as literal
+                    //距离太远不够4字节 退为literal
                     if (uCurMatchCnt < 4)
                     {
                         WriteU8(rgOut, ref iOutPos, ref iCurNib, rgIn[uInPtr]);
-                        uCurMatchCnt = 1;  // consumed 1 byte as literal, no match tag
+                        uCurMatchCnt = 1;//已作为literal消费1字节 不设match位
                         return;
                     }
                     uStoreDist -= LONG_DIST2 << 2; uStoreDist |= 3;
@@ -216,6 +226,10 @@ namespace Lamarr
             }
         }
 
+        #endregion
+        #region 长度编码
+
+        //变长编码 越长的匹配用越多bit
         private void EncodeLength(uint uCurMatchCnt)
         {
             if (uCurMatchCnt < DEFAULT_CNT)
@@ -229,6 +243,10 @@ namespace Lamarr
             }
         }
 
+        #endregion
+        #region Hash与匹配
+
+        //链搜索无上限 靠start_pos自然截断
         private uint FindMatch()
         {
             uint uCurPtr = uInPtr;
@@ -302,6 +320,10 @@ namespace Lamarr
             return uBestCnt;
         }
 
+        #endregion
+        #region 非压缩块回退
+
+        //压缩体积超过原始时直接复制 省bit
         private void FlushUCChunk()
         {
             uint cbCopy = cbUCData >> 3;
@@ -355,78 +377,51 @@ namespace Lamarr
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        #endregion
+        #region nibble写入
+
+        //委托NibbleWriter 统一bit写入
         private static void WriteU8(byte[] rgOut, ref int iPos, ref int iNib, uint uVal)
         {
-            if (iNib != 0)
-            {
-                rgOut[iPos++] |= (byte)(uVal << 4);
-                rgOut[iPos] = (byte)(uVal >> 4);
-            }
-            else
-            {
-                rgOut[iPos++] = (byte)uVal;
-            }
+            var w = new NibbleWriter(rgOut, iPos, iNib);
+            w.WriteByte(uVal);
+            iPos = w.Pos; iNib = w.Nib;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void WriteU4(byte[] rgOut, ref int iPos, ref int iNib, uint uVal)
         {
-            iNib ^= 1;
-            if (iNib == 1)
-                rgOut[iPos] = (byte)(uVal & 0xF);
-            else
-                rgOut[iPos++] |= (byte)(uVal << 4);
+            var w = new NibbleWriter(rgOut, iPos, iNib);
+            w.WriteNibble(uVal);
+            iPos = w.Pos; iNib = w.Nib;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void WriteLE12(byte[] rgOut, ref int iPos, ref int iNib, uint uVal)
         {
-            iNib ^= 1;
-            if (iNib == 1)
-            {
-                rgOut[iPos++] = (byte)uVal;
-                rgOut[iPos] = (byte)(uVal >> 8);
-            }
-            else
-            {
-                rgOut[iPos++] |= (byte)(uVal << 4);
-                rgOut[iPos++] = (byte)(uVal >> 4);
-            }
+            var w = new NibbleWriter(rgOut, iPos, iNib);
+            w.WriteLE12(uVal);
+            iPos = w.Pos; iNib = w.Nib;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void WriteLE16(byte[] rgOut, ref int iPos, ref int iNib, uint uVal)
         {
-            if (iNib != 0)
-            {
-                rgOut[iPos++] |= (byte)(uVal << 4);
-                rgOut[iPos++] = (byte)(uVal >> 4);
-                rgOut[iPos] = (byte)(uVal >> 12);
-            }
-            else
-            {
-                rgOut[iPos] = (byte)uVal; iPos++;
-                rgOut[iPos] = (byte)(uVal >> 8); iPos++;
-            }
+            var w = new NibbleWriter(rgOut, iPos, iNib);
+            w.WriteLE16(uVal);
+            iPos = w.Pos; iNib = w.Nib;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void WriteLE20(byte[] rgOut, ref int iPos, ref int iNib, uint uVal)
         {
-            iNib ^= 1;
-            if (iNib == 1)
-            {
-                rgOut[iPos] = (byte)uVal; iPos++;
-                rgOut[iPos] = (byte)(uVal >> 8); iPos++;
-                rgOut[iPos] = (byte)(uVal >> 16);
-            }
-            else
-            {
-                rgOut[iPos++] |= (byte)(uVal << 4);
-                rgOut[iPos] = (byte)(uVal >> 4); iPos++;
-                rgOut[iPos] = (byte)(uVal >> 12); iPos++;
-            }
+            var w = new NibbleWriter(rgOut, iPos, iNib);
+            w.WriteLE20(uVal);
+            iPos = w.Pos; iNib = w.Nib;
         }
+
+        #endregion
+        #region 工具
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private uint Hash(uint uPos)
@@ -437,6 +432,7 @@ namespace Lamarr
             return (u16 + ((u32 >> RS_HASH_BITS) & 0xFFFF)) & DICT_MSK;
         }
 
+        //距离/长度择优 uCurPos>0x880后优先短距离匹配省bit
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static bool IsBetterMatch(uint uCurPos, uint uNewDist, uint uNewLen,
                                           uint uOldDist, uint uOldLen)
@@ -448,10 +444,13 @@ namespace Lamarr
             return (uOldDist << 3) > uNewDist;
         }
 
+        //小端32位读 JIT在x64上优化为单条mov
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static uint Read32LE(byte[] rg, uint uOff)
         {
             return (uint)(rg[uOff] | (rg[uOff + 1] << 8) | (rg[uOff + 2] << 16) | (rg[uOff + 3] << 24));
         }
+
+        #endregion
     }
 }

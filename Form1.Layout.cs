@@ -73,6 +73,16 @@ public partial class Form1
     {
         lblC64_1.Text = bHasData ? "         **** COMMODORE 64 BASIC V2 ****" : "";
         lblC64_3.Text = bHasData ? "READY." : "";
+        if (bHasData)
+        {
+            if (tmrC64 == null) StartC64Anim();
+            else if (!tmrC64.Enabled) tmrC64.Start();
+        }
+        else
+        {
+            tmrC64?.Stop();
+            lblC64_2.Text = "";
+        }
     }
 
     private void SetC64Status(string sStatus, bool bAutoReset = true)

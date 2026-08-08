@@ -6,7 +6,7 @@ namespace Lamarr;
 internal static class Program
 {
     [DllImport("kernel32.dll")]
-    static extern bool AllocConsole();
+    static extern bool AllocConsole();//WinExe不会自动分配控制台 测试模式需要手动
 
     const int iOk = 0;
     const int iErrNoPayload = 1;
