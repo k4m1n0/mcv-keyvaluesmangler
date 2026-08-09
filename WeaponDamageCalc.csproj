@@ -22,14 +22,12 @@
   </PropertyGroup>
 
   <Target Name="PublishStub" BeforeTargets="Publish" Condition="'$(SelfContained)' != 'true'">
-    <Exec Command="dotnet publish &quot;$(ProjectDir)Lamarr&quot; -c $(Configuration) -r $(RuntimeIdentifier) --no-self-contained -p:PublishSingleFile=true -p:DebugType=none -p:DebugSymbols=false -o &quot;$(PublishDir)&quot;" />
-    <Exec Command="dotnet build &quot;$(ProjectDir)LamarrPacker&quot; -c $(Configuration)" />
+    <Exec Command="cd /d &quot;$(ProjectDir)StubNative&quot; &amp;&amp; ml64 /c lamarr_stub.asm &amp;&amp; link /DLL /NOENTRY /SUBSYSTEM:WINDOWS lamarr_stub.obj /OUT:lamarr_stub.dll kernel32.lib" />
+    <Exec Command="dotnet build &quot;$(ProjectDir)Patcher&quot; -c $(Configuration)" />
   </Target>
 
   <Target Name="LamarrPack" AfterTargets="Publish" Condition="'$(SelfContained)' != 'true'">
-    <Exec Command="&quot;$(ProjectDir)LamarrPacker\bin\$(Configuration)\net8.0-windows\LamarrPacker.exe&quot; --stub &quot;$(PublishDir)Lamarr.exe&quot; --input &quot;$(ProjectDir)bin\$(Configuration)\$(TargetFramework)\win-x64\WeaponDamageCalc.exe&quot; --output &quot;$(PublishDir)WeaponDamageCalc_packed.exe&quot;" />
-    <Copy SourceFiles="$(PublishDir)WeaponDamageCalc_packed.exe" DestinationFiles="$(PublishDir)WeaponDamageCalc.exe" OverwriteReadOnlyFiles="true" />
-    <Delete Files="$(PublishDir)WeaponDamageCalc_packed.exe" />
+    <Exec Command="dotnet run --project &quot;$(ProjectDir)Patcher&quot; -- --stub &quot;$(ProjectDir)StubNative\lamarr_stub.dll&quot; --input &quot;$(ProjectDir)bin\$(Configuration)\$(TargetFramework)\win-x64\WeaponDamageCalc.dll&quot; --output &quot;$(PublishDir)WeaponDamageCalc.exe&quot;" />
   </Target>
 
   <ItemGroup>

@@ -159,7 +159,7 @@ namespace Lamarr
 
             copy_uncmp:
                 FlushUCChunk();
-                uInPtr = uProcessedData;
+                uInPtr = uProcessedData + ((cbUCData >> 3) << 3);
                 iUCTagPos = iOutPos; iUCNib = 0;
                 iTagPos = iOutPos++;
                 iCpyTag = 0; cbUCData = 0; uProcessedData = uInPtr;

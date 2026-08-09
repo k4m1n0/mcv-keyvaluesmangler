@@ -15,6 +15,7 @@ internal static class Program
     [STAThread]
     static int Main(string[] rgArgs)
     {
+#if DEBUG
         if (rgArgs.Length == 1 && rgArgs[0] == "--test-decode")
         {
             AllocConsole();
@@ -29,10 +30,12 @@ internal static class Program
 
         if (StubLoader.TryLoadFromTail(out var asmPayload, out var rgRawBytes))
             return RunPayload(asmPayload, rgRawBytes, rgArgs);
+#endif
 
         return iErrNoPayload;
     }
 
+#if DEBUG
     static int TestDecode()
     {
         string sTestFile = Path.Combine(AppContext.BaseDirectory, "test_orig.lzmat");
@@ -112,4 +115,5 @@ internal static class Program
         object? oRet = asmEntry.Invoke(null, rgInvokeArgs);
         return oRet is int iRet ? iRet : iOk;
     }
+#endif
 }
