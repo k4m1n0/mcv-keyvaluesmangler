@@ -219,10 +219,10 @@
 
   FORMAT:
     The compressed payload sits at the end of the EXE, marked by the magic
-    "Lamarr!!" (8 bytes). An 8-byte header stores the original and
-    compressed sizes as little-endian u32. The compressed data follows
+    "Lamarr!!" (8 bytes). An 8 byte header stores the original and
+    compressed sizes as little endian u32. The compressed data follows
 
-    The compression is a nibble-aligned LZ format. Full specification at
+    The compression is a nibble aligned LZ format. Full specification at
     Lamarr/FORMAT.TXT
 
     +------------------+-------------------------------------------+
@@ -237,8 +237,8 @@
 
   CREDITS:
     The underlying LZMAT compression algorithm was designed by
-    Vitaly Evseenko.  The Lamarr source (Lamarr/, LamarrPacker/)
-    is a clean room reimplementation - no third-party code, no
+    Vitaly Evseenko. The Lamarr source (Lamarr/, LamarrPacker/)
+    is a clean room reimplementation - no third party code, no
     dependencies beyond .NET 8.0, released under WTFPL too
 
 
