@@ -217,29 +217,29 @@
   No temp files. No console window flash. HELL YEAH
 
   FORMAT
-      The compressed payload sits at the end of the EXE, marked by the
-      8 byte magic "Lamarr!!". An 8 byte header follows, storing the
-      original and compressed sizes as little endian u32. Then comes the
-      compressed data itself
+    The compressed payload sits at the end of the EXE, marked by the
+    8 byte magic "Lamarr!!". An 8 byte header follows, storing the
+    original and compressed sizes as little endian u32. Then comes the
+    compressed data itself
 
-      The compression is a nibble aligned LZ format. Full specification:
-      Lamarr/FORMAT.TXT
+    The compression is a nibble aligned LZ format. Full specification:
+    Lamarr/FORMAT.TXT
 
-      +--------+--------------------------------------+
-      | Offset | Content                              |
-      +--------+--------------------------------------+
-      | 0      | Stub executable (arbitrary length S) |
-      | S      | "Lamarr!!" (8 bytes)                 |
-      | S + 8  | Original size (u32 LE)               |
-      | S + 12 | Compressed size (u32 LE)             |
-      | S + 16 | Compressed payload (C bytes)         |
-      +--------+--------------------------------------+
+    +--------+--------------------------------------+
+    | Offset | Content                              |
+    +--------+--------------------------------------+
+    | 0      | Stub executable (arbitrary length S) |
+    | S      | "Lamarr!!" (8 bytes)                 |
+    | S + 8  | Original size (u32 LE)               |
+    | S + 12 | Compressed size (u32 LE)             |
+    | S + 16 | Compressed payload (C bytes)         |
+    +--------+--------------------------------------+
 
   CREDITS
-      The underlying LZMAT compression algorithm was designed by
-      Vitaly Evseenko. The Lamarr source (Lamarr/, LamarrPacker/)
-      is a clean room reimplementation - no third party code, no
-      dependencies beyond .NET 8.0, released under WTFPL too :)))
+    The underlying LZMAT compression algorithm was designed by
+    Vitaly Evseenko. The Lamarr source (Lamarr/, LamarrPacker/)
+    is a clean room reimplementation - no third party code, no
+    dependencies beyond .NET 8.0, released under WTFPL too :)))
 
 ================================================================================
   B. CREDITS
