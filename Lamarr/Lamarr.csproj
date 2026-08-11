@@ -21,11 +21,4 @@
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 
-  <!-- LamarrDecoder.cs is the C# reference implementation, kept for DEBUG test-decode.
-       Release builds use the native MASM decoder in StubNative/ instead. -->
-  <ItemGroup Condition="'$(Configuration)'=='Release'">
-    <Compile Remove="LamarrDecoder.cs" />
-    <Compile Remove="Stubloader.cs" />
-  </ItemGroup>
-
 </Project>
