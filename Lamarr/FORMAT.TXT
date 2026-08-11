@@ -5,6 +5,7 @@
 
           Clean-room reimplementation of the LZMAT compression
             algorithm originally designed by Vitaly Evseenko.
+              Reference implementation by John "k0u74ku" Doe
 
 
 Abstract
