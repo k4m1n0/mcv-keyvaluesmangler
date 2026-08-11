@@ -210,36 +210,36 @@
   A. LAMARR
 ================================================================================
 
-  Keyvalues Mangler uses a self extracting compressor called Lamarr to fit
-  within a 360 KiB size budget while still bundling all dependencies. The
-  EXE you downloaded is the stub: it decompresses the real payload into
-  memory at startup, loads it as an assembly, and runs it
+  Keyvalues Mangler bundles its dependencies through a self extracting
+  compressor called Lamarr, staying under a 360 KiB budget. It decompresses
+  the payload into memory at startup, loads it as an assembly and runs it
 
-  No temp files. No console window flash. HELL YEAH 
+  No temp files. No console window flash. HELL YEAH
 
-  FORMAT:
-    The compressed payload sits at the end of the EXE, marked by the magic
-    "Lamarr!!" (8 bytes). An 8 byte header stores the original and
-    compressed sizes as little endian u32. The compressed data follows
+  FORMAT
+      The compressed payload sits at the end of the EXE, marked by the
+      8 byte magic "Lamarr!!". An 8 byte header follows, storing the
+      original and compressed sizes as little endian u32. Then comes the
+      compressed data itself
 
-    The compression is a nibble aligned LZ format. Full specification at
-    Lamarr/FORMAT.TXT
+      The compression is a nibble aligned LZ format. Full specification:
+      Lamarr/FORMAT.TXT
 
-    +------------------+-------------------------------------------+
-    | Offset           | Content                                   |
-    +------------------+-------------------------------------------+
-    | 0                | Stub executable (arbitrary length S)      |
-    | S                | "Lamarr!!" (8 bytes)                      |
-    | S + 8            | Original size (u32 LE)                    |
-    | S + 12           | Compressed size (u32 LE)                  |
-    | S + 16           | Compressed payload (C bytes)              |
-    +------------------+-------------------------------------------+
+      +--------+--------------------------------------+
+      | Offset | Content                              |
+      +--------+--------------------------------------+
+      | 0      | Stub executable (arbitrary length S) |
+      | S      | "Lamarr!!" (8 bytes)                 |
+      | S + 8  | Original size (u32 LE)               |
+      | S + 12 | Compressed size (u32 LE)             |
+      | S + 16 | Compressed payload (C bytes)         |
+      +--------+--------------------------------------+
 
-  CREDITS:
-    The underlying LZMAT compression algorithm was designed by
-    Vitaly Evseenko. The Lamarr source (Lamarr/, LamarrPacker/)
-    is a clean room reimplementation - no third party code, no
-    dependencies beyond .NET 8.0, released under WTFPL too :)))
+  CREDITS
+      The underlying LZMAT compression algorithm was designed by
+      Vitaly Evseenko. The Lamarr source (Lamarr/, LamarrPacker/)
+      is a clean room reimplementation - no third party code, no
+      dependencies beyond .NET 8.0, released under WTFPL too :)))
 
 ================================================================================
   B. CREDITS
