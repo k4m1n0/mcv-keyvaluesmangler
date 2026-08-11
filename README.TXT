@@ -44,7 +44,7 @@
     - One click export to game script files
     - Wiki integration: convert, generate, and upload weapon pages
     - Run from command line if you hate GUIs for some reason
-    - Detect dark mode so your eyeballs does not bleed at 3 AM
+    - Detect dark mode so your eyeballs do not bleed at 3 AM
       (Win/GTK/KDE/Xfce)
 
 ================================================================================
@@ -240,7 +240,6 @@
     Vitaly Evseenko. The Lamarr source (Lamarr/, LamarrPacker/)
     is a clean room reimplementation - no third party code, no
     dependencies beyond .NET 8.0, released under WTFPL too
-
 
 ================================================================================
   B. CREDITS
