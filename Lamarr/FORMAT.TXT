@@ -3,16 +3,16 @@
 
                               Version 1.0
 
-          Clean room reimplementation of the LZMAT compression
+          Clean-room reimplementation of the LZMAT compression
             algorithm originally designed by Vitaly Evseenko.
 
 
 Abstract
 
     This document specifies a nibble-aligned LZ-style lossless
-    compression format.  The format operates on an octet stream,
+    compression format. The format operates on an octet stream,
     producing a self-delimiting compressed representation through a
-    tag-byte-driven state machine.  A literal byte is emitted as-is;
+    tag-byte-driven state machine. A literal byte is emitted as-is;
     a backward reference (match) is encoded as a distance-length pair
     using variable-width fields whose bit alignment shifts at nibble
     granularity.
@@ -29,8 +29,8 @@ Abstract
     RFC 2119.
 
     Bit numbering follows the least-significant-bit-first convention:
-    bit 0 is the least significant bit of an octet.  Multi-octet
-    values are stored in little-endian byte order.
+    bit 0 is the least significant bit of an octet. Multi-octet values
+    are stored in little-endian byte order.
 
     Notation:
 
@@ -66,15 +66,22 @@ Abstract
             v := (S[p] >> 4) | (S[p + 1] << 4)
             p := p + 1
 
-    The cursor advances by one octet after each read.  Writing
-    follows the inverse:  the low nibble of v is OR'd into the high
-    nibble of the current octet (if nib = 1), and the high nibble of
-    v is placed in the low nibble of the following octet.
+    The cursor advances by one octet after each read.
+
+    For writing, the encoder toggles nib on U4, LE12, and LE20 write
+    operations. U8 and LE16 writes do not toggle nib. Consecutive
+    nibble-aligned writes share output octets: the first write occupies
+    the low nibble of an octet and the second occupies the high nibble,
+    at which point the cursor advances to the next octet.
+
+    The encoder write primitives are specified in Section
+    5.3. The nibble toggle behaviour of each primitive is specified
+    individually.
 
 2.2.  Multi-Byte Little-Endian Reads
 
     Wider fields (12-bit, 16-bit, 20-bit) are read as native LE
-    integers and then masked.  Reads past end-of-buffer return zero
+    integers and then masked. Reads past end-of-buffer return zero
     for missing octets, allowing the decoder to consume padding bits
     at stream end without explicit markers.
 
@@ -105,19 +112,19 @@ Abstract
 3.1.  Initial Byte
 
     The first octet of the original input is copied verbatim to the
-    first octet of the compressed output.  This establishes the
+    first octet of the compressed output. This establishes the
     output origin for backward references.
 
 3.2.  Tag Byte
 
     A tag byte is a u8 value encoding the type of the next 1 to 8
-    items.  Bit 7 (0x80) controls the first item, bit 6 the second,
+    items. Bit 7 (0x80) controls the first item, bit 6 the second,
     and so forth.
 
         bit = 0  =>  literal byte follows
         bit = 1  =>  match (distance + length) follows
 
-    After 8 bits are consumed, a new tag byte is read.  When fewer
+    After 8 bits are consumed, a new tag byte is read. When fewer
     than 8 items remain in a tag group, unused bits MUST be set to 1.
     The decoder treats these as match items; boundary checks prevent
     spurious output (Section 3.5).
@@ -130,7 +137,7 @@ Abstract
 3.4.  Match Item
 
     A match item represents a substring already present in the
-    output.  It consists of two sub-fields:
+    output. It consists of two sub-fields:
 
         distance    d such that source position is (outPos - d).
                     Encoded per Section 4.1.
@@ -155,13 +162,13 @@ Abstract
 
 3.6.  Tag Byte Nibble Alignment
 
-    The tag byte itself is subject to nibble alignment.  When the
+    The tag byte itself is subject to nibble alignment. When the
     preceding output ends on a nibble boundary (nib = 1), the tag
     byte is split across two octets:  its low nibble occupies the
     high nibble of the current octet (OR'd with residual data), and
     its high nibble occupies the low nibble of the following octet.
     To avoid residual garbage, the encoder MUST zero the following
-    octet before writing the tag.  When nib = 0, the tag is written
+    octet before writing the tag. When nib = 0, the tag is written
     as a whole octet at the current output position, which then
     advances by one.
 
@@ -171,7 +178,7 @@ Abstract
 4.1.  Distance Coding
 
     A raw 20-bit field (cflag, u20 per Section 2.2) is read; the
-    cursor advances by 1 octet.  The coding tier is selected by
+    cursor advances by 1 octet. The coding tier is selected by
     outPos.
 
 4.1.1.  Short Distance  (outPos < 0x881)
@@ -200,16 +207,16 @@ Abstract
             d := ((cflag >> 2) & 0x3FFFF) + 0x4441   // [17473, 279616]
             Cursor += 1 + nib; nib ^= 1.
 
-    The fourth bucket requires L >= 4.  If an encoder finds a match
+    The fourth bucket requires L >= 4. If an encoder finds a match
     of length 3 whose distance falls in this bucket, it MUST encode
     the first octet as a literal and let the remaining two octets be
-    handled by subsequent loop iterations.  (The encoder cannot
+    handled by subsequent loop iterations. (The encoder cannot
     simply force L = 4, as that would copy an incorrect fourth octet
     from the source position.)
 
 4.2.  Length Coding
 
-    A raw 12-bit field (u12, Section 2.2) is read.  Cursor advances
+    A raw 12-bit field (u12, Section 2.2) is read. Cursor advances
     by nib-phase octets and nib is toggled.
 
         (u12 & 0xF) != 0xF:
@@ -224,12 +231,13 @@ Abstract
             Cursor += 2.
             L := E + 0x111.
 
-    The value E = 0xFFFF produces L = 0x11110, which is a sentinel
-    triggering a Copy Chunk (Section 4.3) instead of a normal match.
+    The value E = 0xFFFF produces L = LZMAT_2BYTE_CNT (0x10110),
+    which is a sentinel triggering a Copy Chunk (Section 4.3) instead
+    of a normal match.
 
 4.3.  Copy Chunk  (Uncompressed Fallback)
 
-    When L = 0x11110, the item is an uncompressed data block.  The
+    When L = LZMAT_2BYTE_CNT, the item is an uncompressed data block. The
     length C (in units of 4-octet groups) is decoded from context:
 
         nib = 1:   C := ((octet[cursor - 4] & 0xFC) << 5)
@@ -241,7 +249,7 @@ Abstract
         C := C << 1
 
     The decompressor copies C * 4 octets directly from the compressed
-    input to output, advancing both cursors by C * 4.  This consumes
+    input to output, advancing both cursors by C * 4. This consumes
     the remaining bits of the current tag byte (inner loop break).
 
 
@@ -255,16 +263,20 @@ Abstract
         h(p) := (u16(p) + ((u32(p) >> 9) & 0xFFFF))
                 & (TABLE_SIZE - 1)
 
-    TABLE_SIZE is 0x8000 (32768 entries, 128 KiB).  A conforming
-    implementation MAY use a different power of two, but the hash
-    function `h(p)` above MUST use the same TABLE_SIZE value in both
-    the mask and the table allocation.  Collisions chain through an
-    auxiliary index array of the same size.  The chain is traversed
-    until a position before the search window is reached:
+    TABLE_SIZE is 0x8000 (32768 entries). Collisions chain through
+    an auxiliary index array of the same size. The chain is
+    traversed until a position before the search window is reached:
 
-        start_pos := 0                       if p < 0x4443F
-        start_pos := p - 0x4443F             otherwise
+        start_pos := 0                       if p < MAX_GAMMA_DIST
+        start_pos := p - MAX_GAMMA_DIST      otherwise
 
+5.1.1.  RLE Fast Path
+
+    When (*(u32 *)(inPtr - 1)) == (*(u32 *)(inPtr)):
+        matchLen := 4
+        while remaining > 0 AND inPtr[matchLen] == inPtr[matchLen - 1]:
+            matchLen++
+        return matchLen
 5.2.  Match Selection
 
     When multiple matches exist at a position:
@@ -277,24 +289,85 @@ Abstract
              distance coding overhead becomes significant.
         (d)  Otherwise, prefer when (d_old * 8) > d_new.
 
-5.3.  Uncompressed Chunk Trigger
+    The encoder MAY use a progressive 2-byte hash-chain filter
+    (cmp_val) to reduce false-positive byte comparisons. This
+    is an optimisation detail and does not affect the format.
+5.3.  Nibble-Aligned Write Primitives
 
-    When the compressed output for a segment exceeds the size of the
-    corresponding raw input, the segment is flushed as a Copy Chunk
-    (Section 4.3).
+    Toggle column indicates whether the primitive modifies the nibble
+    cursor.
+
+    SET_U8(out, pos, nib, v)                              // toggle: NO
+
+        if nib != 0:
+            out[pos] := out[pos] OR (u8)(v << 4)   ; pos := pos + 1
+            out[pos] := (u8)(v >> 4)
+        else:
+            out[pos] := (u8)v                       ; pos := pos + 1
+
+    SET_U4(out, pos, nib, v)                              // toggle: YES
+
+        nib := nib XOR 1
+        if nib = 1:
+            out[pos] := (u8)(v AND 0x0F)
+        else:
+            out[pos] := out[pos] OR (u8)(v << 4)   ; pos := pos + 1
+
+    SET_LE12(out, pos, nib, v)                            // toggle: YES
+
+        nib := nib XOR 1
+        if nib = 1:
+            out[pos] := (u8)v                       ; pos := pos + 1
+            out[pos] := (u8)(v >> 8)
+        else:
+            out[pos] := out[pos] OR (u8)(v << 4)   ; pos := pos + 1
+            out[pos] := (u8)(v >> 4)                ; pos := pos + 1
+
+    SET_LE16(out, pos, nib, v)                            // toggle: NO
+
+        if nib != 0:
+            out[pos] := out[pos] OR (u8)(v << 4)   ; pos := pos + 1
+            out[pos] := (u8)(v >> 4)                ; pos := pos + 1
+            out[pos] := (u8)(v >> 12)
+        else:
+            out[pos] := (u8)v                       ; pos := pos + 1
+            out[pos] := (u8)(v >> 8)                ; pos := pos + 1
+
+    SET_LE20(out, pos, nib, v)                            // toggle: YES
+
+        nib := nib XOR 1
+        if nib = 1:
+            SET_LE16(out, (u16)v)          // advances pos by 2
+            out[pos] := (u8)(v >> 16)
+        else:
+            out[pos] := out[pos] OR (u8)(v << 4)   ; pos := pos + 1
+            SET_LE16(out, (u16)(v >> 4))  // advances pos by 2
+
+5.4.  Copy Chunk Trigger
+
+    When the encoder detects that the compressed output for a segment
+    exceeds the corresponding raw input size, it flushes the
+    accumulated uncompressed data as a Copy Chunk (see Section 4.3).
+    The encoder advances inPtr past the flushed region by setting
+    inPtr to processed_data + cbUCData.
 
 
 6.  Container Format
 
-    +-----------+--------------------------------------------+
-    | Offset    | Content                                    |
-    +-----------+--------------------------------------------+
-    | 0         | Stub executable (S octets)                 |
-    | S         | Magic: "Lamarr!!" (8 octets)               |
-    | S + 8     | Original size (u32 LE)                     |
-    | S + 12    | Compressed size (u32 LE)                   |
-    | S + 16    | Compressed payload (C octets)              |
-    +-----------+--------------------------------------------+
+    The following container format is defined by the Lamarr C# reference
+    implementation (Packer.cs and StubLoader.cs). Other implementations
+    MAY use a different container, provided the compressed payload is a
+    conforming LZMAT-compatible bitstream per Sections 1 through 5.
+
+    +-----------+-------------------------------+
+    | Offset    | Content                       |
+    +-----------+-------------------------------+
+    | 0         | Stub executable (S octets)    |
+    | S         | Magic: "Lamarr!!" (8 octets)  |
+    | S + 8     | Original size (u32 LE)        |
+    | S + 12    | Compressed size (u32 LE)      |
+    | S + 16    | Compressed payload (C octets) |
+    +-----------+-------------------------------+
 
     Magic octets:  0x4C 0x61 0x6D 0x61 0x72 0x72 0x21 0x21
 
@@ -308,14 +381,13 @@ Abstract
 
 7.  Security Considerations
 
-    (a)  Distance Overflow.  Validate distance <= outPos before copy.
-    (b)  Length Overflow.  Validate outPos + length <= dstLen.
-    (c)  Resource Exhaustion.  Bound output allocation (e.g., 500
-         MiB).
-    (d)  Container Integrity.  Validate magic, header, bounds.
+    (a)  Distance Overflow. Validate distance <= outPos before copy.
+    (b)  Length Overflow. Validate outPos + length <= dstLen.
+    (c)  Resource Exhaustion. Bound output allocation (e.g., 500 MiB).
+    (d)  Container Integrity. Validate magic, header, bounds.
 
-    This format is designed for distribution of trusted payloads.  It
-    includes no integrity checks (checksums, MACs).  Untrusted input
+    This format is designed for distribution of trusted payloads. It
+    includes no integrity checks (checksums, MACs). Untrusted input
     SHOULD be wrapped in an external integrity layer.
 
 
@@ -345,4 +417,42 @@ Appendix A.  Field Width Summary
     +-------------------+--------+----------------------------+
 
 
-                      End of Specification
+Appendix B.  Implementation Notes
+
+    B.1.  Buffer Boundary Behaviour
+
+    The format does not require the input buffer to extend beyond
+    cbIn octets. During match search, the progressive hash filter
+    (Section 5.2) MAY read one octet past the declared input length
+    when a match extends to the final octet. The value read at
+    position cbIn is therefore undefined in the general case.
+
+    Conforming encoders SHOULD provide the declared input in a
+    buffer padded with one zero octet beyond cbIn, yielding
+    deterministic output for all inputs.
+
+    When such padding is used, compressed output MAY differ from
+    implementations that read arbitrary memory at cbIn. This
+    difference is limited to the final ~200 compressed octets,
+    has no impact on decompression correctness, and affects only
+    input streams that lie within ~200 octets of a buffer page
+    boundary. Decoders are unaffected.
+
+    B.2.  Hash Table at Input Boundary
+
+    The hash function (Section 5.1) reads a u32 at the current input
+    position. When the encoder position is within 3 octets of cbIn,
+    this read extends beyond the declared input buffer. In memory-
+    unsafe environments the value is undefined; in memory-safe
+    environments the read MUST be guarded.
+
+    The Lamarr C# reference implementation returns hash bucket 0 for
+    positions where (uPos + 3 >= cbIn). This guard is transparent
+    at all input positions except the final three, where the hash
+    bucket differs from implementations that read past cbIn. The
+    effect is indistinguishable from the B.1 boundary behaviour.
+    Compressed output MAY differ in the final ~200 octets with no
+    impact on decompression correctness.
+
+
+                        End of Specification

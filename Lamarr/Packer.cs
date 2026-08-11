@@ -1,4 +1,3 @@
-// 打包格式 Stub.exe + Lamarr!! + [4B原始大小][4B压缩大小] + 压缩载荷
 using System;
 using System.IO;
 

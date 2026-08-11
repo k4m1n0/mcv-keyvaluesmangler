@@ -10,134 +10,134 @@ public static class LamarrDecoder
     private const uint LZ_1BYTE_CNT = 0xFF + LZ_DEFAULT_CNT;
     private const uint LZ_2BYTE_CNT = 0xFFFF + LZ_1BYTE_CNT;
 
-    public static int Decode(byte[] pbOut, ref uint pcbOut, byte[] pbIn, uint cbIn)
+    public static int Decode(byte[] rgOut, ref uint pcbOut, byte[] rgIn, uint cbIn)
     {
-        uint outPos = 1;
-        uint inPos = 1;
-        int cur_nib = 0;
+        uint uOutPos = 1;
+        uint uInPos = 1;
+        int iCurNib = 0;
 
         //首字节直接复制 格式要求
-        pbOut[0] = pbIn[0];
+        rgOut[0] = rgIn[0];
 
         //一个tag byte用8个bit管后续8个item bit=1是match bit=0是literal
-        while (inPos < (cbIn - (uint)cur_nib))
+        while (uInPos < (cbIn - (uint)iCurNib))
         {
-            int bc;
-            uint tag;
+            int iBC;
+            uint uTag;
 
-            if (cur_nib != 0)
-                tag = (uint)((pbIn[inPos] >> 4) | (pbIn[inPos + 1] << 4));
+            if (iCurNib != 0)
+                uTag = (uint)((rgIn[uInPos] >> 4) | (rgIn[uInPos + 1] << 4));
             else
-                tag = pbIn[inPos];
-            inPos++;
+                uTag = rgIn[uInPos];
+            uInPos++;
 
-            for (bc = 0; bc < 8 && inPos < (cbIn - (uint)cur_nib) && outPos < pcbOut; bc++, tag <<= 1)
+            for (iBC = 0; iBC < 8 && uInPos < (cbIn - (uint)iCurNib) && uOutPos < pcbOut; iBC++, uTag <<= 1)
             {
-                if ((tag & 0x80) != 0)
+                if ((uTag & 0x80) != 0)
                 {
-                    uint r_pos, r_cnt, dist;
+                    uint uRPos, uRCnt, uDist;
 
-                    uint cflag = cur_nib != 0
-                        ? (ReadLE32Safe(pbIn, inPos, cbIn) >> 4) & 0xFFFFF
-                        : ReadLE32Safe(pbIn, inPos, cbIn) & 0xFFFFF;
-                    inPos++;
+                    uint uCFlag = iCurNib != 0
+                        ? (ReadLE32Safe(rgIn, uInPos, cbIn) >> 4) & 0xFFFFF
+                        : ReadLE32Safe(rgIn, uInPos, cbIn) & 0xFFFFF;
+                    uInPos++;
 
                     //outPos<0x881用短距离编码 少1bit分两个bucket
-                    if (outPos < 0x881)
+                    if (uOutPos < 0x881)
                     {
-                        dist = cflag >> 1;
-                        if ((cflag & 1) != 0)
+                        uDist = uCFlag >> 1;
+                        if ((uCFlag & 1) != 0)
                         {
-                            inPos += (uint)cur_nib;
-                            dist = (dist & 0x7FF) + 0x81;
-                            cur_nib ^= 1;
+                            uInPos += (uint)iCurNib;
+                            uDist = (uDist & 0x7FF) + 0x81;
+                            iCurNib ^= 1;
                         }
                         else
-                            dist = (dist & 0x7F) + 1;
+                            uDist = (uDist & 0x7F) + 1;
                     }
                     else
                     {
-                        dist = cflag >> 2;
-                        switch (cflag & 3)
+                        uDist = uCFlag >> 2;
+                        switch (uCFlag & 3)
                         {
-                            case 0: dist = (dist & 0x3F) + 1; break;
-                            case 1: inPos += (uint)cur_nib; dist = (dist & 0x3FF) + 0x41; cur_nib ^= 1; break;
-                            case 2: dist = (dist & 0x3FFF) + 0x441; inPos++; break;
-                            case 3: inPos += (uint)(1 + cur_nib); dist = (dist & 0x3FFFF) + 0x4441; cur_nib ^= 1; break;
+                            case 0: uDist = (uDist & 0x3F) + 1; break;
+                            case 1: uInPos += (uint)iCurNib; uDist = (uDist & 0x3FF) + 0x41; iCurNib ^= 1; break;
+                            case 2: uDist = (uDist & 0x3FFF) + 0x441; uInPos++; break;
+                            case 3: uInPos += (uint)(1 + iCurNib); uDist = (uDist & 0x3FFFF) + 0x4441; iCurNib ^= 1; break;
                         }
                     }
 
-                    if (cur_nib != 0)
-                        r_cnt = (uint)((ReadLE16Safe(pbIn, inPos, cbIn) >> 4) & 0xFFF);
+                    if (iCurNib != 0)
+                        uRCnt = (uint)((ReadLE16Safe(rgIn, uInPos, cbIn) >> 4) & 0xFFF);
                     else
-                        r_cnt = (uint)(ReadLE16Safe(pbIn, inPos, cbIn) & 0xFFF);
-                    inPos += (uint)cur_nib;
-                    cur_nib ^= 1;
+                        uRCnt = (uint)(ReadLE16Safe(rgIn, uInPos, cbIn) & 0xFFF);
+                    uInPos += (uint)iCurNib;
+                    iCurNib ^= 1;
 
                     //4bit<15直接+3 得到3..17
-                    if ((r_cnt & 0xF) != 0xF)
+                    if ((uRCnt & 0xF) != 0xF)
                     {
-                        r_cnt = (r_cnt & 0xF) + 3;
+                        uRCnt = (uRCnt & 0xF) + 3;
                     }
                     else
                     {
-                        inPos++;
+                        uInPos++;
                         //4bit=15 读1字节扩展
-                        if (r_cnt != 0xFFF)
+                        if (uRCnt != 0xFFF)
                         {
-                            r_cnt = (r_cnt >> 4) + 0x12;
+                            uRCnt = (uRCnt >> 4) + 0x12;
                         }
                         else
                         {
-                            if (cur_nib != 0)
-                                r_cnt = (uint)((ReadLE32Safe(pbIn, inPos, cbIn) >> 4) & 0xFFFF) + LZ_1BYTE_CNT;
+                            if (iCurNib != 0)
+                                uRCnt = (uint)((ReadLE32Safe(rgIn, uInPos, cbIn) >> 4) & 0xFFFF) + LZ_1BYTE_CNT;
                             else
-                                r_cnt = (uint)(ReadLE16Safe(pbIn, inPos, cbIn) + LZ_1BYTE_CNT);
-                            inPos += 2;
+                                uRCnt = (uint)(ReadLE16Safe(rgIn, uInPos, cbIn) + LZ_1BYTE_CNT);
+                            uInPos += 2;
                             //哨兵值0x111+0xFFFF 触发非压缩块回退
-                            if (r_cnt == LZ_2BYTE_CNT)
+                            if (uRCnt == LZ_2BYTE_CNT)
                             {
                                 uint uCopyCnt;
-                                if (cur_nib != 0)
+                                if (iCurNib != 0)
                                 {
-                                    uCopyCnt = ((uint)pbIn[inPos - 4] & 0xFC) << 5;
-                                    inPos++;
-                                    cur_nib = 0;
+                                    uCopyCnt = ((uint)rgIn[uInPos - 4] & 0xFC) << 5;
+                                    uInPos++;
+                                    iCurNib = 0;
                                 }
                                 else
                                 {
-                                    uCopyCnt = (uint)((ReadLE16Safe(pbIn, inPos - 5, cbIn) & 0xFC0) << 1);
+                                    uCopyCnt = (uint)((ReadLE16Safe(rgIn, uInPos - 5, cbIn) & 0xFC0) << 1);
                                 }
-                                uCopyCnt += (tag & 0x7F) + 4;
+                                uCopyCnt += (uTag & 0x7F) + 4;
                                 uCopyCnt <<= 1;
-                                while (uCopyCnt-- > 0 && outPos < pcbOut)
+                                while (uCopyCnt-- > 0 && uOutPos < pcbOut)
                                 {
-                                    pbOut[outPos++] = pbIn[inPos++];
-                                    pbOut[outPos++] = pbIn[inPos++];
-                                    pbOut[outPos++] = pbIn[inPos++];
-                                    pbOut[outPos++] = pbIn[inPos++];
+                                    rgOut[uOutPos++] = rgIn[uInPos++];
+                                    rgOut[uOutPos++] = rgIn[uInPos++];
+                                    rgOut[uOutPos++] = rgIn[uInPos++];
+                                    rgOut[uOutPos++] = rgIn[uInPos++];
                                 }
                                 break;
                             }
                         }
                     }
 
-                    if (outPos < dist) return 0x104;//距离越过输出起始 数据损坏
-                    if ((outPos + r_cnt) > pcbOut) return 0x111;//输出缓冲区不够
+                    if (uOutPos < uDist) return 0x104;//距离越过输出起始 数据损坏
+                    if ((uOutPos + uRCnt) > pcbOut) return 0x111;//输出缓冲区不够
 
-                    r_pos = outPos - dist;
-                    while (r_cnt-- > 0 && outPos < pcbOut)
-                        pbOut[outPos++] = pbOut[r_pos++];
+                    uRPos = uOutPos - uDist;
+                    while (uRCnt-- > 0 && uOutPos < pcbOut)
+                        rgOut[uOutPos++] = rgOut[uRPos++];
                 }
                 else
                 {
-                    pbOut[outPos++] = (byte)((cur_nib != 0) ? ((pbIn[inPos] >> 4) | (pbIn[inPos + 1] << 4)) : pbIn[inPos]);
-                    inPos++;
+                    rgOut[uOutPos++] = (byte)((iCurNib != 0) ? ((rgIn[uInPos] >> 4) | (rgIn[uInPos + 1] << 4)) : rgIn[uInPos]);
+                    uInPos++;
                 }
             }
         }
 
-        pcbOut = outPos;
+        pcbOut = uOutPos;
         return 0;
     }
 

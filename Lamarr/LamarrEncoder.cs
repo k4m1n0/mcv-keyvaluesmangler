@@ -5,6 +5,8 @@ namespace Lamarr
 {
     public class LamarrEncoder
     {
+        #region 常量字段
+
         //hash表条目数 平衡碰撞率与内存占用
         private const int DICT_SIZE = 0x8000;
         private const int IDX_SIZE  = 0x8000;
@@ -23,25 +25,24 @@ namespace Lamarr
         private const uint LONG_DIST1  = 0x400 | LONG_DIST0;
         private const uint LONG_DIST2  = 0x4000 | LONG_DIST1;
         private const uint MAX_GAMMA_DIST = (0x40000 | LONG_DIST2) - 1;
+        private const int MAX_CHAIN_LEN = 4096;
 
         private byte[] rgIn = null!, rgOut = null!;
         private uint cbIn, cbOutCap;
         private int[] rgPtr = null!, rgIdx = null!;
-
-        #region 字段
 
         private int iOutPos;
         private int iCurNib;
         private int iTagNib;
 
         private uint uInPtr, uProcessedData;
-        private uint uGammaDist, uMatchCnt;
+        private uint   uGammaDist;
         private int iTagPos, iUCTagPos, iUCNib, iCpyTag;
         private uint cbUCData;
         private byte bBitMsk, bThisTag;
 
         #endregion
-        #region 入口
+        #region 静态入口
 
         public static uint GetMaxEncodedSize(uint cbIn)
         {
@@ -56,6 +57,13 @@ namespace Lamarr
 
         private int EncodeInternal(byte[] rgOut, ref uint pcbOut, byte[] rgIn, uint cbIn)
         {
+            //输入末尾补1字节0 cmp_val在match到末尾时读取pbIn[cbIn]=0
+            if (rgIn.Length <= cbIn)
+            {
+                byte[] rgPadded = new byte[cbIn + 1];
+                Array.Copy(rgIn, rgPadded, cbIn);
+                rgIn = rgPadded;
+            }
             this.rgIn = rgIn; this.rgOut = rgOut; this.cbIn = cbIn;
             cbOutCap = pcbOut;
 
@@ -91,57 +99,33 @@ namespace Lamarr
                 {
                     uCurMatchCnt = 1;
                     WriteU8(rgOut, ref iOutPos, ref iCurNib, rgIn[uInPtr]);
-                    goto set_next_tag;
                 }
-
-                EncodeDistance(ref uCurMatchCnt);
-                if (uCurMatchCnt >= 3)//仅真实匹配才写长度和tag位
+                else
                 {
-                    EncodeLength(uCurMatchCnt);
-                    bThisTag |= bBitMsk;
+                    EncodeDistance(ref uCurMatchCnt);
+                    if (uCurMatchCnt >= 3)//仅真实匹配才写长度和tag位
+                    {
+                        EncodeLength(uCurMatchCnt);
+                        bThisTag |= bBitMsk;
+                    }
                 }
 
-            set_next_tag:
                 bBitMsk >>= 1;
                 if (bBitMsk == 0)
                 {
-                    if (iCpyTag != 0 && cbUCData > 0xFFF8)
-                        goto copy_uncmp;
-
-                    uint i = uInPtr - (uProcessedData + uCurMatchCnt);
-                    uint cbCompressed = (uint)(iOutPos - iUCTagPos);
-                    if (bThisTag != 0)
+                    if (CheckCopyChunk(uCurMatchCnt))
                     {
-                        if (iCpyTag > 0xFF)
-                            goto copy_uncmp;
-                        else if (cbCompressed < i)
-                        {
-                            if (iCpyTag > 0x3F)
-                                goto copy_uncmp;
-                            iCpyTag = 0;
-                            iUCTagPos = iOutPos;
-                            iUCNib = iCurNib;
-                            uProcessedData = uInPtr + uCurMatchCnt;
-                        }
-                    }
-                    else
-                    {
-                        if (iCpyTag != 0 || (i + 4) < cbCompressed)
-                        {
-                            cbUCData = uInPtr - uProcessedData;
-                            iCpyTag++;
-                        }
+                        FlushUCChunk();
+                        uInPtr = uProcessedData + cbUCData;
+                        iUCTagPos = iOutPos; iUCNib = 0;
+                        iTagPos = iOutPos++;
+                        iCpyTag = 0; cbUCData = 0; uProcessedData = uInPtr;
+                        bBitMsk = 0x80; bThisTag = 0;
+                        iTagNib = 0; iCurNib = 0;
+                        continue;
                     }
 
-                    if ((iTagNib & 1) != 0)
-                    {
-                        rgOut[iTagPos++] |= (byte)(bThisTag << 4);
-                        rgOut[iTagPos] |= (byte)(bThisTag >> 4);
-                    }
-                    else
-                    {
-                        rgOut[iTagPos] = bThisTag;
-                    }
+                    WriteTagByte();
 
                     bBitMsk = 0x80; bThisTag = 0;
                     iTagPos = iOutPos++;
@@ -154,19 +138,9 @@ namespace Lamarr
                 }
 
                 UpdateHash(uCurMatchCnt);
-                uMatchCnt = uCurMatchCnt;
-                continue;
+                            }
 
-            copy_uncmp:
-                FlushUCChunk();
-                uInPtr = uProcessedData;
-                iUCTagPos = iOutPos; iUCNib = 0;
-                iTagPos = iOutPos++;
-                iCpyTag = 0; cbUCData = 0; uProcessedData = uInPtr;
-                bBitMsk = 0x80; bThisTag = 0;
-                iTagNib = 0; iCurNib = 0;
-            }
-
+            //尾部未满8个item的tag填充
             if (bBitMsk != 0) { bThisTag |= bBitMsk; bThisTag |= (byte)(bBitMsk - 1); }
             if ((iTagNib & 1) != 0)
             {
@@ -177,6 +151,56 @@ namespace Lamarr
 
             pcbOut = (uint)iOutPos + (uint)iCurNib;
             return 0;
+        }
+
+        private bool CheckCopyChunk(uint uCurMatchCnt)
+        {
+            //iUCData溢出或iCpyTag超阈值触发flush；bValid防止rewind循环
+            if (iCpyTag != 0 && cbUCData > 0xFFF8)
+                return true;
+
+            uint i = uInPtr - (uProcessedData + uCurMatchCnt);
+            uint cbCompressed = (uint)(iOutPos - iUCTagPos);
+            //bValid防copy_uncmp后回绕导致的级联触发
+            bool bValid = uInPtr > uProcessedData;
+
+            if (bThisTag != 0)
+            {
+                if (bValid && iCpyTag > 0xFF)
+                    return true;
+                if (cbCompressed < i)
+                {
+                    if (!bValid) return false;
+                    if (iCpyTag > 0x3F)
+                        return true;
+                    iCpyTag = 0;
+                    iUCTagPos = iOutPos;
+                    iUCNib = iCurNib;
+                    uProcessedData = uInPtr + uCurMatchCnt;
+                }
+            }
+            else
+            {
+                if (iCpyTag != 0 || (i + 4) < cbCompressed)
+                {
+                    cbUCData = uInPtr - uProcessedData;
+                    iCpyTag++;
+                }
+            }
+            return false;
+        }
+
+        private void WriteTagByte()
+        {
+            if ((iTagNib & 1) != 0)
+            {
+                rgOut[iTagPos++] |= (byte)(bThisTag << 4);
+                rgOut[iTagPos] |= (byte)(bThisTag >> 4);
+            }
+            else
+            {
+                rgOut[iTagPos] = bThisTag;
+            }
         }
 
         #endregion
@@ -242,7 +266,7 @@ namespace Lamarr
         }
 
 
-        //链搜索无上限 靠start_pos自然截断
+        //链搜索上限4096 防碰撞退化
         private uint FindMatch()
         {
             uint uCurPtr = uInPtr;
@@ -257,25 +281,25 @@ namespace Lamarr
 
             uint uHash = Hash(uInPtr);
 
+            //pInp[-1..2]==pInp[0..3] -> 连续相同字节
             if (uRemaining >= 4 && Read32LE(rgIn, uCurPtr) == Read32LE(rgIn, uCurPtr - 1))
             {
                 uint uRem = cbIn - 4 - uCurPtr;
                 uint uCur = uCurPtr + 4;
-                uMatchCnt = 4;
                 uGammaDist = 0;
                 if (uRem > MAX_2BYTE_CNT - 4) uRem = MAX_2BYTE_CNT - 4;
-                while (uRem-- > 0 && pIn[uCur] == pIn[uCur - 4]) uCur++;
+                while (uRem-- > 0 && pIn[uCur] == pIn[uCur - 1]) uCur++;
                 return uCur - uCurPtr;
             }
 
             int iDictPtr = rgPtr[uHash];
             int iStartPos = (uCurPtr < MAX_GAMMA_DIST) ? 0 : (int)(uCurPtr - MAX_GAMMA_DIST);
 
-            uint uBestCnt = 1;
-            uint uBestDist = 0;
-
             if (iDictPtr < iStartPos)
-                return uBestCnt;
+            {
+                uGammaDist = 0;
+                return 1;
+            }
 
             if (uCurPtr + 2 >= cbIn)
             {
@@ -284,15 +308,15 @@ namespace Lamarr
             }
 
             ushort uCmpVal = (ushort)(pIn[uCurPtr + 1] | (pIn[uCurPtr + 2] << 8));
+            int iPITmp = 1;
+            uint uBestCnt = 1;
+            uint uBestDist = 0;
 
-            int iChainDepth = 0;
-            const int MAX_CHAIN = 65536;
-            while (iDictPtr < (int)uCurPtr)
+            int iChain = 0;
+            while (iDictPtr < (int)uCurPtr && ++iChain <= MAX_CHAIN_LEN)
             {
-                iChainDepth++;
-                if (iChainDepth > MAX_CHAIN) break;
                 int iCurIdx = iDictPtr;
-                if ((ushort)(pIn[iDictPtr + 1] | (pIn[iDictPtr + 2] << 8)) == uCmpVal)
+                if ((ushort)(pIn[iDictPtr + iPITmp] | (pIn[iDictPtr + iPITmp + 1] << 8)) == uCmpVal)
                 {
                     uint uRem = uRemaining;
                     if (uRem > MAX_2BYTE_CNT) uRem = MAX_2BYTE_CNT;
@@ -305,6 +329,10 @@ namespace Lamarr
                     if (IsBetterMatch(uCurPtr, uNewDist, uFound, uBestDist, uBestCnt))
                     {
                         uBestDist = uNewDist; uBestCnt = uFound;
+                        {
+                            uCmpVal = (ushort)(pIn[uCurPtr + uFound - 1] | (pIn[uCurPtr + uFound] << 8));
+                            iPITmp = (int)uFound - 1;
+                        }
                         if (uBestCnt >= MAX_2BYTE_CNT) break;
                     }
                 }
@@ -464,7 +492,6 @@ namespace Lamarr
         {
             if (uNewLen <= uOldLen) return false;
             if (uNewLen > uOldLen + 1) return true;
-            if (uOldDist == 0) return true;
             if (uCurPos > 0x880 && (uOldDist << 7) > uNewDist) return true;
             return (uOldDist << 3) > uNewDist;
         }
