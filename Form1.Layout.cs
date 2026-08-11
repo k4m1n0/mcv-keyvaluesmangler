@@ -38,6 +38,12 @@ public partial class Form1
         long lGcHeap = GC.GetTotalMemory(false) / 1024;
         long lUnmanaged = lWs > lGcHeap ? lWs - lGcHeap : 0;
         lblC64_2.Text = $"{lWs / 1024}M RAM SYSTEM  {lUnmanaged}K NATIVE BYTES FREE";
+
+        if (lblC64_1.Text == "")
+        {
+            tmrC64.Stop();
+            lblC64_2.Text = "";
+        }
     }
 
     private void InitC64Labels()
