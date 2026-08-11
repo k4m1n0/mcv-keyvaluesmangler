@@ -215,7 +215,7 @@
   EXE you downloaded is the stub: it decompresses the real payload into
   memory at startup, loads it as an assembly, and runs it
 
-  No temp files. No console window flash
+  No temp files. No console window flash. HELL YEAH 
 
   FORMAT:
     The compressed payload sits at the end of the EXE, marked by the magic
@@ -239,7 +239,7 @@
     The underlying LZMAT compression algorithm was designed by
     Vitaly Evseenko. The Lamarr source (Lamarr/, LamarrPacker/)
     is a clean room reimplementation - no third party code, no
-    dependencies beyond .NET 8.0, released under WTFPL too
+    dependencies beyond .NET 8.0, released under WTFPL too :)))
 
 ================================================================================
   B. CREDITS
