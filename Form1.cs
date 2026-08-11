@@ -88,9 +88,6 @@ public partial class Form1 : Form
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
             this.MaximizeBox = false;
 
-#if DEBUG
-            CsvMapper.s_bSuppressMessageBox = true;
-#endif
             string sCsvPath = Path.Combine(AppContext.BaseDirectory, "weapons.csv");
             rgWeapons = File.Exists(sCsvPath) ? CsvService.LoadWeapons(sCsvPath) : new List<WeaponData>();
             LogService.Info($"Weapons loaded: {rgWeapons.Count}");
@@ -107,7 +104,7 @@ public partial class Form1 : Form
             MarkPanelControls();
             if (SystemUsesDarkMode())
                 ApplyDarkMode();
-
+                
             this.KeyPreview = true;
             this.KeyDown += Form1_KeyDown;
             this.FormClosing += Form1_FormClosing;

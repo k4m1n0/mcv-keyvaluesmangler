@@ -1,5 +1,7 @@
 using System.Drawing;
+using System.Threading.Tasks;
 using System.Windows.Forms;
+using WeaponDamageCalc.Demo;
 using WeaponDamageCalc.Services;
 
 namespace WeaponDamageCalc;
@@ -16,6 +18,7 @@ public partial class Form1
     private Label lblC64_1 = null!;
     private Label lblC64_2 = null!;
     private Label lblC64_3 = null!;
+    private KeygenRenderer? _keygenRenderer;
 
     private System.Windows.Forms.Timer? tmrC64;
     private System.Windows.Forms.Timer? tmrC64Reset;
@@ -35,6 +38,12 @@ public partial class Form1
         long lGcHeap = GC.GetTotalMemory(false) / 1024;
         long lUnmanaged = lWs > lGcHeap ? lWs - lGcHeap : 0;
         lblC64_2.Text = $"{lWs / 1024}M RAM SYSTEM  {lUnmanaged}K NATIVE BYTES FREE";
+
+        if (lblC64_1.Text == "")
+        {
+            tmrC64.Stop();
+            lblC64_2.Text = "";
+        }
     }
 
     private void InitC64Labels()
@@ -44,12 +53,9 @@ public partial class Form1
         lblC64_2 = new Label { Location = new Point(iCx, 686), Size = new Size(300, 13), Font = new Font("Consolas", 8, FontStyle.Bold), ForeColor = Color.FromArgb(200, 200, 255), BackColor = Color.FromArgb(60, 60, 160), TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0), Padding = new Padding(0) };
         lblC64_3 = new Label { Location = new Point(iCx, 697), Size = new Size(300, 13), Font = new Font("Consolas", 8, FontStyle.Bold), ForeColor = Color.FromArgb(200, 200, 255), BackColor = Color.FromArgb(60, 60, 160), TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0), Padding = new Padding(0) };
 
-        var sTadaPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Media", "tada.wav");
-        System.Media.SoundPlayer? spTada = File.Exists(sTadaPath) ? new System.Media.SoundPlayer(sTadaPath) : null;
-        void PlayTada() { try { spTada?.Play(); } catch { } }
-        lblC64_1.Click += (_, _) => PlayTada();
-        lblC64_2.Click += (_, _) => PlayTada();
-        lblC64_3.Click += (_, _) => PlayTada();
+        lblC64_1.Click += (_, _) => ToggleKeygenRenderer();
+        lblC64_2.Click += (_, _) => ToggleKeygenRenderer();
+        lblC64_3.Click += (_, _) => ToggleKeygenRenderer();
 
         this.Controls.Add(lblC64_1);
         this.Controls.Add(lblC64_2);
@@ -57,10 +63,32 @@ public partial class Form1
         UpdateC64Labels(rgWeapons.Count > 0);
     }
 
+    private void ToggleKeygenRenderer()
+    {
+        if (_keygenRenderer != null)
+        {
+            _keygenRenderer.Dispose();
+            _keygenRenderer = null;
+            pnlSpread.Invalidate();
+            return;
+        }
+        _keygenRenderer = new KeygenRenderer(pnlSpread);
+    }
+
     private void UpdateC64Labels(bool bHasData)
     {
         lblC64_1.Text = bHasData ? "         **** COMMODORE 64 BASIC V2 ****" : "";
         lblC64_3.Text = bHasData ? "READY." : "";
+        if (bHasData)
+        {
+            if (tmrC64 == null) StartC64Anim();
+            else if (!tmrC64.Enabled) tmrC64.Start();
+        }
+        else
+        {
+            tmrC64?.Stop();
+            lblC64_2.Text = "";
+        }
     }
 
     private void SetC64Status(string sStatus, bool bAutoReset = true)

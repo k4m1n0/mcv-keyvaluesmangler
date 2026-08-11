@@ -17,9 +17,9 @@
       | ##\  # | ## /##__  ##| ##  | ##| ##  | ##| ##| ##_____/| ##
       | ## \/  | ##|  #######| ##  | ##|  #######| ##|  #######| ##
       |__/     |__/ \_______/|__/  |__/ \____  ##|__/ \_______/|__/
-                                          /##  | ##
-                                         |  ######/
-                                          \______/
+                                        /##  | ##
+                                       |  ######/
+                                        \______/
                    /#######   /######   /######   /######
                   | ##____/  /###_  ## /###_  ## /###_  ##
                   | ##      | ####\ ##| ####\ ##| ####\ ##
@@ -44,7 +44,7 @@
     - One click export to game script files
     - Wiki integration: convert, generate, and upload weapon pages
     - Run from command line if you hate GUIs for some reason
-    - Detect dark mode so your eyeballs does not bleed at 3 AM
+    - Detect dark mode so your eyeballs do not bleed at 3 AM
       (Win/GTK/KDE/Xfce)
 
 ================================================================================
@@ -207,8 +207,44 @@
     - Pass magically because you really need this build right now
 
 ================================================================================
-  A. CREDITS
+  A. LAMARR
 ================================================================================
+
+  Keyvalues Mangler bundles its dependencies through a self extracting
+  compressor called Lamarr, staying under a 360 KiB budget. It decompresses
+  the payload into memory at startup, loads it as an assembly and runs it
+
+  No temp files. No console window flash. HELL YEAH
+
+  FORMAT
+    The compressed payload sits at the end of the EXE, marked by the
+    8 byte magic "Lamarr!!". An 8 byte header follows, storing the
+    original and compressed sizes as little endian u32. Then comes the
+    compressed data itself
+
+    The compression is a nibble aligned LZ format. Full specification:
+    Lamarr/FORMAT.TXT
+
+    +--------+--------------------------------------+
+    | Offset | Content                              |
+    +--------+--------------------------------------+
+    | 0      | Stub executable (arbitrary length S) |
+    | S      | "Lamarr!!" (8 bytes)                 |
+    | S + 8  | Original size (u32 LE)               |
+    | S + 12 | Compressed size (u32 LE)             |
+    | S + 16 | Compressed payload (C bytes)         |
+    +--------+--------------------------------------+
+
+  CREDITS
+    The underlying LZMAT compression algorithm was designed by
+    Vitaly Evseenko. The Lamarr source (Lamarr/, LamarrPacker/)
+    is a clean room reimplementation - no third party code, no
+    dependencies beyond .NET 8.0, released under WTFPL too :)))
+
+================================================================================
+  B. CREDITS
+================================================================================
+
 
   Written for the MCV community by
         John "k0u74ku" Doe

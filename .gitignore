@@ -2,3 +2,9 @@
 /bin
 /obj
 /publish
+/Lamarr/bin
+/Lamarr/obj
+/LamarrPacker/bin
+/LamarrPacker/obj
+*.bin
+*.exe
