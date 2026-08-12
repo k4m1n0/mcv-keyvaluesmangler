@@ -212,7 +212,7 @@
 ==============================================================================
 
   Keyvalues Mangler bundles its dependencies through a self extracting
-  compressor called Lamarr, staying under a 360 KiB budget. It decompresses
+  compressor called Lamarr to stay under a 360 KiB budget. It decompresses
   the payload into memory at startup, loads it as an assembly and runs it
 
   No temp files. No console window flash. HELL YEAH
@@ -262,3 +262,4 @@
   (C) Juche 115. Made with Visual Studio and spite
 
 ==============================================================================
+EOF
