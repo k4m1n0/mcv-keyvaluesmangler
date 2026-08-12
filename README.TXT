@@ -160,8 +160,8 @@
   7. LIMITATIONS
 ================================================================================
 
-  - Self contained build is ~60 MiB and blame Microsoft not me
-  - Why C#? Ask my college professor not me.
+  - Self contained build is ~60 MiB and go blame Microsoft
+  - Why C#? Ask my college professor not me :p
   - Some wiki operations require login to
     wiki.militaryconflictvietnam.com
   - Two copies from the same folder will not open, this is intentional
