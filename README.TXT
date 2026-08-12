@@ -160,7 +160,7 @@
   7. LIMITATIONS
 ==============================================================================
 
-  - Self contained build is ~60 MiB and go blame Microsoft
+  - Self contained build is ~38 MiB and go blame Microsoft
   - Why C#? Ask my college professor not me :p
   - Some wiki operations require login to
     wiki.militaryconflictvietnam.com
@@ -180,8 +180,7 @@
       dotnet publish -c Release -r win-x64
       --self-contained true -p:PublishSingleFile=true
       -p:DebugType=none -p:DebugSymbols=false
-      -p:EnableCompressionInSingleFile=true
-      -p:InvariantGlobalization=true -o ./publish
+      -p:EnableCompressionInSingleFile=true -o ./publish
 
   Then grab the EXE from .\publish\ and do whatever you want with it
 
