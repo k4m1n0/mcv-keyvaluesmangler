@@ -81,6 +81,16 @@ internal static class Program
 
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        Application.ThreadException += (_, e) =>
+        {
+            if (e.Exception is TypeLoadException)
+            {
+                LogService.Debug($"ThreadException: {e.Exception.Message}");
+                Application.Exit();
+                return;
+            }
+        };
         Application.Run(new Form1());
         return 0;
     }

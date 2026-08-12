@@ -39,13 +39,13 @@
 
   FEATURE:
     - Dual panel weapon comparison with live TTK calculation
-    - 100 levels of Undo / Redo
+    - 100 levels of Undo / Redo stack
     - Day of Victory && Zombie Mode alternate statistics
     - One click export to game script files
     - Wiki integration: convert, generate, and upload weapon pages
     - Run from command line if you hate GUIs for some reason
     - Detect dark mode so your eyeballs do not bleed at 3 AM
-      (Win/GTK/Xfce/KDE)
+      (Win / GTK / Xfce / KDE)
 
 ==============================================================================
   1. SYSTEM REQUIREMENTS
@@ -53,8 +53,8 @@
 
   MINIMUM:
     - Windows 7 SP1 with KB3063858 (use the self contained one)
-    - Wine/Proton 9.0+ for the OS of evil
-    - Pentium 4 630 with SVGA graphics
+    - Wine / Proton 9.0+ for the OS of evil
+    - Pentium 4 630 (SSE3) with SVGA graphics
     - 1.44 MiB floppy or 64 MiB (self contained) drive space available
     - A keyboard. A mouse. Fingers optional but recommended
 
@@ -199,7 +199,7 @@
   WHAT IT DOES:
     - CSV round trip, BOM handling, quoted fields, error recovery, and
       other you hopefully will never encounter but some crazy MFs will
-    - Verifies that 100 levels of Undo/Redo actually work instead of just
+    - Verifies that 100 levels of undo redo actually work instead of just
       looking good in the feature list so you can break 100 things then
       spam Ctrl+ZZZ and they still get back home in one piece somehow
 

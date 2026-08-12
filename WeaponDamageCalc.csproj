@@ -21,6 +21,13 @@
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(SelfContained)' == 'true'">
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>partial</TrimMode>
+    <_SuppressWinFormsTrimError>true</_SuppressWinFormsTrimError>
+    <NoWarn>$(NoWarn);IL2008</NoWarn>
+  </PropertyGroup>
+
   <Target Name="PublishStub" BeforeTargets="Publish" Condition="'$(SelfContained)' != 'true'">
     <Exec Command="dotnet publish &quot;$(ProjectDir)Lamarr&quot; -c $(Configuration) -r $(RuntimeIdentifier) --no-self-contained -p:PublishSingleFile=true -p:DebugType=none -p:DebugSymbols=false -o &quot;$(PublishDir)&quot;" />
     <Exec Command="dotnet build &quot;$(ProjectDir)LamarrPacker&quot; -c $(Configuration)" />
@@ -48,6 +55,10 @@
   <ItemGroup>
     <EmbeddedResource Include="Tools\preset_file.txt" />
     <EmbeddedResource Include="Demo\keil.fc" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(SelfContained)' == 'true'">
+    <TrimmerRootAssembly Include="System.Windows.Forms" />
   </ItemGroup>
 
 </Project>
