@@ -55,7 +55,7 @@
     - Windows 7 SP1 with KB3063858 (use the self contained one)
     - Wine / Proton 9.0+ for the OS of evil
     - Pentium 4 630 (SSE3) with SVGA graphics
-    - 1.44 MiB floppy or 64 MiB (self contained) drive space available
+    - 1.44 MiB floppy or 40 MiB (self contained) drive space available
     - A keyboard. A mouse. Fingers optional but recommended
 
   RECOMMENDED:
