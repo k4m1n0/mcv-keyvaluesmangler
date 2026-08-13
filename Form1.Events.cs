@@ -890,6 +890,7 @@ public partial class Form1
         else if (e.Control && e.KeyCode == Keys.D1) { LogService.Debug("Hotkey: Ctrl+1 (focus L)"); e.SuppressKeyPress = true; cmbWeaponsL.Focus(); cmbWeaponsL.DroppedDown = true; }
         else if (e.Control && e.KeyCode == Keys.D2) { LogService.Debug("Hotkey: Ctrl+2 (focus R)"); e.SuppressKeyPress = true; cmbWeaponsR.Focus(); cmbWeaponsR.DroppedDown = true; }
         else if (e.Control && e.KeyCode == Keys.R) { LogService.Debug("Hotkey: Ctrl+R (refresh)"); e.SuppressKeyPress = true; FlashButton(btnRefresh); RefreshWeaponList(); }
+        else if (e.Control && e.KeyCode is Keys.Up or Keys.Down or Keys.Left or Keys.Right) { LogService.Debug($"Hotkey: Ctrl+{e.KeyCode} (navigate focus)"); e.SuppressKeyPress = true; e.Handled = true; NavigateFocus(e.KeyCode); }
         else if (e.KeyCode == Keys.F5) { LogService.Debug("Hotkey: F5 (refresh)"); e.SuppressKeyPress = true; FlashButton(btnRefresh); RefreshWeaponList(); }
         #if DEBUG
                 else if (e.Control && e.Shift && e.KeyCode == Keys.F12)

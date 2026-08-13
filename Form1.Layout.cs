@@ -176,15 +176,15 @@ public partial class Form1
         {
             nudHipSpreadL = CreateNullableNumericRow(gbSpread, "Hip", 8, iY, 100m); BindNudUndo(nudHipSpreadL, SpreadRecoilChangedL, bIsLeft); iY += 24;
             nudAdsSpreadL = CreateNullableNumericRow(gbSpread, "ADS", 8, iY, 100m); BindNudUndo(nudAdsSpreadL, SpreadRecoilChangedL, bIsLeft); iY += 24;
-            nudBipodHipSpreadL = CreateNullableNumericRow(gbSpread, "Bipod Hip", 8, iY, 100m); BindNudUndo(nudBipodHipSpreadL, SpreadRecoilChangedL, bIsLeft); iY += 24;
-            nudBipodAdsSpreadL = CreateNullableNumericRow(gbSpread, "Bipod ADS", 8, iY, 100m); BindNudUndo(nudBipodAdsSpreadL, SpreadRecoilChangedL, bIsLeft);
+            nudBipodHipSpreadL = CreateNullableNumericRow(gbSpread, "BipodHip", 8, iY, 100m); BindNudUndo(nudBipodHipSpreadL, SpreadRecoilChangedL, bIsLeft); iY += 24;
+            nudBipodAdsSpreadL = CreateNullableNumericRow(gbSpread, "BipodADS", 8, iY, 100m); BindNudUndo(nudBipodAdsSpreadL, SpreadRecoilChangedL, bIsLeft);
         }
         else
         {
             nudHipSpreadR = CreateNullableNumericRow(gbSpread, "Hip", 8, iY, 100m); BindNudUndo(nudHipSpreadR, SpreadRecoilChangedR, bIsLeft); iY += 24;
             nudAdsSpreadR = CreateNullableNumericRow(gbSpread, "ADS", 8, iY, 100m); BindNudUndo(nudAdsSpreadR, SpreadRecoilChangedR, bIsLeft); iY += 24;
-            nudBipodHipSpreadR = CreateNullableNumericRow(gbSpread, "Bipod Hip", 8, iY, 100m); BindNudUndo(nudBipodHipSpreadR, SpreadRecoilChangedR, bIsLeft); iY += 24;
-            nudBipodAdsSpreadR = CreateNullableNumericRow(gbSpread, "Bipod ADS", 8, iY, 100m); BindNudUndo(nudBipodAdsSpreadR, SpreadRecoilChangedR, bIsLeft);
+            nudBipodHipSpreadR = CreateNullableNumericRow(gbSpread, "BipodHip", 8, iY, 100m); BindNudUndo(nudBipodHipSpreadR, SpreadRecoilChangedR, bIsLeft); iY += 24;
+            nudBipodAdsSpreadR = CreateNullableNumericRow(gbSpread, "BipodADS", 8, iY, 100m); BindNudUndo(nudBipodAdsSpreadR, SpreadRecoilChangedR, bIsLeft);
         }
         this.Controls.Add(gbSpread);
 

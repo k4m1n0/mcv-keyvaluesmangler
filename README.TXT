@@ -93,8 +93,9 @@
   Ctrl+Y            Redo
   Ctrl+1            Focus left weapon dropdown
   Ctrl+2            Focus right weapon dropdown
-  Ctrl+R            Refresh weapon list from CSV
+  Ctrl+R / F5       Refresh weapon list from CSV
   Ctrl+T            Toggle always on top / minimize
+  Ctrl+Arrows       Move focus by direction
 
 ==============================================================================
   4. FILE REFERENCE
