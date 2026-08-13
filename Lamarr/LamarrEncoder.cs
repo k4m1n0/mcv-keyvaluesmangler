@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 
 namespace Lamarr
 {
+    //glhf
     public class LamarrEncoder
     {
         #region 常量字段
