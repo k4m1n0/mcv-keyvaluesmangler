@@ -245,10 +245,10 @@ public static class WeaponScriptService
         int iSkippedNoScript = 0;
         int iSkippedEmptyName = 0;
 
-        rgLog.Add($"CSV -> 脚本导出");
+        rgLog.Add($"CSV -> scripts export");
         rgLog.Add($"CSV: {sCsvFilePath}");
-        rgLog.Add($"目标目录: {sScriptsDir}");
-        rgLog.Add($"共 {iTotal} 把武器");
+        rgLog.Add($"Target dir: {sScriptsDir}");
+        rgLog.Add($"Total: {iTotal} weapons");
         rgLog.Add(new string('-', 50));
 
         for (int i = 0; i < rgWeapons.Count; i++)
@@ -305,18 +305,18 @@ public static class WeaponScriptService
                 sContent = sContent.TrimEnd('\r', '\n');
                 File.WriteAllText(sScriptPath, sContent, new UTF8Encoding(false));
                 iSuccess++;
-                rgLog.Add($"[{i + 1}/{iTotal}] {sScriptName} ({iUpdated} 字段)");
+                rgLog.Add($"[{i + 1}/{iTotal}] {sScriptName} ({iUpdated} fields)");
             }
             catch (Exception ex)
             {
                 iSkipped++;
-                rgLog.Add($"[{i + 1}/{iTotal}] 失败: {sScriptName} - {ex.Message}");
+                rgLog.Add($"[{i + 1}/{iTotal}] failed: {sScriptName} - {ex.Message}");
                 LogService.Error(ex, $"ExportCsvToScripts: {sScriptName}");
             }
         }
 
         rgLog.Add(new string('-', 50));
-        rgLog.Add($"完成: 成功 {iSuccess}, 跳过 {iSkipped} (空名{iSkippedEmptyName} 无脚本{iSkippedNoScript}), 总计 {iTotal}");
+        rgLog.Add($"Done: {iSuccess} ok, {iSkipped} skipped (empty name {iSkippedEmptyName}, no script {iSkippedNoScript}), total {iTotal}");
         string sResult = string.Join("\n", rgLog);
         LogService.Info($"ExportCsvToScripts done: {iSuccess} ok, {iSkipped} skip, {iTotal} total");
         return sResult;
@@ -443,7 +443,7 @@ public static class WeaponScriptService
         if (!Directory.Exists(sScriptsDir))
         {
             LogService.Error($"ImportScriptsToCsv: directory not found: {sScriptsDir}");
-            return $"错误: 目录不存在 - {sScriptsDir}";
+            return $"Error: directory not found - {sScriptsDir}";
         }
 
         var mpOldPrintNames = LoadPrintNameMap(sOutputCsvPath);
@@ -453,9 +453,9 @@ public static class WeaponScriptService
         int iTotal = rgFiles.Length;
         int iSuccess = 0, iFailed = 0, iSkipped = 0;
 
-        rgLog.Add($"脚本 -> CSV 导入");
-        rgLog.Add($"目录: {sScriptsDir}");
-        rgLog.Add($"共 {iTotal} 个文件");
+        rgLog.Add($"Scripts -> CSV import");
+        rgLog.Add($"Dir: {sScriptsDir}");
+        rgLog.Add($"Total: {iTotal} files");
         rgLog.Add(new string('-', 50));
 
         for (int i = 0; i < rgFiles.Length; i++)
@@ -470,7 +470,7 @@ public static class WeaponScriptService
                 if (!IsStandardFirearm(sName, sContent))
                 {
                     iSkipped++;
-                    rgLog.Add($"[{i + 1}/{iTotal}] 跳过(非枪械): {sName}");
+                    rgLog.Add($"[{i + 1}/{iTotal}] skipped (non std firearm): {sName}");
                     continue;
                 }
 
@@ -503,18 +503,18 @@ public static class WeaponScriptService
 
                 rgList.Add(wWeapon);
                 iSuccess++;
-                rgLog.Add($"[{i + 1}/{iTotal}] {sName} ({iRead} 字段)");
+                rgLog.Add($"[{i + 1}/{iTotal}] {sName} ({iRead} fields)");
             }
             catch (Exception ex)
             {
                 iFailed++;
-                rgLog.Add($"[{i + 1}/{iTotal}] 失败: {sName} - {ex.GetType().Name}: {ex.Message}");
+                rgLog.Add($"[{i + 1}/{iTotal}] failed: {sName} - {ex.GetType().Name}: {ex.Message}");
                 LogService.Error(ex, $"ImportScriptsToCsv: {sName}");
             }
         }
 
         rgLog.Add(new string('-', 50));
-        rgLog.Add($"解析完成: 成功 {iSuccess}, 失败 {iFailed}, 跳过 {iSkipped}");
+        rgLog.Add($"Parse done: {iSuccess} ok, {iFailed} failed, {iSkipped} skipped");
 
         if (iSuccess > 0 && File.Exists(sOutputCsvPath))
         {
@@ -547,12 +547,12 @@ public static class WeaponScriptService
         try
         {
             CsvService.SaveWeapons(sOutputCsvPath, rgList);
-            rgLog.Add($"保存完成: 共 {rgList.Count} 把武器写入 CSV");
+            rgLog.Add($"Save done: {rgList.Count} weapons written to CSV");
         }
         catch (Exception ex)
         {
             LogService.Error(ex, "ImportScriptsToCsv: CSV save failed");
-            rgLog.Add($"CSV保存失败: {ex.Message}");
+            rgLog.Add($"CSV save failed: {ex.Message}");
         }
 
         string sResult = string.Join("\n", rgLog);

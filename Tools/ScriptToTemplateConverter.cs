@@ -18,7 +18,7 @@ public static class ScriptToTemplateConverter
         if (rgTemplateLines == null || rgTemplateLines.Length == 0)
         {
             LogService.Error("ConvertAll: embedded template not found");
-            return "嵌入的模板文件未找到";
+            return "Embedded template file not found";
         }
 
         var rgFiles = Directory.GetFiles(sScriptsDir, "weapon_*.txt");
@@ -27,13 +27,13 @@ public static class ScriptToTemplateConverter
 
         string sExternalPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "preset_file.txt");
         if (File.Exists(sExternalPath) && rgTemplateLines.Any(sL => sL.Contains("WeaponData")))
-            rgLog.Add("使用外置模板: " + sExternalPath);
+            rgLog.Add("Using external template: " + sExternalPath);
         else if (File.Exists(sExternalPath))
-            rgLog.Add("外置模板校验失败 (缺少WeaponData块)，已回退到内嵌默认模板");
+            rgLog.Add("External template validation failed (missing WeaponData block), falling back to embedded default template");
 
-        rgLog.Add("脚本 -> 模板转换");
-        rgLog.Add($"目录: {sScriptsDir}");
-        rgLog.Add($"共 {rgFiles.Length} 个文件");
+        rgLog.Add("Scripts -> template conversion");
+        rgLog.Add($"Dir: {sScriptsDir}");
+        rgLog.Add($"Total: {rgFiles.Length} files");
         rgLog.Add(new string('-', 50));
 
         var roOpts = bSimpleMode ? RenderOptions.Simple : RenderOptions.Full;
@@ -54,13 +54,13 @@ public static class ScriptToTemplateConverter
             catch (Exception ex)
             {
                 iFailed++;
-                rgLog.Add($"[{i + 1}/{rgFiles.Length}] 失败: {sName} - {ex.Message}");
+                rgLog.Add($"[{i + 1}/{rgFiles.Length}] failed: {sName} - {ex.Message}");
                 LogService.Error(ex, $"ConvertAll: {sName}");
             }
         }
 
         rgLog.Add(new string('-', 50));
-        rgLog.Add($"完成: 成功 {iSuccess}, 失败 {iFailed}, 总计 {rgFiles.Length}");
+        rgLog.Add($"Done: {iSuccess} ok, {iFailed} failed, total {rgFiles.Length}");
         string sResultLog = string.Join("\n", rgLog);
         LogService.Info($"ConvertAll done: {iSuccess} ok, {iFailed} fail, {rgFiles.Length} total");
         return sResultLog;
@@ -992,35 +992,35 @@ public static class ScriptToTemplateConverter
     {
         if (!LogService.Enabled) return;
 
-        rgLog.Add($"--- 调试: {sWeaponName} ---");
+        rgLog.Add($"--- debug: {sWeaponName} ---");
 
         var mpScriptMap = ParseTopLevelMap(sScript);
         var mpScriptBlocks = ExtractAllBlocks(sScript);
-        rgLog.Add($"脚本顶层键值对: {mpScriptMap.Count} 个");
+        rgLog.Add($"Script top-level KV pairs: {mpScriptMap.Count}");
         int iShown = 0;
         foreach (var kvp in mpScriptMap)
         {
-            if (iShown >= 15) { rgLog.Add($"  ... 共 {mpScriptMap.Count} 个"); break; }
+            if (iShown >= 15) { rgLog.Add($"  ... total {mpScriptMap.Count}"); break; }
             rgLog.Add($"  \"{kvp.Key}\" = \"{kvp.Value}\"");
             iShown++;
         }
-        rgLog.Add($"脚本子块: {mpScriptBlocks.Count} 个");
+        rgLog.Add($"Script sub-blocks: {mpScriptBlocks.Count}");
         foreach (var sBk in mpScriptBlocks.Keys)
-            rgLog.Add($"  {sBk} ({mpScriptBlocks[sBk].Length} 字符)");
+            rgLog.Add($"  {sBk} ({mpScriptBlocks[sBk].Length} chars)");
 
         var anTemplateTree = ParseTemplateToTree(rgTemplateLines);
-        rgLog.Add($"模板AST节点数: {CountNodes(anTemplateTree)}");
+        rgLog.Add($"Template AST nodes: {CountNodes(anTemplateTree)}");
         rgLog.Add(anTemplateTree.ToString());
 
         if (!string.IsNullOrEmpty(sResult))
         {
             var rgResultLines = sResult.Split('\n');
             var anResultTree = ParseTemplateToTree(rgResultLines);
-            rgLog.Add($"转换后AST节点数: {CountNodes(anResultTree)}");
+            rgLog.Add($"Result AST nodes: {CountNodes(anResultTree)}");
             rgLog.Add(anResultTree.ToString());
         }
 
-        rgLog.Add($"--- 调试结束: {sWeaponName} ---");
+        rgLog.Add($"--- debug end: {sWeaponName} ---");
     }
 
     private static int CountNodes(AstNode anNode)

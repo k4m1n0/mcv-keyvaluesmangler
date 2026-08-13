@@ -238,19 +238,19 @@ public partial class Form1 : Form
     private void InitTopButtons()
     {
         int iCx = 525;
-        btnSave = new Button { Text = "Save", Location = new Point(iCx, 6), Size = new Size(59, 26) };
+        btnSave = new Button { Text = "Save", Location = new Point(iCx, 6), Size = new Size(58, 26) };
         btnSave.Click += BtnSave_Click;
         this.Controls.Add(btnSave);
 
-        btnCsvToScripts = new Button { Text = "CSV>Script", Location = new Point(iCx + 61, 6), Size = new Size(88, 26) };
+        btnCsvToScripts = new Button { Text = "CSV>Script", Location = new Point(iCx + 60, 6), Size = new Size(90, 26) };
         btnCsvToScripts.Click += BtnCsvToScripts_Click;
         this.Controls.Add(btnCsvToScripts);
 
-        btnScriptsToCsv = new Button { Text = "Script>CSV", Location = new Point(iCx + 151, 6), Size = new Size(88, 26) };
+        btnScriptsToCsv = new Button { Text = "Script>CSV", Location = new Point(iCx + 151, 6), Size = new Size(90, 26) };
         btnScriptsToCsv.Click += BtnScriptsToCsv_Click;
         this.Controls.Add(btnScriptsToCsv);
 
-        btnRefresh = new Button { Text = "Rfsh", Location = new Point(iCx + 241, 6), Size = new Size(59, 26) };
+        btnRefresh = new Button { Text = "Rfsh", Location = new Point(iCx + 242, 6), Size = new Size(58, 26) };
         btnRefresh.Click += BtnRefresh_Click;
         this.Controls.Add(btnRefresh);
 

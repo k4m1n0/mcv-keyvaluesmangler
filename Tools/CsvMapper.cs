@@ -116,7 +116,8 @@ public static class CsvMapper
             }
             rgResult.Add(obj);
         }
-        ShowWarnings(rgWarnings);
+        if (rgResult.Count > 0)
+            ShowWarnings(rgWarnings);
         return rgResult;
     }
 

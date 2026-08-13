@@ -403,7 +403,7 @@ public partial class Form1
             if (sSelectedDir == null) return;
             if (mpTitleToScript == null && !string.IsNullOrWhiteSpace(txtInput.Text))
             {
-                try { mpTitleToScript = await WikiService.BuildScriptIndexAsync(); if (mpTitleToScript != null) lblStatus.Text = $"索引已加载 ({mpTitleToScript.Count} 个武器)"; }
+                try { mpTitleToScript = await WikiService.BuildScriptIndexAsync(); if (mpTitleToScript != null) lblStatus.Text = $"Index loaded with ({mpTitleToScript.Count} weapons)"; }
                 catch (Exception ex) { LogService.Error(ex, "Wiki Convert: BuildScriptIndexAsync"); }
             }
             try { txtOutput.Text = WikiService.ConvertWikiSource(txtInput.Text, sSelectedDir, mpTitleToScript).Replace("\n", "\r\n"); }

@@ -11,7 +11,7 @@
     <Version>1.0.2.0</Version>
     <FileVersion>1.0.2.0</FileVersion>
 
-    <DebuggerSupport>false</DebuggerSupport>
+    <PublishSingleFile>true</PublishSingleFile>
     <EnableUnsafeBinaryFormatterSerialization>false</EnableUnsafeBinaryFormatterSerialization>
     <EnableUnsafeUTF7Encoding>false</EnableUnsafeUTF7Encoding>
     <EventSourceSupport>false</EventSourceSupport>
@@ -21,19 +21,26 @@
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(Configuration)' != 'Debug'">
+    <DebuggerSupport>false</DebuggerSupport>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+
   <PropertyGroup Condition="'$(SelfContained)' == 'true'">
     <PublishTrimmed>true</PublishTrimmed>
     <TrimMode>partial</TrimMode>
     <_SuppressWinFormsTrimError>true</_SuppressWinFormsTrimError>
     <NoWarn>$(NoWarn);IL2008</NoWarn>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
   </PropertyGroup>
 
-  <Target Name="PublishStub" BeforeTargets="Publish" Condition="'$(SelfContained)' != 'true'">
+  <Target Name="PublishStub" BeforeTargets="Publish" Condition="'$(SelfContained)' != 'true' And '$(Configuration)' != 'Debug'">
     <Exec Command="dotnet publish &quot;$(ProjectDir)Lamarr&quot; -c $(Configuration) -r $(RuntimeIdentifier) --no-self-contained -p:PublishSingleFile=true -p:DebugType=none -p:DebugSymbols=false -o &quot;$(PublishDir)&quot;" />
     <Exec Command="dotnet build &quot;$(ProjectDir)LamarrPacker&quot; -c $(Configuration)" />
   </Target>
 
-  <Target Name="LamarrPack" AfterTargets="Publish" Condition="'$(SelfContained)' != 'true'">
+  <Target Name="LamarrPack" AfterTargets="Publish" Condition="'$(SelfContained)' != 'true' And '$(Configuration)' != 'Debug'">
     <Exec Command="&quot;$(ProjectDir)LamarrPacker\bin\$(Configuration)\net8.0-windows\LamarrPacker.exe&quot; --stub &quot;$(PublishDir)Lamarr.exe&quot; --input &quot;$(ProjectDir)bin\$(Configuration)\$(TargetFramework)\win-x64\WeaponDamageCalc.dll&quot; --output &quot;$(PublishDir)WeaponDamageCalc_packed.exe&quot;" />
     <Copy SourceFiles="$(PublishDir)WeaponDamageCalc_packed.exe" DestinationFiles="$(PublishDir)WeaponDamageCalc.exe" OverwriteReadOnlyFiles="true" />
     <Delete Files="$(PublishDir)WeaponDamageCalc_packed.exe" />

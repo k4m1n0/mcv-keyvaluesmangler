@@ -291,8 +291,9 @@ Abstract
         (d)  Otherwise, prefer when (d_old * 8) > d_new.
 
     The encoder MAY use a progressive 2-byte hash-chain filter
-    (cmp_val) to reduce false-positive byte comparisons. This
-    is an optimisation detail and does not affect the format.
+    (a 16-bit lookahead value) to reduce false-positive byte
+    comparisons. This is an optimisation detail and does not affect
+    the format.
 5.3.  Nibble-Aligned Write Primitives
 
     Toggle column indicates whether the primitive modifies the nibble
@@ -350,7 +351,8 @@ Abstract
     exceeds the corresponding raw input size, it flushes the
     accumulated uncompressed data as a Copy Chunk (see Section 4.3).
     The encoder advances inPtr past the flushed region by setting
-    inPtr to processed_data + cbUCData.
+    inPtr to base + (cbUCData & ~7), then re-encodes the trailing
+    cbUCData & 7 octets in subsequent iterations (see B.3).
 
 
 6.  Container Format
@@ -454,6 +456,23 @@ Appendix B.  Implementation Notes
     effect is indistinguishable from the B.1 boundary behaviour.
     Compressed output MAY differ in the final ~200 octets with no
     impact on decompression correctness.
+
+    B.3.  Copy Chunk Octet Alignment
+
+    The copy chunk (Section 4.3) carries an uncompressed run whose
+    length is rounded down to a multiple of 8 octets. The encoded
+    length is cbCopy = cbUCData >> 3, so the chunk copies exactly
+    cbCopy * 8 octets, that is cbUCData rounded down to the nearest
+    multiple of 8. Section 4.3 expresses the same length as C * 4
+    octets, where C = 2 * cbCopy.
+
+    When cbUCData is not a multiple of 8, the trailing octets up to
+    the next multiple of 8 are not part of the copy chunk. The
+    encoder MUST advance its input cursor by only cbCopy * 8 octets
+    and re-encode the remaining octets as literals or matches in
+    subsequent iterations. Advancing by the unrounded cbUCData drops
+    the remainder and truncates the decompressed output, producing a
+    stream the stub loader rejects as a corrupt payload.
 
 
                         End of Specification

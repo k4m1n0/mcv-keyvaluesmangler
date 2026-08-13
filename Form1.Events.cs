@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Text;
@@ -720,6 +721,61 @@ public partial class Form1
                 this.Invoke(() => MessageBox.Show($"Template convert failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error));
             }
         });
+    }
+
+    private bool PickScriptsDir(string sDescription)
+    {
+        string sInitial = string.IsNullOrEmpty(sLastScriptsDir) ? AppContext.BaseDirectory : sLastScriptsDir;
+        using var dlg = new FolderBrowserDialog { Description = sDescription, UseDescriptionForTitle = true, InitialDirectory = sInitial };
+        if (dlg.ShowDialog() != DialogResult.OK || string.IsNullOrEmpty(dlg.SelectedPath)) return false;
+        sLastScriptsDir = dlg.SelectedPath;
+        return true;
+    }
+
+    private void OpenScriptForCurrent(bool bIsLeft)
+    {
+        var wWeapon = bIsLeft ? wCurrentLeft : wCurrentRight;
+
+        if (string.IsNullOrEmpty(sLastScriptsDir) && !PickScriptsDir("Select folder containing weapon scripts"))
+            return;
+
+        if (wWeapon == null || string.IsNullOrWhiteSpace(wWeapon.ScriptName))
+            return;
+
+        string sScriptName = wWeapon.ScriptName;
+
+        string ResolvePath()
+        {
+            string sPath = Path.Combine(sLastScriptsDir, Path.GetFileName(sScriptName));
+            if (!File.Exists(sPath) && !sPath.EndsWith(".txt", StringComparison.OrdinalIgnoreCase))
+                sPath += ".txt";
+            return sPath;
+        }
+
+        string sScriptPath = ResolvePath();
+
+        if (!File.Exists(sScriptPath))
+        {
+            if (!PickScriptsDir("Script not found in current folder. Select the correct scripts folder")) return;
+            sScriptPath = ResolvePath();
+        }
+
+        if (!File.Exists(sScriptPath))
+        {
+            MessageBox.Show($"Script not found:\n{sScriptPath}", "Open Script", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        try
+        {
+            using var p = Process.Start(new ProcessStartInfo(sScriptPath) { UseShellExecute = true });
+            LogService.Info($"OpenScriptForCurrent: opened {sScriptPath}");
+        }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, $"OpenScriptForCurrent: {sScriptPath}");
+            MessageBox.Show($"Failed to open script: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     #endregion

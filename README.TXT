@@ -173,14 +173,9 @@
   It just needs a .NET 8.0 SDK
 
    BUILD WITH:
-      dotnet publish -c Release -r win-x64
-      --no-self-contained -p:PublishSingleFile=true
-      -p:DebugType=none -p:DebugSymbols=false -o ./publish
+      dotnet publish -c Release -r win-x64 --no-self-contained -o ./publish
     or
-      dotnet publish -c Release -r win-x64
-      --self-contained true -p:PublishSingleFile=true
-      -p:DebugType=none -p:DebugSymbols=false
-      -p:EnableCompressionInSingleFile=true -o ./publish
+      dotnet publish -c Release -r win-x64 --self-contained true -o ./publish
 
   Then grab the EXE from .\publish\ and do whatever you want with it
 
@@ -192,8 +187,7 @@
   Ctrl+Shift+F12 to run tests at any time without restarting
 
   BUILD WITH:
-    dotnet publish -c Debug -r win-x64
-    --no-self-contained -p:PublishSingleFile=true -o ./publish
+    dotnet publish -c Debug -r win-x64 --no-self-contained -o ./publish
 
   WHAT IT DOES:
     - CSV round trip, BOM handling, quoted fields, error recovery, and

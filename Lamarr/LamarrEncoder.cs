@@ -57,7 +57,7 @@ namespace Lamarr
 
         private int EncodeInternal(byte[] rgOut, ref uint pcbOut, byte[] rgIn, uint cbIn)
         {
-            //输入末尾补1字节0 cmp_val在match到末尾时读取pbIn[cbIn]=0
+            //输入末尾补1字节0 match到末尾时读取rgIn[cbIn]=0
             if (rgIn.Length <= cbIn)
             {
                 byte[] rgPadded = new byte[cbIn + 1];
@@ -116,7 +116,7 @@ namespace Lamarr
                     if (CheckCopyChunk(uCurMatchCnt))
                     {
                         FlushUCChunk();
-                        uInPtr = uProcessedData + cbUCData;
+                        uInPtr = uProcessedData + (cbUCData & ~7u);
                         iUCTagPos = iOutPos; iUCNib = 0;
                         iTagPos = iOutPos++;
                         iCpyTag = 0; cbUCData = 0; uProcessedData = uInPtr;
@@ -155,13 +155,13 @@ namespace Lamarr
 
         private bool CheckCopyChunk(uint uCurMatchCnt)
         {
-            //iUCData溢出或iCpyTag超阈值触发flush；bValid防止rewind循环
+            //iUCData溢出或iCpyTag超阈值触发flush bValid防止rewind循环
             if (iCpyTag != 0 && cbUCData > 0xFFF8)
                 return true;
 
             uint i = uInPtr - (uProcessedData + uCurMatchCnt);
             uint cbCompressed = (uint)(iOutPos - iUCTagPos);
-            //bValid防copy_uncmp后回绕导致的级联触发
+            //bValid防FlushUCChunk后回绕导致的级联触发
             bool bValid = uInPtr > uProcessedData;
 
             if (bThisTag != 0)
@@ -281,7 +281,7 @@ namespace Lamarr
 
             uint uHash = Hash(uInPtr);
 
-            //pInp[-1..2]==pInp[0..3] -> 连续相同字节
+            //rgIn[uCurPtr-1..uCurPtr+2]==rgIn[uCurPtr..uCurPtr+3] -> 连续相同字节
             if (uRemaining >= 4 && Read32LE(rgIn, uCurPtr) == Read32LE(rgIn, uCurPtr - 1))
             {
                 uint uRem = cbIn - 4 - uCurPtr;

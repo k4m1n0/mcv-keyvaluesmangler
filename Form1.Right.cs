@@ -26,11 +26,15 @@ public partial class Form1
     private void InitRightPanel(List<WeaponData> rgWeapons)
     {
         int iX = 825;
-        this.Controls.Add(new Label { Text = "WeaponR", Location = new Point(iX + 190, 8), Size = new Size(65, 20) });
+        this.Controls.Add(new Label { Text = "WeaponR", Location = new Point(iX + 190, 8), Size = new Size(70, 20) });
         cmbWeaponsR = new ComboBox { Location = new Point(iX + 5, 6), Size = new Size(180, 23), AutoCompleteMode = AutoCompleteMode.SuggestAppend, AutoCompleteSource = AutoCompleteSource.ListItems, DisplayMember = "PrintName" };
         cmbWeaponsR.SelectedIndexChanged += WeaponSelectedR;
         this.Controls.Add(cmbWeaponsR);
-        nudDamageGenericR = new NumericUpDown { Location = new Point(iX + 417, 6), Size = new Size(65, 23), DecimalPlaces = 1, Increment = 1m, Minimum = 0m, Maximum = 999m, Value = 0m };
+        var btnOpenScriptR = new Button { Text = "EditInFile", Location = new Point(iX + 260, 6), Size = new Size(75, 26) };
+        btnOpenScriptR.Click += (s, e) => OpenScriptForCurrent(false);
+        this.Controls.Add(btnOpenScriptR);
+        new ToolTip().SetToolTip(btnOpenScriptR, "Open weapon script in default editor");
+        nudDamageGenericR = new NumericUpDown { Location = new Point(iX + 415, 6), Size = new Size(65, 23), DecimalPlaces = 1, Increment = 1m, Minimum = 0m, Maximum = 999m, Value = 0m };
         nudDamageGenericR.ValueChanged += (s, e) => { ScheduleUndo(); UpdateAllDamage(); LogService.DebugDebounce("nud_Dmg_R", $"Dmg R: {nudDamageGenericR.Value}", 500); };
         nudDamageGenericR.MouseUp += (_, _) => PushUndoNow();
         this.Controls.Add(nudDamageGenericR);

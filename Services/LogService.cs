@@ -77,7 +77,9 @@ public static class LogService
 
         //Debug.Write始终输出 不受MinLevel限制
         string sLine = FormatLine(sLevelName, sMsg, stTrace);
+    #if DEBUG
         System.Diagnostics.Debug.Write(sLine);
+    #endif
 
         //文件写入受MinLevel控制
         if (!bFileOutputEnabled || lvl < lvlMin) return;

@@ -29,9 +29,13 @@ public partial class Form1
         cmbWeaponsL = new ComboBox { Location = new Point(340, 6), Size = new Size(180, 23), AutoCompleteMode = AutoCompleteMode.SuggestAppend, AutoCompleteSource = AutoCompleteSource.ListItems, DisplayMember = "PrintName" };
         cmbWeaponsL.SelectedIndexChanged += WeaponSelectedL;
         this.Controls.Add(cmbWeaponsL);
-        this.Controls.Add(new Label { Text = "WeaponL", Location = new Point(275, 8), Size = new Size(65, 20) });
+        var btnOpenScriptL = new Button { Text = "EditInFile", Location = new Point(190, 6), Size = new Size(75, 26) };
+        btnOpenScriptL.Click += (s, e) => OpenScriptForCurrent(true);
+        this.Controls.Add(btnOpenScriptL);
+        new ToolTip().SetToolTip(btnOpenScriptL, "Open weapon script in default editor");
+        this.Controls.Add(new Label { Text = "WeaponL", Location = new Point(270, 8), Size = new Size(70, 20) });
         this.Controls.Add(new Label { Text = "Dmg", Location = new Point(4, 8), AutoSize = true });
-        nudDamageGenericL = new NumericUpDown { Location = new Point(42, 6), Size = new Size(65, 23), DecimalPlaces = 1, Increment = 1m, Minimum = 0m, Maximum = 999m, Value = 0m };//我用了好几天才发现这个输入框被裁掉了
+        nudDamageGenericL = new NumericUpDown { Location = new Point(45, 6), Size = new Size(65, 23), DecimalPlaces = 1, Increment = 1m, Minimum = 0m, Maximum = 999m, Value = 0m };//我用了好几天才发现这个输入框被裁掉了
         nudDamageGenericL.ValueChanged += (s, e) => { ScheduleUndo(); UpdateAllDamage(); LogService.DebugDebounce("nud_Dmg_L", $"Dmg L: {nudDamageGenericL.Value}", 500); };
         nudDamageGenericL.MouseUp += (_, _) => PushUndoNow();
         this.Controls.Add(nudDamageGenericL);
