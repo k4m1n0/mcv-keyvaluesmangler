@@ -242,11 +242,11 @@ public partial class Form1 : Form
         btnSave.Click += BtnSave_Click;
         this.Controls.Add(btnSave);
 
-        btnCsvToScripts = new Button { Text = "CSV>Script", Location = new Point(iCx + 59, 6), Size = new Size(90, 26) };
+        btnCsvToScripts = new Button { Text = "CSV>Script", Location = new Point(iCx + 60, 6), Size = new Size(89, 26) };
         btnCsvToScripts.Click += BtnCsvToScripts_Click;
         this.Controls.Add(btnCsvToScripts);
 
-        btnScriptsToCsv = new Button { Text = "Script>CSV", Location = new Point(iCx + 151, 6), Size = new Size(90, 26) };
+        btnScriptsToCsv = new Button { Text = "Script>CSV", Location = new Point(iCx + 151, 6), Size = new Size(89, 26) };
         btnScriptsToCsv.Click += BtnScriptsToCsv_Click;
         this.Controls.Add(btnScriptsToCsv);
 
