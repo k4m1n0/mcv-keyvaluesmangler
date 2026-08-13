@@ -68,4 +68,8 @@
     <TrimmerRootAssembly Include="System.Windows.Forms" />
   </ItemGroup>
 
+  <Target Name="RemoveWpfNativeDlls" AfterTargets="Publish" Condition="'$(SelfContained)' == 'true'">
+    <Delete Files="$(PublishDir)*_cor3.dll" />
+  </Target>
+
 </Project>
