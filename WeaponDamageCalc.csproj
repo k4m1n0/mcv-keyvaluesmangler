@@ -69,7 +69,10 @@
   </ItemGroup>
 
   <Target Name="RemoveWpfNativeDlls" AfterTargets="Publish" Condition="'$(SelfContained)' == 'true'">
-    <Delete Files="$(PublishDir)*_cor3.dll" />
+      <ItemGroup>
+          <Cor3Dlls Include="$(PublishDir)*_cor3.dll" />
+      </ItemGroup>
+      <Delete Files="@(Cor3Dlls)" />
   </Target>
 
 </Project>
