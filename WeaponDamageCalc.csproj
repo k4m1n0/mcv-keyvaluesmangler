@@ -8,8 +8,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
-    <Version>1.0.2.0</Version>
-    <FileVersion>1.0.2.0</FileVersion>
+    <Version>1.2.0.0</Version>
+    <FileVersion>1.2.0.0</FileVersion>
 
     <PublishSingleFile>true</PublishSingleFile>
     <EnableUnsafeBinaryFormatterSerialization>false</EnableUnsafeBinaryFormatterSerialization>
