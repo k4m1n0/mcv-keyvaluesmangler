@@ -31,8 +31,8 @@ internal static class Program
     static int Main(string[] rgArgs)
     {
         string sCurrentDir = AppContext.BaseDirectory;
-        string sMutexName = @"WeaponDamageCalc_" + Convert.ToHexString(MD5.HashData(
-            Encoding.UTF8.GetBytes(sCurrentDir.ToLowerInvariant())));
+        string sMutexName = @"WeaponDamageCalc_" + Convert.ToHexString(SHA256.HashData(
+            Encoding.UTF8.GetBytes(sCurrentDir.ToLowerInvariant())))[..16];
         using var hMutex = new Mutex(true, sMutexName, out bool bCreatedNew);
         if (!bCreatedNew)
         {
@@ -50,18 +50,23 @@ internal static class Program
             else if (rgArgs[i].Equals("--lightmode", StringComparison.OrdinalIgnoreCase))
                 Form1.bForceLightMode = true;
             else if (rgArgs[i].Equals("--log-level", StringComparison.OrdinalIgnoreCase))
-            { i++; continue; }
-            else if (rgArgs[i].Equals("--verbose", StringComparison.OrdinalIgnoreCase))
+            {
+                //仅当下一个参数存在且不是--开头时才当作value跳过 否则留给下一轮识别
+                if (i + 1 < rgArgs.Length && !rgArgs[i + 1].StartsWith("--"))
+                    i++;
                 continue;
+            }
+            else if (rgArgs[i].Equals("--verbose", StringComparison.OrdinalIgnoreCase))
+                rgCliArgs.Add(rgArgs[i]);
             else
                 rgCliArgs.Add(rgArgs[i]);
         }
 
         var rgCliArgsArr = rgCliArgs.ToArray();
-        var sLogLevelArg = Opt(rgArgs, "--log-level");
 
         if (rgCliArgsArr.Length > 0)
         {
+            var sLogLevelArg = Opt(rgArgs, "--log-level");
             return RunCliMode(rgCliArgsArr, sLogLevelArg != null ? ParseLogLevel(sLogLevelArg) : LogService.Level.Warn);
         }
 
@@ -84,12 +89,11 @@ internal static class Program
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
         Application.ThreadException += (_, e) =>
         {
-            if (e.Exception is TypeLoadException)
-            {
-                LogService.Debug($"ThreadException: {e.Exception.Message}");
-                Application.Exit();
-                return;
-            }
+            LogService.Error(e.Exception, "UI ThreadException");
+            MessageBox.Show(
+                $"Unexpected error:\n\n{e.Exception.Message}\n\nSee mangler.log for details.",
+                "Mangler - Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            Application.Exit();
         };
         Application.Run(new Form1());
         return 0;
@@ -230,8 +234,13 @@ Examples:
     static string? Arg(string[] rgArgs, int i) => i < rgArgs.Length ? rgArgs[i] : null;
 
     //取命名参数的值 如--user xxx返回xxx
-    static string? Opt(string[] rgArgs, string sName) =>
-        Array.FindIndex(rgArgs, sA => sA.Equals(sName, StringComparison.OrdinalIgnoreCase)) is int iIdx && iIdx >= 0 ? rgArgs[iIdx + 1] : null;
+    static string? Opt(string[] rgArgs, string sName)
+    {
+        int iIdx = Array.FindIndex(rgArgs, sA => sA.Equals(sName, StringComparison.OrdinalIgnoreCase));
+        if (iIdx < 0 || iIdx + 1 >= rgArgs.Length) return null;
+        string sVal = rgArgs[iIdx + 1];
+        return sVal.StartsWith("--") ? null : sVal;//value不能是--开头的另一个参数
+    }
 
     static void Verbose(string sMsg, bool bVerbose)
     {
