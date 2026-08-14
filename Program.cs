@@ -51,13 +51,10 @@ internal static class Program
                 Form1.bForceLightMode = true;
             else if (rgArgs[i].Equals("--log-level", StringComparison.OrdinalIgnoreCase))
             {
-                //仅当下一个参数存在且不是--开头时才当作value跳过 否则留给下一轮识别
                 if (i + 1 < rgArgs.Length && !rgArgs[i + 1].StartsWith("--"))
                     i++;
                 continue;
             }
-            else if (rgArgs[i].Equals("--verbose", StringComparison.OrdinalIgnoreCase))
-                rgCliArgs.Add(rgArgs[i]);
             else
                 rgCliArgs.Add(rgArgs[i]);
         }
@@ -513,21 +510,23 @@ Examples:
             sDefaultTemplate, sLmgTemplate, sPistolTemplate, sShortTemplate, new HashSet<string>(), mpIndex);
         Verbose($"Generated: {rgGenerated.Count} pages", bVerbose);
 
+        //获取wiki真实标题 否则用生成器标题
+        string GetWikiTitle(WikiPageGenerator.GeneratedPage gpPage)
+        {
+            if (mpIndex != null)
+            {
+                var kvpMatch = mpIndex.FirstOrDefault(kvp => kvp.Value.Equals(gpPage.ScriptName, StringComparison.OrdinalIgnoreCase));
+                if (!string.IsNullOrEmpty(kvpMatch.Key)) return kvpMatch.Key;
+            }
+            return gpPage.Title;
+        }
+
         //--check-wiki时批量查询已存在页面
         HashSet<string> hsExisting = new();
         if (bCheckWiki)
         {
             Verbose("Checking wiki for existing pages...", bVerbose);
-            //用索引映射获取wiki真实标题 否则用生成器标题
-            var rgTitles = rgGenerated.Select(gpPage =>
-            {
-                if (mpIndex != null)
-                {
-                    var kvpMatch = mpIndex.FirstOrDefault(kvp => kvp.Value.Equals(gpPage.ScriptName, StringComparison.OrdinalIgnoreCase));
-                    if (!string.IsNullOrEmpty(kvpMatch.Key)) return kvpMatch.Key;
-                }
-                return gpPage.Title;
-            }).ToList();
+            var rgTitles = rgGenerated.Select(GetWikiTitle).ToList();
             hsExisting = await WikiApiService.GetExistingTitlesAsync(rgTitles);
             Verbose($"Existing on wiki: {hsExisting.Count}", bVerbose);
         }
@@ -538,13 +537,7 @@ Examples:
         {
             if (!bIncludeExisting && bCheckWiki)
             {
-                string sWikiTitle = gpPage.Title;
-                if (mpIndex != null)
-                {
-                    var kvpMatch = mpIndex.FirstOrDefault(kvp => kvp.Value.Equals(gpPage.ScriptName, StringComparison.OrdinalIgnoreCase));
-                    if (!string.IsNullOrEmpty(kvpMatch.Key)) sWikiTitle = kvpMatch.Key;
-                }
-                if (hsExisting.Contains(sWikiTitle)) continue;
+                if (hsExisting.Contains(GetWikiTitle(gpPage))) continue;
             }
 
             string sFn = Path.Combine(sOutputDir, gpPage.Title.Replace(" ", "_").Replace("/", "_") + ".txt");
