@@ -19,13 +19,7 @@ public partial class Form1
             if (bShowingAltStats && amCurrentAltStat == amMode)
             {
                 LogService.Info($"ToggleAltStats: exiting {amMode} mode");
-                if ((wCurrentLeft != null && HasUnsavedChanges(true, bCheckBothSides: true))
-                    || (wCurrentRight != null && HasUnsavedChanges(false, bCheckBothSides: true)))
-                {
-                    var drResult = MessageBox.Show("Unsaved alt stat changes will be lost. Discard?",
-                        "Unsaved Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-                    if (drResult != DialogResult.Yes) return;
-                }
+                if (!ConfirmDiscardUnsaved("Unsaved alt stat changes will be lost. Discard?")) return;
                 bShowingAltStats = false;
                 bUpdatingControls = true;
                 if (wCurrentLeft != null) { LoadWeaponToControls(wCurrentLeft, true); }
@@ -39,13 +33,7 @@ public partial class Form1
             else
             {
                 LogService.Info($"ToggleAltStats: entering {amMode} mode");
-                if ((wCurrentLeft != null && HasUnsavedChanges(true, bCheckBothSides: true))
-                    || (wCurrentRight != null && HasUnsavedChanges(false, bCheckBothSides: true)))
-                {
-                    var drResult = MessageBox.Show("Unsaved changes will be lost. Switch stats mode?",
-                        "Unsaved Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-                    if (drResult != DialogResult.Yes) return;
-                }
+                if (!ConfirmDiscardUnsaved("Unsaved changes will be lost. Switch stats mode?")) return;
                 PushUndo();
                 bShowingAltStats = true; amCurrentAltStat = amMode;
                 HighlightAltStatButton(amMode);
@@ -63,6 +51,18 @@ public partial class Form1
         {
             LogService.Error(ex, $"ToggleAltStats: mode={amMode}");
         }
+    }
+
+    bool ConfirmDiscardUnsaved(string sMessage)
+    {
+        if ((wCurrentLeft != null && HasUnsavedChanges(true, bCheckBothSides: true))
+            || (wCurrentRight != null && HasUnsavedChanges(false, bCheckBothSides: true)))
+        {
+            var drResult = MessageBox.Show(sMessage,
+                "Unsaved Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+            return drResult == DialogResult.Yes;
+        }
+        return true;
     }
 
     //高亮当前模式的按钮 另一个恢复默认

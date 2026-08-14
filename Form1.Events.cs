@@ -399,102 +399,107 @@ public partial class Form1
     #endregion
     #region 保存导出
 
+    private void CommitCurrentControlsToWeapons()
+    {
+        //强制提交活跃控件的待定输入 防止NUD焦点未移走导致值未更新
+        var ctrlActive = this.ActiveControl;
+        if (ctrlActive != null) { this.ActiveControl = null; ctrlActive.Focus(); }
+        bool bSameWeapon = wCurrentLeft != null && wCurrentRight != null
+            && ReferenceEquals(wCurrentLeft, wCurrentRight);
+        if (bSameWeapon)
+        {
+            bool bFocusLeft = ResolveSameWeaponFocus();
+            if (bFocusLeft)
+            {
+                if (bShowingAltStats)
+                {
+                    SyncAltStatFields(wCurrentLeft!, amCurrentAltStat, true);
+                    var wOldClone = CloneWeaponData(wCurrentLeft!);
+                    SyncAltStatsToMatchTopLevel(wOldClone, wCurrentLeft!);
+                    LoadAltStatsToControls(true, amCurrentAltStat);
+                    LoadAltStatsToControls(false, amCurrentAltStat);
+                }
+                else
+                {
+                    var wOld = CloneWeaponData(wCurrentLeft!);
+                    SaveControlsToWeapon(wCurrentLeft!, true);
+                    SyncAltStatsToMatchTopLevel(wOld, wCurrentLeft!);
+                    LoadWeaponToControls(wCurrentLeft!, false);
+                }
+            }
+            else
+            {
+                if (bShowingAltStats)
+                {
+                    SyncAltStatFields(wCurrentRight!, amCurrentAltStat, false);
+                    var wOldClone = CloneWeaponData(wCurrentRight!);
+                    SyncAltStatsToMatchTopLevel(wOldClone, wCurrentRight!);
+                    LoadAltStatsToControls(false, amCurrentAltStat);
+                    LoadAltStatsToControls(true, amCurrentAltStat);
+                }
+                else
+                {
+                    var wOld = CloneWeaponData(wCurrentRight!);
+                    SaveControlsToWeapon(wCurrentRight!, false);
+                    SyncAltStatsToMatchTopLevel(wOld, wCurrentRight!);
+                    LoadWeaponToControls(wCurrentRight!, true);
+                }
+            }
+            UpdateAllDamage(); pnlSpread.Invalidate(); pnlRecoil.Invalidate();
+        }
+        else if (!bShowingAltStats)
+        {
+            if (wCurrentLeft != null)
+            {
+                var wOldL = CloneWeaponData(wCurrentLeft);
+                SaveControlsToWeapon(wCurrentLeft, true);
+                SyncAltStatsToMatchTopLevel(wOldL, wCurrentLeft);
+            }
+            if (wCurrentRight != null)
+            {
+                var wOldR = CloneWeaponData(wCurrentRight);
+                SaveControlsToWeapon(wCurrentRight, false);
+                SyncAltStatsToMatchTopLevel(wOldR, wCurrentRight);
+            }
+        }
+        if (bShowingAltStats && !bSameWeapon)
+        {
+            if (wCurrentLeft != null)
+            {
+                SyncAltStatFields(wCurrentLeft, amCurrentAltStat);
+                var wOldCloneL = CloneWeaponData(wCurrentLeft);
+                SyncAltStatsToMatchTopLevel(wOldCloneL, wCurrentLeft);
+            }
+            if (wCurrentRight != null && !ReferenceEquals(wCurrentLeft, wCurrentRight))
+            {
+                SyncAltStatFields(wCurrentRight, amCurrentAltStat);
+                var wOldCloneR = CloneWeaponData(wCurrentRight);
+                SyncAltStatsToMatchTopLevel(wOldCloneR, wCurrentRight);
+            }
+        }
+        //栈顶已是当前状态则不入栈 避免连续保存产生重复条目
+        bool bSameAsTop = llUndoStack.Count > 0;
+        if (bSameAsTop)
+        {
+            var ueLast = llUndoStack.Last!.Value;
+            var wTempL = new WeaponData(); SaveControlsToWeapon(wTempL, true);
+            var wTempR = new WeaponData(); SaveControlsToWeapon(wTempR, false);
+            bSameAsTop = WeaponDataEquals(wTempL, ueLast.LeftData) && WeaponDataEquals(wTempR, ueLast.RightData);
+        }
+        if (!bSameAsTop) PushUndo();
+        ClearRedo();
+        StoreSnapshot();
+        if (bShowingAltStats)
+            HighlightAltStatButton(amCurrentAltStat);
+    }
+
     private void BtnSave_Click(object? sender, EventArgs e)
     {
         if (System.Threading.Interlocked.Exchange(ref iSaveLock, 1) != 0) return;
         try
         {
             LogService.Info("BtnSave: saving weapons...");
-            //强制提交活跃控件的待定输入 防止NUD焦点未移走导致值未更新
-            var ctrlActive = this.ActiveControl;
-            if (ctrlActive != null) { this.ActiveControl = null; ctrlActive.Focus(); }
-            bool bSameWeapon = wCurrentLeft != null && wCurrentRight != null
-                && ReferenceEquals(wCurrentLeft, wCurrentRight);
-            if (bSameWeapon)
-            {
-                bool bFocusLeft = ResolveSameWeaponFocus();
-                if (bFocusLeft)
-                {
-                    if (bShowingAltStats)
-                    {
-                        SyncAltStatFields(wCurrentLeft!, amCurrentAltStat, true);
-                        var wOldClone = CloneWeaponData(wCurrentLeft!);
-                        SyncAltStatsToMatchTopLevel(wOldClone, wCurrentLeft!);
-                        LoadAltStatsToControls(true, amCurrentAltStat);
-                        LoadAltStatsToControls(false, amCurrentAltStat);
-                    }
-                    else
-                    {
-                        var wOld = CloneWeaponData(wCurrentLeft!);
-                        SaveControlsToWeapon(wCurrentLeft!, true);
-                        SyncAltStatsToMatchTopLevel(wOld, wCurrentLeft!);
-                        LoadWeaponToControls(wCurrentLeft!, false);
-                    }
-                }
-                else
-                {
-                    if (bShowingAltStats)
-                    {
-                        SyncAltStatFields(wCurrentRight!, amCurrentAltStat, false);
-                        var wOldClone = CloneWeaponData(wCurrentRight!);
-                        SyncAltStatsToMatchTopLevel(wOldClone, wCurrentRight!);
-                        LoadAltStatsToControls(false, amCurrentAltStat);
-                        LoadAltStatsToControls(true, amCurrentAltStat);
-                    }
-                    else
-                    {
-                        var wOld = CloneWeaponData(wCurrentRight!);
-                        SaveControlsToWeapon(wCurrentRight!, false);
-                        SyncAltStatsToMatchTopLevel(wOld, wCurrentRight!);
-                        LoadWeaponToControls(wCurrentRight!, true);
-                    }
-                }
-                UpdateAllDamage(); pnlSpread.Invalidate(); pnlRecoil.Invalidate();
-            }
-            else if (!bShowingAltStats)
-            {
-                if (wCurrentLeft != null)
-                {
-                    var wOldL = CloneWeaponData(wCurrentLeft);
-                    SaveControlsToWeapon(wCurrentLeft, true);
-                    SyncAltStatsToMatchTopLevel(wOldL, wCurrentLeft);
-                }
-                if (wCurrentRight != null)
-                {
-                    var wOldR = CloneWeaponData(wCurrentRight);
-                    SaveControlsToWeapon(wCurrentRight, false);
-                    SyncAltStatsToMatchTopLevel(wOldR, wCurrentRight);
-                }
-            }
-            if (bShowingAltStats && !bSameWeapon)
-            {
-                if (wCurrentLeft != null)
-                {
-                    SyncAltStatFields(wCurrentLeft, amCurrentAltStat);
-                    var wOldCloneL = CloneWeaponData(wCurrentLeft);
-                    SyncAltStatsToMatchTopLevel(wOldCloneL, wCurrentLeft);
-                }
-                if (wCurrentRight != null && !ReferenceEquals(wCurrentLeft, wCurrentRight))
-                {
-                    SyncAltStatFields(wCurrentRight, amCurrentAltStat);
-                    var wOldCloneR = CloneWeaponData(wCurrentRight);
-                    SyncAltStatsToMatchTopLevel(wOldCloneR, wCurrentRight);
-                }
-            }
-            //栈顶已是当前状态则不入栈 避免连续保存产生重复条目
-            bool bSameAsTop = llUndoStack.Count > 0;
-            if (bSameAsTop)
-            {
-                var ueLast = llUndoStack.Last!.Value;
-                var wTempL = new WeaponData(); SaveControlsToWeapon(wTempL, true);
-                var wTempR = new WeaponData(); SaveControlsToWeapon(wTempR, false);
-                bSameAsTop = WeaponDataEquals(wTempL, ueLast.LeftData) && WeaponDataEquals(wTempR, ueLast.RightData);
-            }
-            if (!bSameAsTop) PushUndo();
-            ClearRedo();
-            StoreSnapshot();
-            if (bShowingAltStats)
-                HighlightAltStatButton(amCurrentAltStat);
+            CommitCurrentControlsToWeapons();
             try
             {
                 SetC64Status("SAVING...");
@@ -563,86 +568,7 @@ public partial class Form1
             }
 
             LogService.Info($"BtnQuickExport: exporting to {sLastScriptsDir}, altStats={bShowingAltStats}");
-            //强制提交活跃控件输入
-            var ctrlActive = this.ActiveControl;
-            if (ctrlActive != null) { this.ActiveControl = null; ctrlActive.Focus(); }
-            bool bSameWeapon = wCurrentLeft != null && wCurrentRight != null
-                && ReferenceEquals(wCurrentLeft, wCurrentRight);
-            if (bSameWeapon)
-            {
-                bool bFocusLeft = ResolveSameWeaponFocus();
-                if (bFocusLeft)
-                {
-                    if (bShowingAltStats)
-                    {
-                        SyncAltStatFields(wCurrentLeft!, amCurrentAltStat, true);
-                        var wOldClone = CloneWeaponData(wCurrentLeft!);
-                        SyncAltStatsToMatchTopLevel(wOldClone, wCurrentLeft!);
-                        LoadAltStatsToControls(true, amCurrentAltStat);
-                        LoadAltStatsToControls(false, amCurrentAltStat);
-                    }
-                    else
-                    {
-                        var wOld = CloneWeaponData(wCurrentLeft!);
-                        SaveControlsToWeapon(wCurrentLeft!, true);
-                        SyncAltStatsToMatchTopLevel(wOld, wCurrentLeft!);
-                        LoadWeaponToControls(wCurrentLeft!, false);
-                    }
-                }
-                else
-                {
-                    if (bShowingAltStats)
-                    {
-                        SyncAltStatFields(wCurrentRight!, amCurrentAltStat, false);
-                        var wOldClone = CloneWeaponData(wCurrentRight!);
-                        SyncAltStatsToMatchTopLevel(wOldClone, wCurrentRight!);
-                        LoadAltStatsToControls(false, amCurrentAltStat);
-                        LoadAltStatsToControls(true, amCurrentAltStat);
-                    }
-                    else
-                    {
-                        var wOld = CloneWeaponData(wCurrentRight!);
-                        SaveControlsToWeapon(wCurrentRight!, false);
-                        SyncAltStatsToMatchTopLevel(wOld, wCurrentRight!);
-                        LoadWeaponToControls(wCurrentRight!, true);
-                    }
-                }
-                UpdateAllDamage(); pnlSpread.Invalidate(); pnlRecoil.Invalidate();
-            }
-            else if (!bShowingAltStats)
-            {
-                if (wCurrentLeft != null)
-                {
-                    var wOldL = CloneWeaponData(wCurrentLeft);
-                    SaveControlsToWeapon(wCurrentLeft, true);
-                    SyncAltStatsToMatchTopLevel(wOldL, wCurrentLeft);
-                }
-                if (wCurrentRight != null)
-                {
-                    var wOldR = CloneWeaponData(wCurrentRight);
-                    SaveControlsToWeapon(wCurrentRight, false);
-                    SyncAltStatsToMatchTopLevel(wOldR, wCurrentRight);
-                }
-            }
-            else
-            {
-                if (wCurrentLeft != null)
-                {
-                    SyncAltStatFields(wCurrentLeft, amCurrentAltStat);
-                    var wOldCloneL = CloneWeaponData(wCurrentLeft);
-                    SyncAltStatsToMatchTopLevel(wOldCloneL, wCurrentLeft);
-                }
-                if (wCurrentRight != null && !ReferenceEquals(wCurrentLeft, wCurrentRight))
-                {
-                    SyncAltStatFields(wCurrentRight, amCurrentAltStat);
-                    var wOldCloneR = CloneWeaponData(wCurrentRight);
-                    SyncAltStatsToMatchTopLevel(wOldCloneR, wCurrentRight);
-                }
-            }
-            ClearRedo();
-            StoreSnapshot();
-            if (bShowingAltStats)
-                HighlightAltStatButton(amCurrentAltStat);
+            CommitCurrentControlsToWeapons();
             try
             {
                 SetC64Status("SAVING...");
