@@ -27,7 +27,7 @@ public partial class Form1
     {
         int iX = 5;
         cmbWeaponsL = new ComboBox { Location = new Point(340, 6), Size = new Size(180, 23), AutoCompleteMode = AutoCompleteMode.SuggestAppend, AutoCompleteSource = AutoCompleteSource.ListItems, DisplayMember = "PrintName" };
-        cmbWeaponsL.SelectedIndexChanged += WeaponSelectedL;
+        cmbWeaponsL.SelectedIndexChanged += (s, ev) => WeaponSelected(true, s, ev);
         this.Controls.Add(cmbWeaponsL);
         var btnOpenScriptL = new Button { Text = "EditInFile", Location = new Point(190, 6), Size = new Size(75, 26) };
         btnOpenScriptL.Click += (s, e) => OpenScriptForCurrent(true);

@@ -167,8 +167,8 @@ public partial class Form1 : Form
 
                 if (rgWeapons.Count > 0)
                 {
-                    cmbWeaponsL.SelectedIndexChanged -= WeaponSelectedL;
-                    cmbWeaponsR.SelectedIndexChanged -= WeaponSelectedR;
+                    cmbWeaponsL.SelectedIndexChanged -= (s, ev) => WeaponSelected(true, s, ev);
+                    cmbWeaponsR.SelectedIndexChanged -= (s, ev) => WeaponSelected(false, s, ev);
 
                     cmbWeaponsL.DataSource = null;
                     cmbWeaponsL.DataSource = new List<WeaponData>(rgWeapons);
@@ -180,8 +180,8 @@ public partial class Form1 : Form
                     cmbWeaponsR.DisplayMember = "PrintName";
                     cmbWeaponsR.SelectedIndex = 0;
 
-                    cmbWeaponsL.SelectedIndexChanged += WeaponSelectedL;
-                    cmbWeaponsR.SelectedIndexChanged += WeaponSelectedR;
+                    cmbWeaponsL.SelectedIndexChanged += (s, ev) => WeaponSelected(true, s, ev);
+                    cmbWeaponsR.SelectedIndexChanged += (s, ev) => WeaponSelected(false, s, ev);
 
                     bInitializing = false;
                     if (cmbWeaponsL.SelectedItem is WeaponData wL)
@@ -929,6 +929,7 @@ public partial class Form1 : Form
             this.MinimizeBox = false;
             this.MaximizeBox = false;
             this.TopMost = true;
+            this.ShowInTaskbar = true;
             var txt = new TextBox { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Dock = DockStyle.Fill, Font = new Font("Consolas", 9), Text = sLogText.Replace("\n", "\r\n") };
             if (bDarkMode)
             {

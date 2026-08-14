@@ -229,10 +229,10 @@ public partial class Form1
             var wFound = rgWeapons.FirstOrDefault(x => x.ScriptName == ueEntry.LeftScriptName);
             if (wFound != null && wCurrentLeft?.ScriptName != wFound.ScriptName)
             {
-                cmbWeaponsL.SelectedIndexChanged -= WeaponSelectedL;
+                cmbWeaponsL.SelectedIndexChanged -= (s, ev) => WeaponSelected(true, s, ev);
                 wCurrentLeft = wFound;
                 cmbWeaponsL.SelectedItem = wFound;
-                cmbWeaponsL.SelectedIndexChanged += WeaponSelectedL;
+                cmbWeaponsL.SelectedIndexChanged += (s, ev) => WeaponSelected(true, s, ev);
             }
         }
         LoadWeaponToControls(ueEntry.LeftData, true);
@@ -242,10 +242,10 @@ public partial class Form1
             var wFound = rgWeapons.FirstOrDefault(x => x.ScriptName == ueEntry.RightScriptName);
             if (wFound != null && wCurrentRight?.ScriptName != wFound.ScriptName)
             {
-                cmbWeaponsR.SelectedIndexChanged -= WeaponSelectedR;
+                cmbWeaponsR.SelectedIndexChanged -= (s, ev) => WeaponSelected(false, s, ev);
                 wCurrentRight = wFound;
                 cmbWeaponsR.SelectedItem = wFound;
-                cmbWeaponsR.SelectedIndexChanged += WeaponSelectedR;
+                cmbWeaponsR.SelectedIndexChanged += (s, ev) => WeaponSelected(false, s, ev);
             }
         }
         LoadWeaponToControls(ueEntry.RightData, false);
