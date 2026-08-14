@@ -37,7 +37,7 @@ internal static class Program
         if (!bCreatedNew)
         {
             LogService.Info("Mutex locked - another instance is already running in this folder");
-            MessageBox.Show("Only one instance of the same folder can be running at once time.",
+            MessageBox.Show("Only one instance of the same folder can be running at once.",
                 "Mangler - Warning", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return 0;
         }
