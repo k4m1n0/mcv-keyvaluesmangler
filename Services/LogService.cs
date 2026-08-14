@@ -73,16 +73,20 @@ public static class LogService
 
     private static void Write(string sLevelName, Level lvl, string sMsg, StackTrace? stTrace)
     {
-        if (!bEnabled) return;
+        //FATAL级别始终写入文件 无视所有开关
+        bool bIsFatal = lvl == Level.Fatal;
+        
+        if (!bIsFatal && !bEnabled) return;
 
         //Debug.Write始终输出 不受MinLevel限制
         string sLine = FormatLine(sLevelName, sMsg, stTrace);
     #if DEBUG
-        System.Diagnostics.Debug.Write(sLine);
+        if (bIsFatal || bEnabled)
+            System.Diagnostics.Debug.Write(sLine);
     #endif
 
-        //文件写入受MinLevel控制
-        if (!bFileOutputEnabled || lvl < lvlMin) return;
+        //文件写入受MinLevel控制 但FATAL始终写入
+        if (!bIsFatal && (!bFileOutputEnabled || lvl < lvlMin)) return;
 
         try
         {
