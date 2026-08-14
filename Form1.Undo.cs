@@ -6,6 +6,7 @@ using WeaponDamageCalc.Services;
 
 namespace WeaponDamageCalc;
 
+//:)
 public partial class Form1
 {
     #region 数据结构
