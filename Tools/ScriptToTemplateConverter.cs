@@ -46,7 +46,7 @@ public static class ScriptToTemplateConverter
             {
                 string sScript = WeaponScriptService.ReadScriptFile(sPath);
                 string sResult = ConvertSingle(sScript, rgTemplateLines, roOpts);
-                DumpDebugInfo(sName, sScript, rgTemplateLines, sResult, rgLog);
+                DumpDebugInfo(sName, sScript, rgTemplateLines, sResult);
                 File.WriteAllText(sPath, sResult, new UTF8Encoding(false));
                 iSuccess++;
                 rgLog.Add($"[{i + 1}/{rgFiles.Length}] {sName}");
@@ -146,14 +146,18 @@ public static class ScriptToTemplateConverter
                 return string.Join("\n", rgTemplateLines);
 
             var hsMissingKeys = new HashSet<string>(mpScriptMap.Keys, StringComparer.OrdinalIgnoreCase);
-            FillTreeWithScript(anTemplateTree, mpScriptMap, mpScriptBlocks, sScript, hsMissingKeys);
+            var hsConsumedBlocks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            FillTreeWithScript(anTemplateTree, mpScriptMap, mpScriptBlocks, sScript, hsMissingKeys, hsConsumedBlocks);
+
+            if (roOpts.bSkipEmptyValues)
+                RemoveOrphanComments(anTemplateTree);//simple模式删除孤立注释(AST层 向下无活跃kv/块的说明注释)
 
             var sbResult = new StringBuilder();
             var rsState = new RenderState();
             RenderTree(anTemplateTree, sbResult, roOpts, rsState);
             string sOutput = sbResult.ToString();
-            //删除单独成行 仅含注释标记的行 如//{或//}
-            sOutput = Regex.Replace(sOutput, @"^\s*//\s*[\{\}]\s*$", "", RegexOptions.Multiline);
+            if (roOpts.bSkipEmptyValues)
+                sOutput = NormalizeBlankLines(sOutput);//压缩连续空行并删除块首尾空行
             sOutput = sOutput.TrimStart('\r', '\n');
             if (!sOutput.EndsWith('\n'))
                 sOutput += "\n";
@@ -322,37 +326,7 @@ public static class ScriptToTemplateConverter
                             Name = sPotentialName
                         };
                         anCNode.HeaderLines.Add(rgLines[i]);
-
-                        //解析注释块内部 去掉行首//前缀
-                        for (int k = i + 1; k < iCommentEnd; k++)
-                        {
-                            string sInnerLine = rgLines[k];
-                            string sInnerTrimmed = sInnerLine.TrimStart();
-                            if (string.IsNullOrWhiteSpace(sInnerLine))
-                            {
-                                anCNode.Children.Add(new AstNode { Type = NodeType.Blank, RawText = sInnerLine });
-                                continue;
-                            }
-                            string sUncommented = sInnerTrimmed.StartsWith("//") ? sInnerTrimmed.Substring(2).TrimStart() : sInnerTrimmed;
-                            ExtractKVResult? ekvKvr = ExtractKeyValueFromLine(sUncommented);
-                            if (ekvKvr != null)
-                            {
-                                anCNode.Children.Add(new AstNode
-                                {
-                                    Type = NodeType.CommentedKeyValue,
-                                    Indent = ExtractIndent(sInnerLine),
-                                    Name = ekvKvr.Key,
-                                    Value = ekvKvr.Value,
-                                    Separator = ekvKvr.Separator,
-                                    Comment = ekvKvr.Comment
-                                });
-                            }
-                            else
-                            {
-                                anCNode.Children.Add(new AstNode { Type = NodeType.Raw, RawText = sInnerLine });//无法识别的行当raw处理
-                            }
-                        }
-
+                        ParseCommentedBlockChildren(rgLines, i + 1, iCommentEnd, anCNode);
                         rgNodes.Add(anCNode);
                         i = iCommentEnd + 1;
                         continue;
@@ -380,6 +354,30 @@ public static class ScriptToTemplateConverter
                     });
                     i++; continue;
                 }
+                //尝试识别键值块(带引号块名) 如 //"FiremodeSpreadMultiplier" { ... }
+                int iQuoteOpen = sTrimmed.IndexOf('"');
+                if (iQuoteOpen >= 0)
+                {
+                    int iQuoteClose = sTrimmed.IndexOf('"', iQuoteOpen + 1);
+                    if (iQuoteClose >= 0)
+                    {
+                        string sQuotedName = sTrimmed.Substring(iQuoteOpen, iQuoteClose - iQuoteOpen + 1);//带引号块名
+                        if (TryFindCommentedBlockRange(rgLines, i, iEnd, out int iCommentEnd))
+                        {
+                            var anCNode = new AstNode
+                            {
+                                Type = NodeType.CommentedBlock,
+                                Indent = ExtractIndent(sLine),
+                                Name = sQuotedName
+                            };
+                            anCNode.HeaderLines.Add(rgLines[i]);
+                            ParseCommentedBlockChildren(rgLines, i + 1, iCommentEnd, anCNode);
+                            rgNodes.Add(anCNode);
+                            i = iCommentEnd + 1;
+                            continue;
+                        }
+                    }
+                }
                 rgNodes.Add(new AstNode { Type = NodeType.Raw, RawText = sLine });
                 i++; continue;
             }
@@ -406,6 +404,42 @@ public static class ScriptToTemplateConverter
 
             rgNodes.Add(new AstNode { Type = NodeType.Raw, RawText = sLine });
             i++;
+        }
+    }
+
+    //解析注释块内部 去掉行首//前缀 跳过//{ //}结构标记行 生成子节点
+    private static void ParseCommentedBlockChildren(string[] rgLines, int iBlockStart, int iBlockEnd, AstNode anCNode)
+    {
+        for (int k = iBlockStart; k < iBlockEnd; k++)
+        {
+            string sInnerLine = rgLines[k];
+            string sInnerTrimmed = sInnerLine.TrimStart();
+            if (string.IsNullOrWhiteSpace(sInnerLine))
+            {
+                anCNode.Children.Add(new AstNode { Type = NodeType.Blank, RawText = sInnerLine });
+                continue;
+            }
+            string sUncommented = sInnerTrimmed.StartsWith("//") ? sInnerTrimmed.Substring(2).TrimStart() : sInnerTrimmed;
+            string sBodyTrimmed = sUncommented.Trim();
+            if (sBodyTrimmed == "{" || sBodyTrimmed == "}")
+                continue;//跳过结构标记行 //{ 或 //}
+            ExtractKVResult? ekvKvr = ExtractKeyValueFromLine(sUncommented);
+            if (ekvKvr != null)
+            {
+                anCNode.Children.Add(new AstNode
+                {
+                    Type = NodeType.CommentedKeyValue,
+                    Indent = ExtractIndent(sInnerLine),
+                    Name = ekvKvr.Key,
+                    Value = ekvKvr.Value,
+                    Separator = ekvKvr.Separator,
+                    Comment = ekvKvr.Comment
+                });
+            }
+            else
+            {
+                anCNode.Children.Add(new AstNode { Type = NodeType.Raw, RawText = sInnerLine });//无法识别的行当raw处理
+            }
         }
     }
 
@@ -507,7 +541,7 @@ public static class ScriptToTemplateConverter
 
     private static void FillTreeWithScript(AstNode anNode, Dictionary<string, string> mpCurrentMap,
                                            Dictionary<string, string> mpScriptBlocks, string sCurrentScriptText,
-                                           HashSet<string> hsMissingKeys)
+                                           HashSet<string> hsMissingKeys, HashSet<string> hsConsumedBlocks)
     {
         try
         {
@@ -522,6 +556,7 @@ public static class ScriptToTemplateConverter
                     {
                         mpChildMap = ParseKeyValueMap(sBlockContent);
                         sChildScriptText = sBlockContent;
+                        hsConsumedBlocks.Add(anNode.Name!);
                     }
                     else
                     {
@@ -531,10 +566,31 @@ public static class ScriptToTemplateConverter
                 }
 
                 foreach (var anChild in anNode.Children)
-                    FillTreeWithScript(anChild, mpChildMap, mpScriptBlocks, sChildScriptText, hsMissingKeys);
+                    FillTreeWithScript(anChild, mpChildMap, mpScriptBlocks, sChildScriptText, hsMissingKeys, hsConsumedBlocks);
 
                 if (anNode.Type == NodeType.Block && anNode.Name == "WeaponData")
                 {
+                    //追加脚本中模板没有的顶层块 如SmokeColors 保持块结构不拍平
+                    foreach (var kvpBlock in mpScriptBlocks)
+                    {
+                        if (hsConsumedBlocks.Contains(kvpBlock.Key)) continue;
+                        if (kvpBlock.Key.Equals("WeaponData", StringComparison.OrdinalIgnoreCase)) continue;//根块本身
+                        if (string.IsNullOrEmpty(kvpBlock.Value)) continue;
+
+                        var anBlock = new AstNode { Type = NodeType.Block, Indent = "\t", Name = kvpBlock.Key };
+                        anBlock.HeaderLines.Add($"\t{kvpBlock.Key}");
+                        anBlock.HeaderLines.Add("\t{");
+
+                        string[] rgBlockLines = kvpBlock.Value.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                        var rgBlockChildren = new List<AstNode>();
+                        if (rgBlockLines.Length > 0)
+                            ParseLines(rgBlockLines, 0, rgBlockLines.Length, rgBlockChildren);
+                        anBlock.Children.AddRange(rgBlockChildren);
+
+                        anNode.Children.Add(anBlock);
+                        RemoveSubBlockKeysFromMissing(anBlock, hsMissingKeys);
+                    }
+
                     var rgExtraChildren = new List<AstNode>();
                     foreach (var sKey in hsMissingKeys.ToList())
                     {
@@ -560,6 +616,7 @@ public static class ScriptToTemplateConverter
                      mpScriptBlocks.TryGetValue(anNode.Name!, out string? sCbBlockContent) &&
                      !string.IsNullOrEmpty(sCbBlockContent))
             {
+                hsConsumedBlocks.Add(anNode.Name!);
                 //解析脚本块内容 提取键值对和子块
                 string[] rgBlockLines = sCbBlockContent.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
                 var rgTempChildren = new List<AstNode>();
@@ -709,8 +766,7 @@ public static class ScriptToTemplateConverter
                 sb.AppendLine($"{anNode.Indent}\"{anNode.Name}\"{anNode.Separator}\"{anNode.Value}\"{sCommentStr}");
                 break;
             case NodeType.CommentedBlock:
-                if (roOpts.bSkipEmptyValues && !anNode.Children.Any(anC => anC.Type == NodeType.KeyValue || anC.Type == NodeType.Block))//无激活内容跳过
-                    break;
+                if (roOpts.bSkipEmptyValues) break;//simple模式跳过未激活注释块 full保留
                 rsState.bLastWasBlank = false;
                 foreach (var sHeader in anNode.HeaderLines)
                     sb.AppendLine(sHeader);
@@ -719,7 +775,7 @@ public static class ScriptToTemplateConverter
                 sb.AppendLine($"{anNode.Indent}//}}");
                 break;
             case NodeType.CommentedKeyValue:
-                if (roOpts.bSkipEmptyValues && string.IsNullOrEmpty(anNode.Value)) break;//空值注释键跳过
+                if (roOpts.bSkipEmptyValues) break;//simple模式跳过注释键 full保留
                 rsState.bLastWasBlank = false;
                 string sCkvCommentStr = string.IsNullOrEmpty(anNode.Comment) ? "" : $" //{anNode.Comment}";
                 sb.AppendLine($"{anNode.Indent}// \"{anNode.Name}\"{anNode.Separator}\"{anNode.Value}\"{sCkvCommentStr}");
@@ -742,6 +798,78 @@ public static class ScriptToTemplateConverter
             }
         }
         return false;
+    }
+
+    //删除孤立的说明注释 即向下(跳过空行和分隔符)紧邻的第一个内容节点不是活跃kv/块的Raw注释 仅simple模式调用
+    private static void RemoveOrphanComments(AstNode anNode)
+    {
+        bool bFollowedByLive = false;//后面(向块末尾方向)是否紧邻活跃kv/块
+        for (int i = anNode.Children.Count - 1; i >= 0; i--)
+        {
+            var anChild = anNode.Children[i];
+            switch (anChild.Type)
+            {
+                case NodeType.Blank:
+                    break;//空行透明
+                case NodeType.KeyValue:
+                    bFollowedByLive = !string.IsNullOrEmpty(anChild.Value);
+                    break;
+                case NodeType.Block:
+                    bFollowedByLive = BlockHasContent(anChild);
+                    break;
+                case NodeType.CommentedKeyValue:
+                case NodeType.CommentedBlock:
+                    bFollowedByLive = false;//注释键/块 在simple下会删 阻断
+                    break;
+                case NodeType.Raw:
+                    if (!IsSeparatorComment(anChild.RawText) && !bFollowedByLive)
+                        anNode.Children.RemoveAt(i);//孤立说明注释 删除
+                    break;//说明注释和分隔符均透明 不改状态
+            }
+        }
+        foreach (var anChild in anNode.Children)
+            RemoveOrphanComments(anChild);//递归子节点
+    }
+
+    //压缩连续空行为单个 并删除块首({后)与块尾(}前)的空行 仅simple模式调用
+    private static string NormalizeBlankLines(string sOutput)
+    {
+        var rgLines = sOutput.Split('\n');
+        var rgResult = new List<string>();
+
+        for (int i = 0; i < rgLines.Length; i++)
+        {
+            string sLine = rgLines[i];
+            if (string.IsNullOrWhiteSpace(sLine))
+            {
+                //连续空行压缩
+                if (rgResult.Count > 0 && string.IsNullOrWhiteSpace(rgResult[^1]))
+                    continue;
+
+                //块首空行 前一个非空行是 {
+                if (rgResult.Count > 0 && rgResult[^1].Trim() == "{")
+                    continue;
+
+                //块尾空行 后一个非空行是 }
+                bool bNextClose = false;
+                for (int k = i + 1; k < rgLines.Length; k++)
+                {
+                    if (string.IsNullOrWhiteSpace(rgLines[k]))
+                        continue;
+                    bNextClose = rgLines[k].Trim() == "}";
+                    break;
+                }
+                if (bNextClose)
+                    continue;
+
+                rgResult.Add(sLine);
+            }
+            else
+            {
+                rgResult.Add(sLine);
+            }
+        }
+        return string.Join("\n", rgResult);
     }
 
     #endregion
@@ -798,7 +926,7 @@ public static class ScriptToTemplateConverter
         return sRaw.Trim();
     }
 
-    //从文本中解析键值对映射 复用ParseLines确保与模板解析使用相同的kv提取逻辑 递归穿透子块
+    //从文本中解析键值对映射 复用ParseLines确保与模板解析使用相同的kv提取逻辑 只收集当前层级不穿透子块
     private static Dictionary<string, string> ParseKeyValueMap(string sText)
     {
         var mpMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -818,15 +946,13 @@ public static class ScriptToTemplateConverter
         return mpMap;
     }
 
-    //递归收集键值对 穿透子块
+    //收集当前层级的键值对 不穿透子块 避免嵌套块键污染顶层map
     private static void CollectKeyValues(List<AstNode> rgNodes, Dictionary<string, string> mpMap)
     {
         foreach (var anNode in rgNodes)
         {
             if (anNode.Type == NodeType.KeyValue && anNode.Name != null && !string.IsNullOrEmpty(anNode.Value))
                 mpMap[anNode.Name] = anNode.Value;
-            else if (anNode.Type == NodeType.Block)
-                CollectKeyValues(anNode.Children, mpMap);
         }
     }
 
@@ -855,39 +981,48 @@ public static class ScriptToTemplateConverter
         var mpBlocks = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         try
         {
-            int iPos = 0;
-            while (iPos < sContent.Length)
+            //定位WeaponData块范围 只在其内部扫描顶层块
+            int iWd = sContent.IndexOf("WeaponData", StringComparison.Ordinal);
+            if (iWd < 0) return mpBlocks;
+            int iOuterOpen = sContent.IndexOf('{', iWd);
+            if (iOuterOpen < 0) return mpBlocks;
+            int iOuterClose = FindMatchingBrace(sContent, iOuterOpen);
+            if (iOuterClose < 0) return mpBlocks;
+
+            int iPos = iOuterOpen + 1;
+            while (iPos < iOuterClose)
             {
                 int iBrace = sContent.IndexOf('{', iPos);
-                if (iBrace < 0) break;
+                if (iBrace < 0 || iBrace >= iOuterClose) break;
 
                 //从{向前找非空白字符确定块名结束位置 再向前找空白或换行确定块名起始
                 int iNameEnd = iBrace - 1;
-                while (iNameEnd >= 0 && char.IsWhiteSpace(sContent[iNameEnd])) iNameEnd--;
-                if (iNameEnd < 0) { iPos = iBrace + 1; continue; }
+                while (iNameEnd > iOuterOpen && char.IsWhiteSpace(sContent[iNameEnd])) iNameEnd--;
+                if (iNameEnd <= iOuterOpen) { iPos = iBrace + 1; continue; }
 
                 int iNameStart = iNameEnd;
-                while (iNameStart >= 0 && !char.IsWhiteSpace(sContent[iNameStart]) && sContent[iNameStart] != '\n')
+                while (iNameStart > iOuterOpen && !char.IsWhiteSpace(sContent[iNameStart]) && sContent[iNameStart] != '\n')
                     iNameStart--;
-                iNameStart++;
+                if (iNameStart <= iOuterOpen) { iPos = iBrace + 1; continue; }
+                if (char.IsWhiteSpace(sContent[iNameStart]) || sContent[iNameStart] == '\n') iNameStart++;
                 if (iNameStart > iNameEnd) { iPos = iBrace + 1; continue; }
 
                 string sBlockName = sContent[iNameStart..(iNameEnd + 1)];
                 sBlockName = CleanBlockName(sBlockName);
 
-                if (!string.IsNullOrEmpty(sBlockName) && !sBlockName.StartsWith("//"))
+                int iClose = FindMatchingBrace(sContent, iBrace);
+                bool bValid = iClose >= 0 && iClose < iOuterClose;
+                if (bValid && !string.IsNullOrEmpty(sBlockName) && !sBlockName.StartsWith("//"))
                 {
-                    int iClose = FindMatchingBrace(sContent, iBrace);
-                    if (iClose >= 0)
-                    {
-                        int iLen = iClose - iBrace - 1;
-                        if (iLen < 0) iLen = 0;
-                        string sBlockContent = sContent.Substring(iBrace + 1, iLen);
-                        if (!mpBlocks.ContainsKey(sBlockName))
-                            mpBlocks[sBlockName] = sBlockContent;
-                    }
+                    int iLen = iClose - iBrace - 1;
+                    if (iLen < 0) iLen = 0;
+                    string sBlockContent = sContent.Substring(iBrace + 1, iLen);
+                    if (!mpBlocks.ContainsKey(sBlockName))
+                        mpBlocks[sBlockName] = sBlockContent;
                 }
-                iPos = iBrace + 1;
+
+                //跳过整个块(含其嵌套) 只提取顶层块
+                iPos = bValid ? iClose + 1 : iBrace + 1;
             }
         }
         catch (Exception ex)
@@ -988,40 +1123,40 @@ public static class ScriptToTemplateConverter
     #endregion
     #region 调试
 
-    //把ast dump和脚本解析信息追加到logform
-    private static void DumpDebugInfo(string sWeaponName, string sScript, string[] rgTemplateLines, string sResult, List<string> rgLog)
+    //把ast dump和脚本解析信息写入logservice
+    private static void DumpDebugInfo(string sWeaponName, string sScript, string[] rgTemplateLines, string sResult)
     {
         if (!LogService.Enabled) return;
 
-        rgLog.Add($"--- debug: {sWeaponName} ---");
+        LogService.Debug($"--- debug: {sWeaponName} ---");
 
         var mpScriptMap = ParseTopLevelMap(sScript);
         var mpScriptBlocks = ExtractAllBlocks(sScript);
-        rgLog.Add($"Script top-level KV pairs: {mpScriptMap.Count}");
+        LogService.Debug($"Script top-level KV pairs: {mpScriptMap.Count}");
         int iShown = 0;
         foreach (var kvp in mpScriptMap)
         {
-            if (iShown >= 15) { rgLog.Add($"  ... total {mpScriptMap.Count}"); break; }
-            rgLog.Add($"  \"{kvp.Key}\" = \"{kvp.Value}\"");
+            if (iShown >= 15) { LogService.Debug($"  ... total {mpScriptMap.Count}"); break; }
+            LogService.Debug($"  \"{kvp.Key}\" = \"{kvp.Value}\"");
             iShown++;
         }
-        rgLog.Add($"Script sub-blocks: {mpScriptBlocks.Count}");
+        LogService.Debug($"Script sub-blocks: {mpScriptBlocks.Count}");
         foreach (var sBk in mpScriptBlocks.Keys)
-            rgLog.Add($"  {sBk} ({mpScriptBlocks[sBk].Length} chars)");
+            LogService.Debug($"  {sBk} ({mpScriptBlocks[sBk].Length} chars)");
 
         var anTemplateTree = ParseTemplateToTree(rgTemplateLines);
-        rgLog.Add($"Template AST nodes: {CountNodes(anTemplateTree)}");
-        rgLog.Add(anTemplateTree.ToString());
+        LogService.Debug($"Template AST nodes: {CountNodes(anTemplateTree)}");
+        LogService.Debug(anTemplateTree.ToString());
 
         if (!string.IsNullOrEmpty(sResult))
         {
             var rgResultLines = sResult.Split('\n');
             var anResultTree = ParseTemplateToTree(rgResultLines);
-            rgLog.Add($"Result AST nodes: {CountNodes(anResultTree)}");
-            rgLog.Add(anResultTree.ToString());
+            LogService.Debug($"Result AST nodes: {CountNodes(anResultTree)}");
+            LogService.Debug(anResultTree.ToString());
         }
 
-        rgLog.Add($"--- debug end: {sWeaponName} ---");
+        LogService.Debug($"--- debug end: {sWeaponName} ---");
     }
 
     private static int CountNodes(AstNode anNode)

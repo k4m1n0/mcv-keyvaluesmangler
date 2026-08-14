@@ -15,15 +15,13 @@ public partial class Form1
     private System.Windows.Forms.Timer? tmrSnapshotCheck;
     private bool bUndoPending;
 
-    #nullable disable //:)
-
-    private WeaponData wSnapshotLeft = null!;
-    private WeaponData wSnapshotRight = null!;
+    private WeaponData? wSnapshotLeft;
+    private WeaponData? wSnapshotRight;
 
     private class UndoEntry
     {
-        public string LeftScriptName = null!;
-        public string RightScriptName = null!;
+        public string? LeftScriptName;
+        public string? RightScriptName;
         public WeaponData LeftData = null!;
         public WeaponData RightData = null!;
         public bool ShowingAltStats;

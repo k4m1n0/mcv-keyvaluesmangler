@@ -19,9 +19,6 @@ public partial class Form1 : Form
     private WeaponData? wCurrentRight = null;
     private static string? sLastWikiUser = null;
 
-    #nullable disable
-    //放上面会爆warn
-
     private bool bUpdatingControls = false;
     private bool bInitializing = true;
 
@@ -37,8 +34,8 @@ public partial class Form1 : Form
     private bool bShowingAltStats = false;
     private WeaponScriptService.AltStatMode amCurrentAltStat = WeaponScriptService.AltStatMode.Dov;
 
-    private string sRapidStartLeft = null;
-    private string sRapidStartRight = null;
+    private string? sRapidStartLeft = null;
+    private string? sRapidStartRight = null;
     private DateTime dtRapidDeadlineL;
     private DateTime dtRapidDeadlineR;
     private const int iRapidSettleMs = 300;
@@ -46,6 +43,7 @@ public partial class Form1 : Form
     private PanelRenderer prSpreadRenderer = null!;
     private PanelRenderer prRecoilRenderer = null!;
 
+    private const int iCenterX = 525;
     private bool bLastFocusLeft = true;
     public static bool bForceDarkMode = false;
     public static bool bForceLightMode = false;
@@ -220,13 +218,12 @@ public partial class Form1 : Form
 
     private void InitCenterPanels()
     {
-        int iCx = 525;
-        pnlSpread = new Panel { Location = new Point(iCx, 38), Size = new Size(300, 300), BorderStyle = BorderStyle.FixedSingle, BackColor = Color.Black };
+        pnlSpread = new Panel { Location = new Point(iCenterX, 38), Size = new Size(300, 300), BorderStyle = BorderStyle.FixedSingle, BackColor = Color.Black };
         EnableDoubleBuffering(pnlSpread);
         pnlSpread.Paint += PnlSpread_Paint;
         this.Controls.Add(pnlSpread);
 
-        pnlRecoil = new Panel { Location = new Point(iCx, 313), Size = new Size(300, 300), BorderStyle = BorderStyle.FixedSingle, BackColor = Color.Black };
+        pnlRecoil = new Panel { Location = new Point(iCenterX, 313), Size = new Size(300, 300), BorderStyle = BorderStyle.FixedSingle, BackColor = Color.Black };
         EnableDoubleBuffering(pnlRecoil);
         pnlRecoil.Paint += PnlRecoil_Paint;
         this.Controls.Add(pnlRecoil);
@@ -237,29 +234,28 @@ public partial class Form1 : Form
 
     private void InitTopButtons()
     {
-        int iCx = 525;
-        btnSave = new Button { Text = "Save", Location = new Point(iCx, 6), Size = new Size(58, 26) };
+        btnSave = new Button { Text = "Save", Location = new Point(iCenterX, 6), Size = new Size(58, 26) };
         btnSave.Click += BtnSave_Click;
         this.Controls.Add(btnSave);
 
-        btnCsvToScripts = new Button { Text = "CSV>Script", Location = new Point(iCx + 60, 6), Size = new Size(89, 26) };
+        btnCsvToScripts = new Button { Text = "CSV>Script", Location = new Point(iCenterX + 60, 6), Size = new Size(89, 26) };
         btnCsvToScripts.Click += BtnCsvToScripts_Click;
         this.Controls.Add(btnCsvToScripts);
 
-        btnScriptsToCsv = new Button { Text = "Script>CSV", Location = new Point(iCx + 151, 6), Size = new Size(89, 26) };
+        btnScriptsToCsv = new Button { Text = "Script>CSV", Location = new Point(iCenterX + 151, 6), Size = new Size(89, 26) };
         btnScriptsToCsv.Click += BtnScriptsToCsv_Click;
         this.Controls.Add(btnScriptsToCsv);
 
-        btnRefresh = new Button { Text = "Rfsh", Location = new Point(iCx + 242, 6), Size = new Size(58, 26) };
+        btnRefresh = new Button { Text = "Rfsh", Location = new Point(iCenterX + 242, 6), Size = new Size(58, 26) };
         btnRefresh.Click += BtnRefresh_Click;
         this.Controls.Add(btnRefresh);
 
-        var btnCopy = new Button { Text = "L>R", Location = new Point(iCx + 22, 618), Size = new Size(48, 26) };
+        var btnCopy = new Button { Text = "L>R", Location = new Point(iCenterX + 22, 618), Size = new Size(48, 26) };
         btnCopy.Click += CopyLeftToRight;
         this.Controls.Add(btnCopy);
 
         //glory to our coders all i dont need to write a hook myself but just call a cvar
-        btnQuickExport = new Button { Text = "wpn_reload_script all", Location = new Point(iCx + 73, 618), Size = new Size(152, 26) };
+        btnQuickExport = new Button { Text = "wpn_reload_script all", Location = new Point(iCenterX + 73, 618), Size = new Size(152, 26) };
         btnQuickExport.Tag = false;
         btnQuickExport.Click += BtnQuickExport_Click;
         btnQuickExport.MouseLeave += (s, e) => CancelConfirm(btnQuickExport);
@@ -269,23 +265,23 @@ public partial class Form1 : Form
         };
         this.Controls.Add(btnQuickExport);
         
-        var btnConvertToTemplate = new Button { Text = "Tmpl", Location = new Point(iCx + 22, 646), Size = new Size(48, 26) };
+        var btnConvertToTemplate = new Button { Text = "Tmpl", Location = new Point(iCenterX + 22, 646), Size = new Size(48, 26) };
         btnConvertToTemplate.Click += BtnConvertToTemplate_Click;
         this.Controls.Add(btnConvertToTemplate);
 
-        var btnToggleDov = new Button { Text = "DoV", Location = new Point(iCx + 73, 646), Size = new Size(75, 26), BackColor = SystemColors.Control };
+        var btnToggleDov = new Button { Text = "DoV", Location = new Point(iCenterX + 73, 646), Size = new Size(75, 26), BackColor = SystemColors.Control };
         btnToggleDov.Click += (s, e) => ToggleAltStats(WeaponScriptService.AltStatMode.Dov);
         this.Controls.Add(btnToggleDov);
 
-        var btnToggleZombie = new Button { Text = "Zmb", Location = new Point(iCx + 150, 646), Size = new Size(75, 26), BackColor = SystemColors.Control };
+        var btnToggleZombie = new Button { Text = "Zmb", Location = new Point(iCenterX + 150, 646), Size = new Size(75, 26), BackColor = SystemColors.Control };
         btnToggleZombie.Click += (s, e) => ToggleAltStats(WeaponScriptService.AltStatMode.Zombie);
         this.Controls.Add(btnToggleZombie);
 
-        var btnCopyR = new Button { Text = "L<R", Location = new Point(iCx + 228, 618), Size = new Size(48, 26) };
+        var btnCopyR = new Button { Text = "L<R", Location = new Point(iCenterX + 228, 618), Size = new Size(48, 26) };
         btnCopyR.Click += CopyRightToLeft;
         this.Controls.Add(btnCopyR);
 
-        var btnWiki = new Button { Text = "Wiki", Location = new Point(iCx + 228, 646), Size = new Size(48, 26) };
+        var btnWiki = new Button { Text = "Wiki", Location = new Point(iCenterX + 228, 646), Size = new Size(48, 26) };
         btnWiki.Click += BtnWiki_Click;
         this.Controls.Add(btnWiki);
 
@@ -313,10 +309,15 @@ public partial class Form1 : Form
         }
     }
 
-    private void Form1_FormClosing(object sender, FormClosingEventArgs e)
+    private void Form1_FormClosing(object? sender, FormClosingEventArgs e)
     {
-        //结束未完成的rapid 保存当前状态
-        if (sRapidStartLeft != null || sRapidStartRight != null) PushUndo();
+        //结束未完成的rapid/pending 保存当前状态
+        if (bUndoPending || sRapidStartLeft != null || sRapidStartRight != null)
+        {
+            tmrUndo?.Stop();
+            bUndoPending = false;
+            PushUndo();
+        }
         tmrSnapshotCheck?.Stop(); tmrSnapshotCheck?.Dispose(); tmrSnapshotCheck = null;
         bool bLeftDirty = wCurrentLeft != null && HasUnsavedChanges(true, bCheckBothSides: true);
         bool bRightDirty = wCurrentRight != null && HasUnsavedChanges(false, bCheckBothSides: true);
@@ -375,27 +376,16 @@ public partial class Form1 : Form
     }
 
     //控件获得焦点时记录其在左半还是右半
-    private void MarkFocusSide(object sender, EventArgs e)
+    private void MarkFocusSide(object? sender, EventArgs e)
     {
         if (sender is Control ctrl)
         {
             int iFormX = this.PointToClient(ctrl.PointToScreen(Point.Empty)).X;
-            bLastFocusLeft = iFormX < 525;
+            bLastFocusLeft = iFormX < iCenterX;
             LogService.Debug($"Focus side: {(bLastFocusLeft ? "L" : "R")} ({ctrl.GetType().Name})");
         }
     }
     
-    //无焦点控件时回退到lastFocusLeft 有控件时先更新再返回
-    private bool IsControlOnLeft(Control ctrl)
-    {
-        if (ctrl != null && !string.IsNullOrEmpty(ctrl.Name))
-        {
-            int iFormX = this.PointToClient(ctrl.PointToScreen(Point.Empty)).X;
-            bLastFocusLeft = iFormX < 525;
-        }
-        return bLastFocusLeft;
-    }
-
     protected override void WndProc(ref Message m)
     {
         const int WM_HOTKEY = 0x0312;
@@ -474,7 +464,7 @@ public partial class Form1 : Form
     #endregion
     #region 复制
 
-    private void CopyLeftToRight(object sender, EventArgs e)
+    private void CopyLeftToRight(object? sender, EventArgs e)
     {
         if (wCurrentLeft != null && wCurrentRight != null)
         {
@@ -489,7 +479,7 @@ public partial class Form1 : Form
         }
     }
 
-    private void CopyRightToLeft(object sender, EventArgs e)
+    private void CopyRightToLeft(object? sender, EventArgs e)
     {
         if (wCurrentRight != null && wCurrentLeft != null)
         {
@@ -504,64 +494,15 @@ public partial class Form1 : Form
         }
     }
 
-    //不拷贝ScriptName和PrintName防止覆盖武器身份
-    private static void CopyWeaponDataFields(WeaponData wSrc, WeaponData wDst)
-    {
-        wDst.DamageHeadMultiplier = wSrc.DamageHeadMultiplier;
-        wDst.DamageChestMultiplier = wSrc.DamageChestMultiplier;
-        wDst.DamageStomachMultiplier = wSrc.DamageStomachMultiplier;
-        wDst.DamageLegMultiplier = wSrc.DamageLegMultiplier;
-        wDst.DamageArmMultiplier = wSrc.DamageArmMultiplier;
-        wDst.BulletSpread = wSrc.BulletSpread;
-        wDst.BulletSpreadDegreesIronsighted = wSrc.BulletSpreadDegreesIronsighted;
-        wDst.BulletSpreadDegreesBipod = wSrc.BulletSpreadDegreesBipod;
-        wDst.BulletSpreadDegreesBipodIronsighted = wSrc.BulletSpreadDegreesBipodIronsighted;
-        wDst.ViewSlideRecoilUp = wSrc.ViewSlideRecoilUp;
-        wDst.ViewSlideRecoilRight = wSrc.ViewSlideRecoilRight;
-        wDst.ViewSlideRecoilIronsightUp = wSrc.ViewSlideRecoilIronsightUp;
-        wDst.ViewSlideRecoilIronsightRight = wSrc.ViewSlideRecoilIronsightRight;
-        wDst.FireModes = wSrc.FireModes;
-        wDst.FireRate = wSrc.FireRate;
-        wDst.RangeModifier = wSrc.RangeModifier;
-        wDst.ClipSize = wSrc.ClipSize;
-        wDst.DefaultClip = wSrc.DefaultClip;
-        wDst.ExtraBulletChamber = wSrc.ExtraBulletChamber;
-        wDst.BulletsPerShot = wSrc.BulletsPerShot;
-        wDst.SecondaryFireRate = wSrc.SecondaryFireRate;
-        wDst.IronSight = wSrc.IronSight;
-        wDst.IronsightSpeedScale = wSrc.IronsightSpeedScale;
-        wDst.Weight = wSrc.Weight;
-        wDst.ZMBuyPrice = wSrc.ZMBuyPrice;
-        wDst.ZMWeight = wSrc.ZMWeight;
-        wDst.MetalPenetrationDepth = wSrc.MetalPenetrationDepth;
-        wDst.GlassPenetrationDepth = wSrc.GlassPenetrationDepth;
-        wDst.ConcretePenetrationDepth = wSrc.ConcretePenetrationDepth;
-        wDst.WoodPenetrationDepth = wSrc.WoodPenetrationDepth;
-        wDst.OtherPenetrationDepth = wSrc.OtherPenetrationDepth;
-        wDst.MetalDamageModifier = wSrc.MetalDamageModifier;
-        wDst.GlassDamageModifier = wSrc.GlassDamageModifier;
-        wDst.ConcreteDamageModifier = wSrc.ConcreteDamageModifier;
-        wDst.WoodDamageModifier = wSrc.WoodDamageModifier;
-        wDst.OtherDamageModifier = wSrc.OtherDamageModifier;
-        wDst.CrouchSpreadMultiplier = wSrc.CrouchSpreadMultiplier;
-        wDst.ProneSpreadMultiplier = wSrc.ProneSpreadMultiplier;
-        wDst.StandMoveSpreadMultiplier = wSrc.StandMoveSpreadMultiplier;
-        wDst.SneakMoveSpreadMultiplier = wSrc.SneakMoveSpreadMultiplier;
-        wDst.CrouchMoveSpreadMultiplier = wSrc.CrouchMoveSpreadMultiplier;
-        wDst.JumpSpreadMultiplier = wSrc.JumpSpreadMultiplier;
-        wDst.DamageGeneric = wSrc.DamageGeneric;
-        wDst.DovBulletSpreadDegreesBipod = wSrc.DovBulletSpreadDegreesBipod;
-        wDst.DovBulletSpreadDegreesBipodIronsighted = wSrc.DovBulletSpreadDegreesBipodIronsighted;
-        wDst.DovFireModes = wSrc.DovFireModes;
-    }
-
     #endregion
     #region 联动同步
 
-    private static WeaponData CloneTopLevelFields(WeaponData wSrc)
+    private static WeaponData CloneWeaponData(WeaponData wSrc)
     {
-        var wDst = new WeaponData();
-        CopyWeaponDataFields(wSrc, wDst);
+        var wDst = wSrc.ShallowClone();
+        wDst.ScriptName = string.Empty;
+        wDst.PrintName = string.Empty;
+        wDst.PrimaryAmmo = string.Empty;
         return wDst;
     }
 
@@ -635,9 +576,9 @@ public partial class Form1 : Form
             (w, nV) => w.DovZMWeight = nV, null, wNew);
         //string
         SyncStrIfMatch(wOld.ClipSize, wNew.ClipSize, wNew.DovClipSize, wNew.ZombieClipSize,
-            (w, sV) => w.DovClipSize = sV, (w, sV) => w.ZombieClipSize = sV, wNew);
+            (w, sV) => w.DovClipSize = sV ?? string.Empty, (w, sV) => w.ZombieClipSize = sV ?? string.Empty, wNew);
         SyncStrIfMatch(wOld.FireModes, wNew.FireModes, wNew.DovFireModes, wNew.ZombieFireModes,
-            (w, sV) => w.DovFireModes = sV, (w, sV) => w.ZombieFireModes = sV, wNew);
+            (w, sV) => w.DovFireModes = sV ?? string.Empty, (w, sV) => w.ZombieFireModes = sV ?? string.Empty, wNew);
     }
 
     private static void SyncDoubleIfMatch(double? fOldVal, double? fNewVal,
@@ -659,7 +600,7 @@ public partial class Form1 : Form
 
     private static void SyncIntIfMatch(int? nOldVal, int? nNewVal,
         int? nDov, int? nZombie,
-        Action<WeaponData, int?> actSetDov, Action<WeaponData, int?> actSetZombie,
+        Action<WeaponData, int?> actSetDov, Action<WeaponData, int?>? actSetZombie,
         WeaponData w)
     {
         if (nDov.HasValue && nOldVal.HasValue && nDov.Value == nOldVal.Value)
@@ -670,13 +611,13 @@ public partial class Form1 : Form
         if (nZombie.HasValue && nOldVal.HasValue && nZombie.Value == nOldVal.Value)
         {
             LogService.Debug($"SyncIntIfMatch: clearing Zombie (old={nOldVal}, zombie={nZombie})");
-            actSetZombie(w, null);
+            actSetZombie?.Invoke(w, null);
         }
     }
 
     private static void SyncStrIfMatch(string sOldVal, string sNewVal,
         string sDov, string sZombie,
-        Action<WeaponData, string> actSetDov, Action<WeaponData, string> actSetZombie,
+        Action<WeaponData, string?> actSetDov, Action<WeaponData, string?> actSetZombie,
         WeaponData w)
     {
         if (!string.IsNullOrEmpty(sDov) && string.Equals(sDov, sOldVal, StringComparison.OrdinalIgnoreCase))
@@ -949,7 +890,7 @@ public partial class Form1 : Form
         btn.BackColor = cOld;
     }
 
-    private void PnlSpread_Paint(object sender, PaintEventArgs e)
+    private void PnlSpread_Paint(object? sender, PaintEventArgs e)
     {
         bool bLeftAds = nudIronSightL.Value != 0;
         bool bRightAds = nudIronSightR.Value != 0;
@@ -962,7 +903,7 @@ public partial class Form1 : Form
             wCurrentRight != null && bRightAds ? (double)nudBipodAdsSpreadR.Value : 0);
     }
 
-    private void PnlRecoil_Paint(object sender, PaintEventArgs e)
+    private void PnlRecoil_Paint(object? sender, PaintEventArgs e)
     {
         bool bLeftAds = nudIronSightL.Value != 0;
         bool bRightAds = nudIronSightR.Value != 0;

@@ -251,6 +251,11 @@ WeaponData
 	
 //	"SmokeColor"			"" // R G B
 	// OR: "SmokeColors" group 0 through 5
+//	"SmokeColors" // R G B, group 0 through 5
+//	{
+//		"0"	""
+//		"1"	""
+//	}
 		
  	"MuzzleParticle"					"" // "null" will disable
  	"MuzzleParticle_Smoke"				"" // "null" will disable

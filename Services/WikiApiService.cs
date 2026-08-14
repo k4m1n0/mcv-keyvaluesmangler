@@ -206,7 +206,18 @@ public static class WikiApiService
                 {
                     try
                     {
-                        var sJson = await (await hcClient.GetAsync(sApiUrl)).Content.ReadAsStringAsync();
+                        var resp = await hcClient.GetAsync(sApiUrl);
+                        int iStatus = (int)resp.StatusCode;
+                        //非2xx：4xx只重试1次 5xx重试3次
+                        if (!resp.IsSuccessStatusCode)
+                        {
+                            bool b4xx = iStatus >= 400 && iStatus < 500;
+                            if (iRetry >= (b4xx ? 1 : 2)) { LogService.Error($"GetExistingTitlesAsync HTTP {iStatus}"); return; }
+                            LogService.Warn($"GetExistingTitlesAsync HTTP {iStatus} (retry {iRetry + 1}/{(b4xx ? 2 : 3)})");
+                            await Task.Delay(3000);
+                            continue;
+                        }
+                        var sJson = await resp.Content.ReadAsStringAsync();
                         using var jdoc = JsonDocument.Parse(sJson);
                         if (jdoc.RootElement.TryGetProperty("query", out var jelQ) && jelQ.TryGetProperty("pages", out var jelPages))
                             lock (hsExisting)
@@ -218,8 +229,16 @@ public static class WikiApiService
                                     }
                         break;
                     }
-                    catch (Exception ex) when (iRetry < 2)
+                    catch (JsonException ex)
                     {
+                        //JSON解析失败 响应格式错误 只重试1次
+                        if (iRetry >= 1) { LogService.Error(ex, "GetExistingTitlesAsync JSON parse failed"); return; }
+                        LogService.Warn($"GetExistingTitlesAsync JSON parse failed (retry {iRetry + 1}/2)");
+                        await Task.Delay(3000);
+                    }
+                    catch (Exception ex)
+                    {
+                        if (iRetry >= 2) { LogService.Error(ex, "GetExistingTitlesAsync failed"); return; }
                         LogService.Warn($"GetExistingTitlesAsync retry {iRetry + 1}/3: {ex.Message}");
                         await Task.Delay(3000);
                     }

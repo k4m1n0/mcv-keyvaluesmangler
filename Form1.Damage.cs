@@ -9,49 +9,30 @@ public partial class Form1
     #region 伤害计算
     private void UpdateAllDamage()
     {
-        UpdateLeftDamage();
-        UpdateRightDamage();
+        UpdateDamage(true);
+        UpdateDamage(false);
     }
 
-    private void UpdateLeftDamage()
+    private void UpdateDamage(bool bIsLeft)
     {
-        if (wCurrentLeft == null) return;
-        double dHm = trkHeadL.Value * dSliderStep, dCm = trkChestL.Value * dSliderStep, dSm = trkStomachL.Value * dSliderStep;
-        double dLm = trkLegL.Value * dSliderStep, dAm = trkArmL.Value * dSliderStep;
-        double dDist = trkDistanceL.Value, dDg = (double)nudDamageGenericL.Value, dRm = (double)nudRangeModifierL.Value;
-        double dBd = dDg * Math.Pow(dRm, dDist / dDistanceDivisor);
-        int iPellets = (int)nudBulletsPerShotL.Value;
-        double dVest = chkVestL.Checked ? (iPellets > 1 ? 0.8 : 0.9) : 1.0;//普通0.9x 霰弹0.8x
-        int iRpm = (int)nudFireRateL.Value;
-        if (nudSecondaryFireRateL.Focused && nudSecondaryFireRateL.Value > 0)
-            iRpm = (int)nudSecondaryFireRateL.Value;
-        var (iBurstCount, dBurstInterval) = ParseBurstInfo(txtFireModesL.Text);
-        UpdateDamageLabel(lblHeadDmgL, dBd * dHm * iPellets, 100, iRpm, iBurstCount, dBurstInterval);
-        UpdateDamageLabel(lblChestDmgL, dBd * dCm * dVest * iPellets, 100, iRpm, iBurstCount, dBurstInterval);
-        UpdateDamageLabel(lblStomachDmgL, dBd * dSm * dVest * iPellets, 100, iRpm, iBurstCount, dBurstInterval);
-        UpdateDamageLabel(lblLegDmgL, dBd * dLm * iPellets, 100, iRpm, iBurstCount, dBurstInterval);
-        UpdateDamageLabel(lblArmDmgL, dBd * dAm * iPellets, 100, iRpm, iBurstCount, dBurstInterval);
-    }
-
-    private void UpdateRightDamage()
-    {
-        if (wCurrentRight == null) return;
-        double dHm = trkHeadR.Value * dSliderStep, dCm = trkChestR.Value * dSliderStep, dSm = trkStomachR.Value * dSliderStep;
-        double dLm = trkLegR.Value * dSliderStep, dAm = trkArmR.Value * dSliderStep;
-        double dDist = trkDistanceR.Value, dDg = (double)nudDamageGenericR.Value, dRm = (double)nudRangeModifierR.Value;
+        var wWeapon = bIsLeft ? wCurrentLeft : wCurrentRight;
+        if (wWeapon == null) return;
+        double dHm = (bIsLeft ? trkHeadL : trkHeadR).Value * dSliderStep, dCm = (bIsLeft ? trkChestL : trkChestR).Value * dSliderStep, dSm = (bIsLeft ? trkStomachL : trkStomachR).Value * dSliderStep;
+        double dLm = (bIsLeft ? trkLegL : trkLegR).Value * dSliderStep, dAm = (bIsLeft ? trkArmL : trkArmR).Value * dSliderStep;
+        double dDist = (bIsLeft ? trkDistanceL : trkDistanceR).Value, dDg = (double)(bIsLeft ? nudDamageGenericL : nudDamageGenericR).Value, dRm = (double)(bIsLeft ? nudRangeModifierL : nudRangeModifierR).Value;
         double dBd = dDg * Math.Pow(dRm, dDist / dDistanceDivisor);//基伤*衰减^(距离/12.7)
-        int iPellets = (int)nudBulletsPerShotR.Value;
-        double dVest = chkVestR.Checked ? (iPellets > 1 ? 0.8 : 0.9) : 1.0;
-        int iRpm = (int)nudFireRateR.Value;
-        // 如果SecondaryFireRate的nud有焦点且值为正整数 使用它
-        if (nudSecondaryFireRateR.Focused && nudSecondaryFireRateR.Value > 0)
-            iRpm = (int)nudSecondaryFireRateR.Value;
-        var (iBurstCount, dBurstInterval) = ParseBurstInfo(txtFireModesR.Text);
-        UpdateDamageLabel(lblHeadDmgR, dBd * dHm * iPellets, 100, iRpm, iBurstCount, dBurstInterval);
-        UpdateDamageLabel(lblChestDmgR, dBd * dCm * dVest * iPellets, 100, iRpm, iBurstCount, dBurstInterval);
-        UpdateDamageLabel(lblStomachDmgR, dBd * dSm * dVest * iPellets, 100, iRpm, iBurstCount, dBurstInterval);
-        UpdateDamageLabel(lblLegDmgR, dBd * dLm * iPellets, 100, iRpm, iBurstCount, dBurstInterval);
-        UpdateDamageLabel(lblArmDmgR, dBd * dAm * iPellets, 100, iRpm, iBurstCount, dBurstInterval);
+        int iPellets = (int)(bIsLeft ? nudBulletsPerShotL : nudBulletsPerShotR).Value;
+        double dVest = (bIsLeft ? chkVestL : chkVestR).Checked ? (iPellets > 1 ? 0.8 : 0.9) : 1.0;//普通0.9x 霰弹0.8x
+        int iRpm = (int)(bIsLeft ? nudFireRateL : nudFireRateR).Value;
+        var nudSecondary = bIsLeft ? nudSecondaryFireRateL : nudSecondaryFireRateR;
+        if (nudSecondary.Focused && nudSecondary.Value > 0)
+            iRpm = (int)nudSecondary.Value;
+        var (iBurstCount, dBurstInterval) = ParseBurstInfo((bIsLeft ? txtFireModesL : txtFireModesR).Text);
+        UpdateDamageLabel(bIsLeft ? lblHeadDmgL : lblHeadDmgR, dBd * dHm * iPellets, 100, iRpm, iBurstCount, dBurstInterval);
+        UpdateDamageLabel(bIsLeft ? lblChestDmgL : lblChestDmgR, dBd * dCm * dVest * iPellets, 100, iRpm, iBurstCount, dBurstInterval);
+        UpdateDamageLabel(bIsLeft ? lblStomachDmgL : lblStomachDmgR, dBd * dSm * dVest * iPellets, 100, iRpm, iBurstCount, dBurstInterval);
+        UpdateDamageLabel(bIsLeft ? lblLegDmgL : lblLegDmgR, dBd * dLm * iPellets, 100, iRpm, iBurstCount, dBurstInterval);
+        UpdateDamageLabel(bIsLeft ? lblArmDmgL : lblArmDmgR, dBd * dAm * iPellets, 100, iRpm, iBurstCount, dBurstInterval);
     }
 
     private static (int iBurstCount, double dBurstInterval) ParseBurstInfo(string? sFireModes)
@@ -246,8 +227,8 @@ public partial class Form1
             wWeapon.SecondaryFireRate = (int)nudSecondaryFireRateL.Value;
             wWeapon.RangeModifier = (double)nudRangeModifierL.Value;
             wWeapon.ClipSize = txtCapacityL.Text;
-            var rgClipParts = txtCapacityL.Text.Split('/');//从字段拆分出DefaultClip 如30/120取30
-            if (rgClipParts.Length > 0 && int.TryParse(rgClipParts[0], out int iFirstNum)) wWeapon.DefaultClip = iFirstNum;
+            var rgParts = txtCapacityL.Text.Split('/');//从字段拆分出DefaultClip 如30/120取30
+            if (rgParts.Length > 0 && int.TryParse(rgParts[0], out int iFirstNum)) wWeapon.DefaultClip = iFirstNum;
             wWeapon.ExtraBulletChamber = (int)nudExtraBulletChamberL.Value;
             wWeapon.BulletsPerShot = (int)nudBulletsPerShotL.Value;
             wWeapon.IronsightSpeedScale = (double)nudIronsightSpeedScaleL.Value;
@@ -293,8 +274,8 @@ public partial class Form1
             wWeapon.SecondaryFireRate = (int)nudSecondaryFireRateR.Value;
             wWeapon.RangeModifier = (double)nudRangeModifierR.Value;
             wWeapon.ClipSize = txtCapacityR.Text;
-            var rgClipParts = txtCapacityR.Text.Split('/');
-            if (rgClipParts.Length > 0 && int.TryParse(rgClipParts[0], out int iFirstNum)) wWeapon.DefaultClip = iFirstNum;
+            var rgParts = txtCapacityR.Text.Split('/');
+            if (rgParts.Length > 0 && int.TryParse(rgParts[0], out int iFirstNum)) wWeapon.DefaultClip = iFirstNum;
             wWeapon.ExtraBulletChamber = (int)nudExtraBulletChamberR.Value;
             wWeapon.BulletsPerShot = (int)nudBulletsPerShotR.Value;
             wWeapon.IronsightSpeedScale = (double)nudIronsightSpeedScaleR.Value;

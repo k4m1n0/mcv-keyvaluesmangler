@@ -56,7 +56,7 @@ public static class CsvMapper
 
         void Warn(string sMsg) { LogWarn(sMsg); rgWarnings.Add(sMsg); }
 
-        var rgLines = SplitLines(sContent);
+        var rgLines = SplitLines(sContent, Warn);
 
         int iHeaderIdx = -1;
         for (int i = 0; i < rgLines.Count; i++)
@@ -64,7 +64,7 @@ public static class CsvMapper
             if (string.IsNullOrWhiteSpace(rgLines[i]))
                 continue;
 
-            var rgFirst = SplitRow(rgLines[i]);
+            var rgFirst = SplitRow(rgLines[i], Warn);
             var sFirstField = rgFirst.Count > 0 ? rgFirst[0] : "";
             if (!string.IsNullOrWhiteSpace(sFirstField))
             {
@@ -78,7 +78,7 @@ public static class CsvMapper
         }
         if (iHeaderIdx < 0) return rgResult;
 
-        var rgHeaders = SplitRow(rgLines[iHeaderIdx]);
+        var rgHeaders = SplitRow(rgLines[iHeaderIdx], Warn);
         var mpHeader = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         for (int i = 0; i < rgHeaders.Count; i++)
         {
@@ -100,7 +100,7 @@ public static class CsvMapper
             if (string.IsNullOrWhiteSpace(sLine)) continue;
             if (sLine.Trim().Replace(",", "").Length == 0) continue;//整行都是逗号
 
-            var rgFields = SplitRow(sLine);
+            var rgFields = SplitRow(sLine, Warn);
             if (rgFields.Count == 0) continue;
             if (rgFields.Count == 1 && string.IsNullOrWhiteSpace(rgFields[0])) continue;
             if (rgFields.All(f => string.IsNullOrWhiteSpace(f))) continue;
@@ -112,7 +112,7 @@ public static class CsvMapper
                 var sRaw = iIdx < rgFields.Count ? rgFields[iIdx] : "";
                 if (string.IsNullOrEmpty(sRaw))
                     sRaw = null;
-                SetValue(obj, col.Property, sRaw);
+                SetValue(obj, col.Property, sRaw, Warn);
             }
             rgResult.Add(obj);
         }
@@ -209,7 +209,7 @@ public static class CsvMapper
 
     private static readonly char[] s_rgLetters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".ToCharArray();
 
-    private static List<string> SplitLines(string sContent)
+    private static List<string> SplitLines(string sContent, Action<string>? warn = null)
     {
         var rgLines = new List<string>();
         var sb = new StringBuilder();
@@ -222,7 +222,7 @@ public static class CsvMapper
 
             if (bInQuotes && iQuoteStart >= 0 && (i - iQuoteStart) > iMaxQuotedFieldLength)
             {
-                LogWarn($"Unclosed quote forced closure at position {i}. Discarding broken field, keeping remaining lines.");
+                WarnOrLog(warn, $"Unclosed quote forced closure at position {i}. Discarding broken field, keeping remaining lines.");
                 bInQuotes = false;
                 iQuoteStart = -1;
                 var rgRemaining = sb.ToString().Split('\n');
@@ -272,7 +272,7 @@ public static class CsvMapper
 
         if (bInQuotes)
         {
-            LogWarn($"Unclosed quote at end of file. Discarding broken field, keeping remaining lines.");
+            WarnOrLog(warn, $"Unclosed quote at end of file. Discarding broken field, keeping remaining lines.");
             var rgRemaining = sb.ToString().Split('\n');
             for (int j = 1; j < rgRemaining.Length; j++)
             {
@@ -287,7 +287,7 @@ public static class CsvMapper
         return rgLines;
     }
 
-    private static List<string> SplitRow(string sRow)
+    private static List<string> SplitRow(string sRow, Action<string>? warn = null)
     {
         var rgFields = new List<string>();
         var sb = new StringBuilder();
@@ -300,7 +300,7 @@ public static class CsvMapper
 
             if (bInQuotes && iQuoteStart >= 0 && (i - iQuoteStart) > iMaxQuotedFieldLength)
             {
-                LogWarn($"Unclosed quote forced closure in row. Data may be incomplete.");
+                WarnOrLog(warn, $"Unclosed quote forced closure in row. Data may be incomplete.");
                 bInQuotes = false;
                 iQuoteStart = -1;
             }
@@ -330,11 +330,11 @@ public static class CsvMapper
         }
 
         if (bInQuotes)
-            LogWarn($"Unclosed quote at end of row. Row may be incomplete.");
+            WarnOrLog(warn, $"Unclosed quote at end of row. Row may be incomplete.");
 
         rgFields.Add(sb.ToString());
 
-        // 去掉外层引号 先Trim防行首空格
+        //去掉外层引号 先Trim防行首空格
         for (int i = 0; i < rgFields.Count; i++)
         {
             var sF = rgFields[i].Trim();
@@ -356,7 +356,7 @@ public static class CsvMapper
     #endregion
     #region 值类型转换
 
-    private static void SetValue<T>(T obj, PropertyInfo piProp, string? sRaw)
+    private static void SetValue<T>(T obj, PropertyInfo piProp, string? sRaw, Action<string>? warn = null)
     {
         try
         {
@@ -381,7 +381,7 @@ public static class CsvMapper
                     piProp.SetValue(obj, iVal2);
                 else
                 {
-                    LogWarn($"Failed to parse int '{piProp.Name}': '{sRaw}'. Set to null.");
+                    WarnOrLog(warn, $"Failed to parse int '{piProp.Name}': '{sRaw}'. Set to null.");
                     if (IsNullable(piProp.PropertyType))
                         piProp.SetValue(obj, null);
                 }
@@ -394,7 +394,7 @@ public static class CsvMapper
                     piProp.SetValue(obj, dVal2);
                 else
                 {
-                    LogWarn($"Failed to parse double '{piProp.Name}': '{sRaw}'. Set to null.");
+                    WarnOrLog(warn, $"Failed to parse double '{piProp.Name}': '{sRaw}'. Set to null.");
                     if (IsNullable(piProp.PropertyType))
                         piProp.SetValue(obj, null);
                 }
@@ -402,7 +402,7 @@ public static class CsvMapper
         }
         catch (Exception ex)
         {
-            LogWarn($"SetValue failed for '{piProp.Name}' with '{sRaw}': {ex.Message}");
+            WarnOrLog(warn, $"SetValue failed for '{piProp.Name}' with '{sRaw}': {ex.Message}");
         }
     }
 
@@ -451,6 +451,13 @@ public static class CsvMapper
     {
         s_actWarn?.Invoke("[CsvMapper] " + sMsg);
         System.Diagnostics.Debug.WriteLine($"[CsvMapper WARN] {sMsg}");
+    }
+
+    //传入警告收集回调时走回调(LogWarn+入集合) 否则仅LogWarn 用于SplitLines/SplitRow的损坏行警告
+    private static void WarnOrLog(Action<string>? warn, string sMsg)
+    {
+        if (warn != null) warn(sMsg);
+        else LogWarn(sMsg);
     }
 
     private static void LogError(string sMsg)

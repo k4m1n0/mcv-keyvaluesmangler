@@ -367,11 +367,12 @@ public static class UndoTests
         Test("Modify in AltStat -> undo restores previous alt value", () =>
         {
             var nud = GetControl<NumericUpDown>("nudHipSpreadL");
+            decimal decNormal = nud.Value;//进入AltStat前的普通值
             ToggleAltStats(WeaponScriptService.AltStatMode.Zombie);
             ChangeNud("nudHipSpreadL", nud.Value + 0.5m);
             Undo();
-            if (Math.Abs(nud.Value - 10.7m) > 0.5m)
-                throw new Exception($"Expected ~10.7, got {nud.Value}");
+            if (Math.Abs(nud.Value - decNormal) > 0.005m)
+                throw new Exception($"Expected {decNormal}, got {nud.Value}");
             ToggleAltStats(WeaponScriptService.AltStatMode.Zombie);
         });
 

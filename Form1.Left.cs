@@ -8,20 +8,20 @@ namespace WeaponDamageCalc;
 public partial class Form1
 {
     private ComboBox cmbWeaponsL = null!;
-    private TrackBar trkHeadL, trkChestL, trkStomachL, trkLegL, trkArmL, trkDistanceL;
-    private NumericUpDown nudHeadL, nudChestL, nudStomachL, nudLegL, nudArmL;
-    private NumericUpDown nudHipSpreadL, nudAdsSpreadL, nudBipodHipSpreadL, nudBipodAdsSpreadL;
-    private NumericUpDown nudHipRecoilUpL, nudHipRecoilRightL, nudAdsRecoilUpL, nudAdsRecoilRightL;
-    private NumericUpDown nudFireRateL, nudRangeModifierL, nudDamageGenericL, nudDistanceL;
-    private NumericUpDown nudExtraBulletChamberL, nudBulletsPerShotL, nudIronsightSpeedScaleL;
-    private NumericUpDown nudWeightL, nudZMBuyPriceL, nudZMWeightL;
-    private NumericUpDown nudMetalPenL, nudGlassPenL, nudConcretePenL, nudWoodPenL, nudOtherPenL;
-    private NumericUpDown nudMetalDmgModL, nudGlassDmgModL, nudConcreteDmgModL, nudWoodDmgModL, nudOtherDmgModL;
-    private NumericUpDown nudCrouchSpreadL, nudProneSpreadL, nudStandMoveSpreadL, nudSneakMoveSpreadL, nudCrouchMoveSpreadL, nudJumpSpreadL;
-    private NumericUpDown nudSecondaryFireRateL, nudIronSightL;
-    private TextBox txtFireModesL, txtCapacityL;
-    private Label lblHeadDmgL, lblChestDmgL, lblStomachDmgL, lblLegDmgL, lblArmDmgL;
-    private CheckBox chkVestL;
+    private TrackBar trkHeadL = null!, trkChestL = null!, trkStomachL = null!, trkLegL = null!, trkArmL = null!, trkDistanceL = null!;
+    private NumericUpDown nudHeadL = null!, nudChestL = null!, nudStomachL = null!, nudLegL = null!, nudArmL = null!;
+    private NumericUpDown nudHipSpreadL = null!, nudAdsSpreadL = null!, nudBipodHipSpreadL = null!, nudBipodAdsSpreadL = null!;
+    private NumericUpDown nudHipRecoilUpL = null!, nudHipRecoilRightL = null!, nudAdsRecoilUpL = null!, nudAdsRecoilRightL = null!;
+    private NumericUpDown nudFireRateL = null!, nudRangeModifierL = null!, nudDamageGenericL = null!, nudDistanceL = null!;
+    private NumericUpDown nudExtraBulletChamberL = null!, nudBulletsPerShotL = null!, nudIronsightSpeedScaleL = null!;
+    private NumericUpDown nudWeightL = null!, nudZMBuyPriceL = null!, nudZMWeightL = null!;
+    private NumericUpDown nudMetalPenL = null!, nudGlassPenL = null!, nudConcretePenL = null!, nudWoodPenL = null!, nudOtherPenL = null!;
+    private NumericUpDown nudMetalDmgModL = null!, nudGlassDmgModL = null!, nudConcreteDmgModL = null!, nudWoodDmgModL = null!, nudOtherDmgModL = null!;
+    private NumericUpDown nudCrouchSpreadL = null!, nudProneSpreadL = null!, nudStandMoveSpreadL = null!, nudSneakMoveSpreadL = null!, nudCrouchMoveSpreadL = null!, nudJumpSpreadL = null!;
+    private NumericUpDown nudSecondaryFireRateL = null!, nudIronSightL = null!;
+    private TextBox txtFireModesL = null!, txtCapacityL = null!;
+    private Label lblHeadDmgL = null!, lblChestDmgL = null!, lblStomachDmgL = null!, lblLegDmgL = null!, lblArmDmgL = null!;
+    private CheckBox chkVestL = null!;
 
     private void InitLeftPanel(List<WeaponData> rgWeapons)
     {

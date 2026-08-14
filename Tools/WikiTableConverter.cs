@@ -420,12 +420,12 @@ public static class WikiTableConverter
             var mClip = Regex.Match(sClean, @"^(\d+).*?/\s*(\d+)$");
             if (mClip.Success && mpV.TryGetValue("clip_size", out var sClip) && !string.IsNullOrEmpty(sClip) && sClip != "-1" && sClip != "0/0" && !sClip.StartsWith("-1/") && sClip.Contains('/'))
             {
-                var rgClipParts = sClip.Split('/');
-                if (rgClipParts.Length == 2)
+                var rgParts = sClip.Split('/');
+                if (rgParts.Length == 2)
                 {
                     string sExtra = mpV.TryGetValue("extrabulletchamber", out var sExc) && sExc == "1" ? "[[+1]]" : "";
                     //匹配弹匣格式 含可选的[[+1]]标记 并替换为脚本弹量
-                    return Regex.Replace(sCell, @"\d+\[\[.*?\]\]?\s*/\s*\d+|\d+\s*/\s*\d+", $"{rgClipParts[0].Trim()}{sExtra} / {rgClipParts[1].Trim()}")
+                    return Regex.Replace(sCell, @"\d+\[\[.*?\]\]?\s*/\s*\d+|\d+\s*/\s*\d+", $"{rgParts[0].Trim()}{sExtra} / {rgParts[1].Trim()}")
                         + MakeZombieClip(mpV, bHasZombie);
                 }
             }

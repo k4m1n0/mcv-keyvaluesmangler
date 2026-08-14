@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Drawing;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -20,24 +21,17 @@ public partial class Form1
     private Label lblC64_3 = null!;
     private KeygenRenderer? _keygenRenderer;
 
+    private static readonly Process s_proc = Process.GetCurrentProcess();
+
     private System.Windows.Forms.Timer? tmrC64;
     private System.Windows.Forms.Timer? tmrC64Reset;
     private void StartC64Anim()
     {
         lblC64_2.TextAlign = ContentAlignment.MiddleCenter;
         tmrC64 = new System.Windows.Forms.Timer { Interval = 2000 };
-        tmrC64.Tick += (_, _) =>
-        {
-            long lWs = Environment.WorkingSet / 1024;
-            long lGcHeap = GC.GetTotalMemory(false) / 1024;
-            long lUnmanaged = lWs > lGcHeap ? lWs - lGcHeap : 0;
-            lblC64_2.Text = $"{lWs / 1024}M RAM SYSTEM  {lUnmanaged}K NATIVE BYTES FREE";
-        };
+        tmrC64.Tick += (_, _) => lblC64_2.Text = FormatMemoryStatus();
         tmrC64.Start();
-        long lWs = Environment.WorkingSet / 1024;
-        long lGcHeap = GC.GetTotalMemory(false) / 1024;
-        long lUnmanaged = lWs > lGcHeap ? lWs - lGcHeap : 0;
-        lblC64_2.Text = $"{lWs / 1024}M RAM SYSTEM  {lUnmanaged}K NATIVE BYTES FREE";
+        lblC64_2.Text = FormatMemoryStatus();
 
         if (lblC64_1.Text == "")
         {
@@ -46,12 +40,19 @@ public partial class Form1
         }
     }
 
+    private static string FormatMemoryStatus()
+    {
+        long lPrivate = s_proc.PrivateMemorySize64;
+        long lGcCommitted = GC.GetGCMemoryInfo().TotalCommittedBytes;
+        long lFree = Math.Max(0, lPrivate - lGcCommitted);
+        return $"{lPrivate / 1024 / 1024}M RAM SYSTEM  {lFree / 1024} NATIVE KBYTES FREE";
+    }
+
     private void InitC64Labels()
     {
-        int iCx = 525;
-        lblC64_1 = new Label { Location = new Point(iCx, 675), Size = new Size(300, 13), Font = new Font("Consolas", 8, FontStyle.Bold), ForeColor = Color.FromArgb(200, 200, 255), BackColor = Color.FromArgb(60, 60, 160), TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0), Padding = new Padding(0) };
-        lblC64_2 = new Label { Location = new Point(iCx, 686), Size = new Size(300, 13), Font = new Font("Consolas", 8, FontStyle.Bold), ForeColor = Color.FromArgb(200, 200, 255), BackColor = Color.FromArgb(60, 60, 160), TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0), Padding = new Padding(0) };
-        lblC64_3 = new Label { Location = new Point(iCx, 697), Size = new Size(300, 13), Font = new Font("Consolas", 8, FontStyle.Bold), ForeColor = Color.FromArgb(200, 200, 255), BackColor = Color.FromArgb(60, 60, 160), TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0), Padding = new Padding(0) };
+        lblC64_1 = new Label { Location = new Point(iCenterX, 675), Size = new Size(300, 13), Font = new Font("Consolas", 8, FontStyle.Bold), ForeColor = Color.FromArgb(200, 200, 255), BackColor = Color.FromArgb(60, 60, 160), TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0), Padding = new Padding(0), Cursor = Cursors.Hand };
+        lblC64_2 = new Label { Location = new Point(iCenterX, 686), Size = new Size(300, 13), Font = new Font("Consolas", 8, FontStyle.Bold), ForeColor = Color.FromArgb(200, 200, 255), BackColor = Color.FromArgb(60, 60, 160), TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0), Padding = new Padding(0), Cursor = Cursors.Hand };
+        lblC64_3 = new Label { Location = new Point(iCenterX, 697), Size = new Size(300, 13), Font = new Font("Consolas", 8, FontStyle.Bold), ForeColor = Color.FromArgb(200, 200, 255), BackColor = Color.FromArgb(60, 60, 160), TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0), Padding = new Padding(0), Cursor = Cursors.Hand };
 
         lblC64_1.Click += (_, _) => ToggleKeygenRenderer();
         lblC64_2.Click += (_, _) => ToggleKeygenRenderer();

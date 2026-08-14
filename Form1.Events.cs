@@ -251,8 +251,9 @@ public partial class Form1
         //控件值写入临时对象与保存点快照比对
     }
 
-    private static bool WeaponDataEquals(WeaponData wA, WeaponData wB)//双浮点比对容忍0.0001误差 防止SaveControlsToWeapon的SliderStep浮点往返造成假阳性
+    private static bool WeaponDataEquals(WeaponData? wA, WeaponData? wB)//双浮点比对容忍0.0001误差 防止SaveControlsToWeapon的SliderStep浮点往返造成假阳性
     {
+        if (wA == null || wB == null) return wA == wB;
         return NullableEquals(wA.DamageHeadMultiplier, wB.DamageHeadMultiplier)
             && NullableEquals(wA.DamageChestMultiplier, wB.DamageChestMultiplier)
             && NullableEquals(wA.DamageStomachMultiplier, wB.DamageStomachMultiplier)
@@ -324,8 +325,7 @@ public partial class Form1
             if (bLeftDiff && !bRightDiff) return true;
             if (!bLeftDiff && bRightDiff) return false;
         }
-        var ctrlActive = this.GetChildAtPoint(this.PointToClient(Cursor.Position));
-        return ctrlActive != null ? IsControlOnLeft(ctrlActive) : bLastFocusLeft;
+        return bLastFocusLeft;
     }
 
     #endregion
@@ -418,14 +418,14 @@ public partial class Form1
                     if (bShowingAltStats)
                     {
                         SyncAltStatFields(wCurrentLeft!, amCurrentAltStat, true);
-                        var wOldClone = CloneTopLevelFields(wCurrentLeft!);
+                        var wOldClone = CloneWeaponData(wCurrentLeft!);
                         SyncAltStatsToMatchTopLevel(wOldClone, wCurrentLeft!);
                         LoadAltStatsToControls(true, amCurrentAltStat);
                         LoadAltStatsToControls(false, amCurrentAltStat);
                     }
                     else
                     {
-                        var wOld = CloneTopLevelFields(wCurrentLeft!);
+                        var wOld = CloneWeaponData(wCurrentLeft!);
                         SaveControlsToWeapon(wCurrentLeft!, true);
                         SyncAltStatsToMatchTopLevel(wOld, wCurrentLeft!);
                         LoadWeaponToControls(wCurrentLeft!, false);
@@ -436,14 +436,14 @@ public partial class Form1
                     if (bShowingAltStats)
                     {
                         SyncAltStatFields(wCurrentRight!, amCurrentAltStat, false);
-                        var wOldClone = CloneTopLevelFields(wCurrentRight!);
+                        var wOldClone = CloneWeaponData(wCurrentRight!);
                         SyncAltStatsToMatchTopLevel(wOldClone, wCurrentRight!);
                         LoadAltStatsToControls(false, amCurrentAltStat);
                         LoadAltStatsToControls(true, amCurrentAltStat);
                     }
                     else
                     {
-                        var wOld = CloneTopLevelFields(wCurrentRight!);
+                        var wOld = CloneWeaponData(wCurrentRight!);
                         SaveControlsToWeapon(wCurrentRight!, false);
                         SyncAltStatsToMatchTopLevel(wOld, wCurrentRight!);
                         LoadWeaponToControls(wCurrentRight!, true);
@@ -455,13 +455,13 @@ public partial class Form1
             {
                 if (wCurrentLeft != null)
                 {
-                    var wOldL = CloneTopLevelFields(wCurrentLeft);
+                    var wOldL = CloneWeaponData(wCurrentLeft);
                     SaveControlsToWeapon(wCurrentLeft, true);
                     SyncAltStatsToMatchTopLevel(wOldL, wCurrentLeft);
                 }
                 if (wCurrentRight != null)
                 {
-                    var wOldR = CloneTopLevelFields(wCurrentRight);
+                    var wOldR = CloneWeaponData(wCurrentRight);
                     SaveControlsToWeapon(wCurrentRight, false);
                     SyncAltStatsToMatchTopLevel(wOldR, wCurrentRight);
                 }
@@ -471,13 +471,13 @@ public partial class Form1
                 if (wCurrentLeft != null)
                 {
                     SyncAltStatFields(wCurrentLeft, amCurrentAltStat);
-                    var wOldCloneL = CloneTopLevelFields(wCurrentLeft);
+                    var wOldCloneL = CloneWeaponData(wCurrentLeft);
                     SyncAltStatsToMatchTopLevel(wOldCloneL, wCurrentLeft);
                 }
                 if (wCurrentRight != null && !ReferenceEquals(wCurrentLeft, wCurrentRight))
                 {
                     SyncAltStatFields(wCurrentRight, amCurrentAltStat);
-                    var wOldCloneR = CloneTopLevelFields(wCurrentRight);
+                    var wOldCloneR = CloneWeaponData(wCurrentRight);
                     SyncAltStatsToMatchTopLevel(wOldCloneR, wCurrentRight);
                 }
             }
@@ -576,14 +576,14 @@ public partial class Form1
                     if (bShowingAltStats)
                     {
                         SyncAltStatFields(wCurrentLeft!, amCurrentAltStat, true);
-                        var wOldClone = CloneTopLevelFields(wCurrentLeft!);
+                        var wOldClone = CloneWeaponData(wCurrentLeft!);
                         SyncAltStatsToMatchTopLevel(wOldClone, wCurrentLeft!);
                         LoadAltStatsToControls(true, amCurrentAltStat);
                         LoadAltStatsToControls(false, amCurrentAltStat);
                     }
                     else
                     {
-                        var wOld = CloneTopLevelFields(wCurrentLeft!);
+                        var wOld = CloneWeaponData(wCurrentLeft!);
                         SaveControlsToWeapon(wCurrentLeft!, true);
                         SyncAltStatsToMatchTopLevel(wOld, wCurrentLeft!);
                         LoadWeaponToControls(wCurrentLeft!, false);
@@ -594,14 +594,14 @@ public partial class Form1
                     if (bShowingAltStats)
                     {
                         SyncAltStatFields(wCurrentRight!, amCurrentAltStat, false);
-                        var wOldClone = CloneTopLevelFields(wCurrentRight!);
+                        var wOldClone = CloneWeaponData(wCurrentRight!);
                         SyncAltStatsToMatchTopLevel(wOldClone, wCurrentRight!);
                         LoadAltStatsToControls(false, amCurrentAltStat);
                         LoadAltStatsToControls(true, amCurrentAltStat);
                     }
                     else
                     {
-                        var wOld = CloneTopLevelFields(wCurrentRight!);
+                        var wOld = CloneWeaponData(wCurrentRight!);
                         SaveControlsToWeapon(wCurrentRight!, false);
                         SyncAltStatsToMatchTopLevel(wOld, wCurrentRight!);
                         LoadWeaponToControls(wCurrentRight!, true);
@@ -613,13 +613,13 @@ public partial class Form1
             {
                 if (wCurrentLeft != null)
                 {
-                    var wOldL = CloneTopLevelFields(wCurrentLeft);
+                    var wOldL = CloneWeaponData(wCurrentLeft);
                     SaveControlsToWeapon(wCurrentLeft, true);
                     SyncAltStatsToMatchTopLevel(wOldL, wCurrentLeft);
                 }
                 if (wCurrentRight != null)
                 {
-                    var wOldR = CloneTopLevelFields(wCurrentRight);
+                    var wOldR = CloneWeaponData(wCurrentRight);
                     SaveControlsToWeapon(wCurrentRight, false);
                     SyncAltStatsToMatchTopLevel(wOldR, wCurrentRight);
                 }
@@ -629,13 +629,13 @@ public partial class Form1
                 if (wCurrentLeft != null)
                 {
                     SyncAltStatFields(wCurrentLeft, amCurrentAltStat);
-                    var wOldCloneL = CloneTopLevelFields(wCurrentLeft);
+                    var wOldCloneL = CloneWeaponData(wCurrentLeft);
                     SyncAltStatsToMatchTopLevel(wOldCloneL, wCurrentLeft);
                 }
                 if (wCurrentRight != null && !ReferenceEquals(wCurrentLeft, wCurrentRight))
                 {
                     SyncAltStatFields(wCurrentRight, amCurrentAltStat);
-                    var wOldCloneR = CloneTopLevelFields(wCurrentRight);
+                    var wOldCloneR = CloneWeaponData(wCurrentRight);
                     SyncAltStatsToMatchTopLevel(wOldCloneR, wCurrentRight);
                 }
             }
@@ -814,12 +814,12 @@ public partial class Form1
                     if (rgWeapons.Count > 0)
                     {
                         RestoreComboSelection(cmbWeaponsR, sRightName);
-                        cmbWeaponsL.SelectedIndexChanged += WeaponSelectedL; cmbWeaponsR.SelectedIndexChanged += WeaponSelectedR;
                         RestoreComboSelection(cmbWeaponsL, sLeftName);
+                        cmbWeaponsL.SelectedIndexChanged += WeaponSelectedL; cmbWeaponsR.SelectedIndexChanged += WeaponSelectedR;
+                        wCurrentLeft = cmbWeaponsL.SelectedItem as WeaponData;
+                        wCurrentRight = cmbWeaponsR.SelectedItem as WeaponData;
                         if (wCurrentLeft != null) { LoadWeaponToControls(wCurrentLeft, true); }
-                        else if (cmbWeaponsL.SelectedItem is WeaponData wL) { wCurrentLeft = wL; LoadWeaponToControls(wL, true); }
                         if (wCurrentRight != null) { LoadWeaponToControls(wCurrentRight, false); }
-                        else if (cmbWeaponsR.SelectedItem is WeaponData wR) { wCurrentRight = wR; LoadWeaponToControls(wR, false); }
                         if (bShowingAltStats)
                         {
                             if (wCurrentLeft != null && WeaponHasAltStats(wCurrentLeft, amCurrentAltStat))
