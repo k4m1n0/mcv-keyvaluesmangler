@@ -51,7 +51,7 @@ public partial class Form1 : Form
     public static bool bForceLightMode = false;
     private bool bDarkMode = false;
 
-    private int iHotkeyId = 9001;
+    private const int iHotkeyId = 9008;//唯一热键id
 
     [DllImport("user32.dll")]
     private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
@@ -826,6 +826,7 @@ public partial class Form1 : Form
     private static string ExtractXmlValue(string sPath, string sKey)
     {
         string sContent = File.ReadAllText(sPath);
+        //匹配XML属性块<property name="{sKey}" ...><value ...>...</value>捕获<value>内文本
         var m = System.Text.RegularExpressions.Regex.Match(sContent,
             $@"<property\s+name=""{sKey}""[^>]*>\s*<value[^>]*>\s*([^<]+)");
         return m.Success ? m.Groups[1].Value.Trim() : "";

@@ -132,6 +132,7 @@ public static class WikiPageGenerator
         string sHasBayonet = mpVals.GetValueOrDefault("hasbayonet", "0") == "1" ? "YES" : "NO";
 
         string sFactionText = liInfo.Factions.Count > 0 ? string.Join("/", liInfo.Factions) : "USVC";
+        //替换阵营占位符[[USVC]]为实际阵营
         sResult = Regex.Replace(sResult, @"\[\[USVC\]\]", sFactionText);
         if (liInfo.Factions.Count > 0)
         {
@@ -141,7 +142,9 @@ public static class WikiPageGenerator
 
         sResult = sResult.Replace("[[File:.png|512px]]", $"[[File:{sTitle}.png|512px]]");
         sResult = sResult.Replace("[[File:.svg|512px]]", $"[[File:{sScriptName}.svg|512px]]");
+        //替换加粗的空链接占位符 <b>[[]]</b>为实际标题链接
         sResult = Regex.Replace(sResult, @"<b>\s*\[\[\]\]\s*</b>", $"<b>[[{sTitle}]]</b>");
+        //替换兵种图片占位符 [[File:Class_.png|50px]]为实际兵种图标
         sResult = Regex.Replace(sResult, @"\[\[File:Class_\.png\|50px\]\]", BuildClassMarkup(liInfo));
         sResult = sResult.Replace("| [[]]", $"| [[{sAmmo}]]");
         sResult = sResult.Replace("[[+1]] /  ", sClipDisplay);
@@ -149,27 +152,33 @@ public static class WikiPageGenerator
         string sDmgLine = $"| {fmt(dDg)}";
         for (int i = 0; i < 5; i++)
             sDmgLine += $"||x{fmt(rgMults[i])} = {fmt(dDg * rgMults[i])}";
+        //替换伤害倍率占位行 | ||× = ||× = ...为实际伤害倍率行
         sResult = Regex.Replace(sResult, @"\| \|\|× = \|\|× = \|\|× = \|\|× = \|\|× = ", sDmgLine);
 
         if (!bIsPistol)
         {
+            //匹配刺刀占位符 ||YES NO替换为是否带刺刀
             var mBayonet = Regex.Match(sResult, @"\|\|YES NO");
             if (mBayonet.Success)
                 sResult = sResult.Substring(0, mBayonet.Index + 2) + sHasBayonet + sResult.Substring(mBayonet.Index + 2 + "YES NO".Length);
+            //匹配导轨占位符 ||YES NO替换为NO
             var mRail = Regex.Match(sResult, @"\|\|YES NO");
             if (mRail.Success)
                 sResult = sResult.Substring(0, mRail.Index + 2) + "NO" + sResult.Substring(mRail.Index + 2 + "YES NO".Length);
         }
 
+        //替换武器类型空链接占位符 |[[]]为实际类型链接
         sResult = Regex.Replace(sResult, @"\|\[\[\]\]", $"|[[{sWeaponType}]]");
         sResult = sResult.Replace("Auto+Semi", sFireModes);
         sResult = sResult.Replace("|| RPM", $"||{sFireRate} RPM");
 
         if (bIsLmg)
         {
+            //匹配散布占位符 ° & ° [[ADS]]替换为hip&ads散布
             var mSpread1 = Regex.Match(sResult, @"° & ° \[\[ADS\]\]");
             if (mSpread1.Success)
                 sResult = sResult.Substring(0, mSpread1.Index) + $"{sSpread}° & {sSpreadAds}° [[ADS]]" + sResult.Substring(mSpread1.Index + mSpread1.Length);
+            //同上 替换为bipod&bipodAds散布
             var mSpread2 = Regex.Match(sResult, @"° & ° \[\[ADS\]\]");
             if (mSpread2.Success)
                 sResult = sResult.Substring(0, mSpread2.Index) + $"{sSpreadBipod}° & {sSpreadBipodAds}° [[ADS]]" + sResult.Substring(mSpread2.Index + mSpread2.Length);

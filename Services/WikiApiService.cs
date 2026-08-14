@@ -95,6 +95,7 @@ public static class WikiApiService
                 if (sRaw == null) return null;
                 if (sRaw.TrimStart().StartsWith("#REDIRECT", StringComparison.OrdinalIgnoreCase))
                 {
+                    //匹配MediaWiki重定向 #REDIRECT [[目标页]]捕获跳转目标标题
                     var mRedirect = Regex.Match(sRaw, @"#REDIRECT\s*\[\[([^\]|]+)");
                     if (mRedirect.Success)
                     {

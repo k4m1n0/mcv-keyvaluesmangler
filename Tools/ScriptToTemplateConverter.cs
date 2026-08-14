@@ -152,6 +152,7 @@ public static class ScriptToTemplateConverter
             var rsState = new RenderState();
             RenderTree(anTemplateTree, sbResult, roOpts, rsState);
             string sOutput = sbResult.ToString();
+            //删除单独成行 仅含注释标记的行 如//{或//}
             sOutput = Regex.Replace(sOutput, @"^\s*//\s*[\{\}]\s*$", "", RegexOptions.Multiline);
             sOutput = sOutput.TrimStart('\r', '\n');
             if (!sOutput.EndsWith('\n'))

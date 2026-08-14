@@ -74,11 +74,13 @@ public static class LoadoutService
             string sLine = LocalizationService.StripComment(sRawLine).Trim();
             if (string.IsNullOrEmpty(sLine)) continue;
 
+            //匹配带引号块名后跟{ 如"Foo" { 压栈块名用于追踪归属
             var mInlineOpen = Regex.Match(sLine, @"""([^""]+)""\s*\{");
             if (mInlineOpen.Success) { rgStack.Add(mInlineOpen.Groups[1].Value); continue; }
             if (sLine == "{") { rgStack.Add(sPendingKey ?? "__anon__"); sPendingKey = null; continue; }
             if (sLine == "}") { if (rgStack.Count > 0) rgStack.RemoveAt(rgStack.Count - 1); continue; }
 
+            //匹配"key" "value"键值对 不匹配时回退尝试捕获行尾单独的key
             var mKv = Regex.Match(sLine, @"""([^""]+)""\s+""([^""]*)""");
             if (!mKv.Success) { var mKo = Regex.Match(sLine, @"""([^""]+)""$"); if (mKo.Success) sPendingKey = mKo.Groups[1].Value; continue; }
 

@@ -189,6 +189,7 @@ public static class WeaponScriptService
             if (iBe < 0 || iBs + 1 >= iBe) return mpValues;
             string sBlock = sContent.Substring(iBs + 1, iBe - iBs - 1);
 
+            //匹配"key" "value"键值对 按大括号深度前缀过滤出顶层键
             foreach (Match m in Regex.Matches(sBlock, @"""([^""]+)""\s+""([^""]*)""", RegexOptions.Multiline))
             {
                 string sBefore = sBlock.Substring(0, m.Index);
@@ -373,6 +374,7 @@ public static class WeaponScriptService
 
                 if (sContent.Contains(sBlockName))
                 {
+                    //匹配块名后跟{的整个块体 最多单层嵌套子块
                     var mBlock = Regex.Match(sContent, $@"{Regex.Escape(sBlockName)}\s*\{{([^}}]*(?:\{{[^}}]*\}}[^}}]*)*)\}}", RegexOptions.Singleline);
                     if (mBlock.Success)
                     {
@@ -489,6 +491,7 @@ public static class WeaponScriptService
                     wWeapon.PrintName = sPn;
                 else
                 {
+                    //提取printname字段的双引号值
                     var mPrintName = Regex.Match(sContent, @"""printname""\s+""([^""]*)""");
                     if (mPrintName.Success) wWeapon.PrintName = mPrintName.Groups[1].Value;
                 }
@@ -565,6 +568,7 @@ public static class WeaponScriptService
         try
         {
             string sBlockName = mpAltStatBlockNames[mode];
+            //匹配备选统计块整体 最多单层嵌套 未找到返回null
             var mBlock = Regex.Match(sContent, $@"{Regex.Escape(sBlockName)}\s*\{{([^}}]*(?:\{{[^}}]*\}}[^}}]*)*)\}}", RegexOptions.Singleline);
             if (!mBlock.Success) return null;
             return ExtractValue(mBlock.Groups[1].Value, sKey);
@@ -581,6 +585,7 @@ public static class WeaponScriptService
         try
         {
         string sBlockName = mpAltStatBlockNames[mode];
+        //匹配备选统计块并替换其中key 未匹配到块则原样返回
         var mBlock = Regex.Match(sContent, $@"{Regex.Escape(sBlockName)}\s*\{{([^}}]*(?:\{{[^}}]*\}}[^}}]*)*)\}}", RegexOptions.Singleline);
         if (!mBlock.Success) return sContent;
         string sFullBlock = mBlock.Value.Replace("\r\n", "\n").Replace('\r', '\n');
@@ -600,6 +605,7 @@ public static class WeaponScriptService
         try
         {
         string sBlockName = mpAltStatBlockNames[mode];
+        //匹配备选统计块并替换其中后座块 未匹配到块则原样返回
         var mAlt = Regex.Match(sContent, $@"{Regex.Escape(sBlockName)}\s*\{{([^}}]*(?:\{{[^}}]*\}}[^}}]*)*)\}}", RegexOptions.Singleline);
         if (!mAlt.Success) return sContent;
         string sAltBlock = mAlt.Groups[1].Value;
@@ -707,6 +713,7 @@ public static class WeaponScriptService
             : sFullBlock.Substring(iClosePos);
 
         var rgLines = new List<string>();
+        //构造key为带引号字面量的匹配模式 避免key内正则字符误解析
         string sKeyPattern = $"\"{Regex.Escape(sKey)}\"";
         foreach (string sLine in sBlockContent.Split('\n'))
         {
@@ -731,6 +738,7 @@ public static class WeaponScriptService
         }
 
         string sResult = sBeforeBrace + "\n" + string.Join("\n", rgLines) + sAfterBrace;
+        //将连续3个及以上换行压缩为单个空行
         sResult = Regex.Replace(sResult, @"(\n\s*){3,}", "\n\n");
         return sResult;
     }
@@ -753,6 +761,7 @@ public static class WeaponScriptService
     private static string? ExtractValue(string sContent, string sKey)
     {
         //^[ \t]* 确保key在行首且前面没有// 防止匹配到注释块内被注释掉的键
+        //匹配行首可缩进的"key" "value" 捕获双引号值
         var m = Regex.Match(sContent, $@"^[ \t]*""{Regex.Escape(sKey)}""\s+""([^""]*)""", RegexOptions.Multiline);
         if (m.Success) return m.Groups[1].Value;
         m = Regex.Match(sContent, $@"^[ \t]*""{Regex.Escape(sKey)}""\s+(\S+)", RegexOptions.Multiline);//回退匹配"abc" 123这种不带引号的裸值
@@ -792,6 +801,7 @@ public static class WeaponScriptService
             i++;
         }
         string sBlockContent = sAltBlock.Substring(iBraceStart + 1, i - iBraceStart - 2);
+        //在块内容中匹配"key" "value" 捕获双引号值
         var m = Regex.Match(sBlockContent, $@"""{Regex.Escape(sKey)}""\s+""([^""]*)""");
         if (m.Success && double.TryParse(m.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double dR))
             return dR;
@@ -1074,8 +1084,7 @@ public static class WeaponScriptService
     {
         try
         {
-        //匹配block 限制在WeaponData顶层 使用RegexOptions来匹配大括号
-        //通过 ^(?!\s*//) 确保块名不在注释行内 加.*平衡大括号嵌套
+        //匹配行首指定block名的整个块体 平衡组配对任意嵌套大括号 供替换块内Up/Right
         string sP = $@"(^{Regex.Escape(sBlock)}\s*\{{(?:[^{{}}]|(?<open>\{{)|(?<-open>\}}))*(?(open)(?!))\}})";
         var m = Regex.Match(sC, sP, RegexOptions.Multiline | RegexOptions.Singleline);
         if (!m.Success) return sC;
@@ -1083,6 +1092,7 @@ public static class WeaponScriptService
 
         if (sUp != null)
         {
+            //匹配Up字段及其双引号值 捕获name前缀以便回填
             string sUpPat = $@"(""Up""\s+)""[^""]*""";
             var mUp = Regex.Match(sB, sUpPat, RegexOptions.Singleline);
             if (mUp.Success)
@@ -1091,6 +1101,7 @@ public static class WeaponScriptService
         }
         if (sRight != null)
         {
+            //同上 匹配Right
             string sRightPat = $@"(""Right""\s+)""[^""]*""";
             var mRight = Regex.Match(sB, sRightPat, RegexOptions.Singleline);
             if (mRight.Success)

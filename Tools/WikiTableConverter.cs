@@ -10,8 +10,10 @@ namespace WeaponDamageCalc.Tools;
 
 public static class WikiTableConverter
 {
+    //匹配脚本行首可缩进的"key" "value" 捕获键与双引号值
     private static readonly Regex reScriptKv = new(
         @"^[ \t]*""([^""]+)""\s+""([^""]*)""", RegexOptions.Multiline | RegexOptions.Compiled);
+    //匹配weapon_开头的脚本名片段 排除空白和|等分隔字符
     private static readonly Regex reScriptName = new(
         @"weapon_[^\s|]+", RegexOptions.Compiled);
 
@@ -104,6 +106,7 @@ public static class WikiTableConverter
         out Dictionary<string, string> mpValues)
     {
         mpValues = new Dictionary<string, string>();
+        //匹配加粗的wikitext链接 <b>[[标题 捕获标题
         var mNameMatch = Regex.Match(sLine, @"<b>\[\[([^\]|]+)");
         if (!mNameMatch.Success) return false;
         string sWikiTitle = mNameMatch.Groups[1].Value.Trim();
@@ -264,6 +267,7 @@ public static class WikiTableConverter
         //提取已有的zmstats橙字 计算完新值后重新拼接
         bool bHasZombie = false;
         string sZombieSuffix = "";
+        //匹配橙字僵尸值 <span style="color:#ff6905;">...</span> 捕获内部文本
         var mZMatch = Regex.Match(sCell, @"<br>\s*<span style=""color:#ff6905;"">([^<]*)</span>");
         if (mZMatch.Success) { bHasZombie = true; sZombieSuffix = mZMatch.Value; sCell = sCell.Replace(sZombieSuffix, ""); }
 
@@ -277,15 +281,18 @@ public static class WikiTableConverter
             double dDgVal = GetDouble(mpV, "damagegeneric");
             if (dDgVal > 0)
             {
+                //匹配数字或数字x数字形式的伤害 替换为伤害x弹丸
                 return Regex.Replace(sCell, @"\d+\.?\d*[Xx]?\d*\.?\d*",
                     $"{FormatDouble(dDgVal)}x{FormatDouble(dPellets)}");
             }
         }
+        //检测整格是否为数字x数字的多弹药伤害格式
         else if (dPellets > 1 && iCol == 5 && Regex.IsMatch(sClean, @"^\d+\.?\d*[Xx]\d+\.?\d*$"))
         {
             double dDgVal = GetDouble(mpV, "damagegeneric");
             if (dDgVal > 0)
             {
+                //匹配数字x数字伤害格式并替换为伤害x弹丸
                 return Regex.Replace(sCell, @"\d+\.?\d*[Xx]\d+\.?\d*",
                     $"{FormatDouble(dDgVal)}x{FormatDouble(dPellets)}");
             }
@@ -293,15 +300,18 @@ public static class WikiTableConverter
         else if (iCol == 0)
         {
             double dDgVal = GetDouble(mpV, "damagegeneric");
+            //检测整格是否为纯整数/小数伤害数值
             if (dDgVal > 0 && Regex.IsMatch(sClean, @"^[1-9]\d*\.?\d*$")
                 && Math.Abs(double.Parse(sClean, CultureInfo.InvariantCulture) - dDgVal) < 100)
             {
+                //匹配数字并替换为新的伤害值
                 return Regex.Replace(sCell, @"\d+\.?\d*", FormatDouble(dDgVal));
             }
         }
 
         bool bIsExplosive = GetDouble(mpV, "explosiondamage") > 0;
 
+        //匹配伤害倍率行x倍率=伤害 捕获倍率和伤害
         var mDmg = Regex.Match(sClean, @"^[x×](\d+\.?\d*)\s*=\s*(\d+\.?\d*)$");
         if (mDmg.Success)
         {
@@ -310,6 +320,7 @@ public static class WikiTableConverter
             if (GetDouble(mpV, "damagegeneric") is double dBd && dBd > 0)
             {
                 double dTotalDmg = Math.Round(dBd * dMult, 2);
+                //匹配x倍率=伤害并替换为重新计算后的值
                 return Regex.Replace(sCell, @"[x×]\d+\.?\d*\s*=\s*\d+\.?\d*",
                     $"x{FormatDouble(dMult)} = {FormatDouble(dTotalDmg)}")
                     + MakeZombie(mpV, bHasZombie, "<br><span style=\"color:#ff6905;\">x{0} = {1}</span>",
@@ -321,13 +332,16 @@ public static class WikiTableConverter
             return sCell + (bHasZombie ? sZombieSuffix : "");
         }
 
+        //匹配散布格hip/ads ADS形式 捕获两个数值
         var mSpread = Regex.Match(sClean, @"^(\d+\.?\d*)\s*/\s*(\d+\.?\d*)\s*(ADS|\[\[ADS\]\])$");
         if (mSpread.Success && GetDouble(mpV, "bulletspreaddegrees") is double dHip && GetDouble(mpV, "bulletspreaddegreesironsighted") is double dAds && (dHip > 0 || dAds > 0))
+            //匹配数值/数值[[ADS]]并替换为hip/ads散布
             return Regex.Replace(sCell, @"\d+\.?\d*\s*/\s*\d+\.?\d*\s*\[\[ADS\]\]", $"{FormatDouble(dHip)} / {FormatDouble(dAds)} [[ADS]]")
                 + MakeZombie(mpV, bHasZombie, "<br><span style=\"color:#ff6905;\">{0} / {1} [[ADS]]</span>",
                     FormatDouble(GetDouble(mpV, "zombie_bulletspreaddegrees")),
                     FormatDouble(GetDouble(mpV, "zombie_bulletspreaddegreesironsighted")));
 
+        //匹配脚架散布格数值°&数值°[[ADS]] 捕获两个数值
         var mBipod = Regex.Match(sClean, @"^(\d+\.?\d*)°?\s*&\s*(\d+\.?\d*)°?\s*\[\[ADS\]\]$");
         if (mBipod.Success)
         {
@@ -338,56 +352,71 @@ public static class WikiTableConverter
             if (Math.Abs(dV1 - dHipSpread) <= Math.Abs(dV1 - dAdsSpread) && dHipSpread > 0)
             {
                 double dBipod = GetDouble(mpV, "bulletspreaddegreesbipod");
+                //匹配脚架散布格式并替换为hip&bipod 第一值更接近hip时
                 return Regex.Replace(sCell, @"\d+\.?\d*°?\s*&\s*\d+\.?\d*°?\s*\[\[ADS\]\]",
                     $"{FormatDouble(dHipSpread)}° & {FormatDouble(dBipod)}° [[ADS]]");
             }
             else if (dAdsSpread > 0)
             {
                 double dBipodAds = GetDouble(mpV, "bulletspreaddegreesbipodironsighted");
+                //匹配脚架散布格式并替换为ads&bipodAds 第一值更接近ads时
                 return Regex.Replace(sCell, @"\d+\.?\d*°?\s*&\s*\d+\.?\d*°?\s*\[\[ADS\]\]",
                     $"{FormatDouble(dAdsSpread)}° & {FormatDouble(dBipodAds)}° [[ADS]]");
             }
         }
 
+        //检测整格是否为 0.xxx形式的射程倍率
         if (Regex.IsMatch(sClean, @"^0\.\d+$") && GetDouble(mpV, "rangemodifier") is double dRm && dRm > 0)
+            //匹配 0.xxx 数值并替换为新的射程倍率
             return Regex.Replace(sCell, @"0\.\d+", FormatDouble(dRm))
                 + MakeZombie(mpV, bHasZombie, "<br><span style=\"color:#ff6905;\">{0}</span>", FormatDouble(GetDouble(mpV, "zombie_rangemodifier")));
 
+        //匹配射速格数字RPM 捕获数值
         var mRpm = Regex.Match(sClean, @"^(\d+)\s*RPM$");
         if (mRpm.Success && mpV.TryGetValue("firerate", out var sFr) && int.TryParse(sFr, out int iIr) && iIr > 0)
+            //匹配数字RPM并替换为脚本射速
             return Regex.Replace(sCell, @"\d+\s*RPM", $"{iIr} RPM")
                 + MakeZombie(mpV, bHasZombie, "<br><span style=\"color:#ff6905;\">{0} RPM</span>", mpV.TryGetValue("zombie_firerate", out var sZfr) ? sZfr : "");
 
+        //匹配重量格kg (lbs)捕获kg和lbs数值
         var mWlm = Regex.Match(sClean, @"^(\d+\.?\d*)\s*kg\s*\((\d+\.?\d*)\s*lbs\)$");
         if (mWlm.Success && GetDouble(mpV, "weight") is double dWk && dWk > 0)
+            //匹配kg (lbs)形式并替换为重新计算的重量
             return Regex.Replace(sCell, @"\d+\.?\d*\s*kg\s*\(\d+\.?\d*\s*lbs\)",
                 $"{FormatDouble(dWk)} kg ({FormatDouble(Math.Round(dWk * 2.20462, 2))} lbs)")
                 + MakeZombie(mpV, bHasZombie, "<br><span style=\"color:#ff6905;\">{0} kg ({1} lbs)</span>",
                     FormatDouble(GetDouble(mpV, "zombie_weight")),
                     FormatDouble(Math.Round(GetDouble(mpV, "zombie_weight") * 2.20462, 2)));
 
+        //匹配纯kg重量格数字kg 捕获数值
         var mWm = Regex.Match(sClean, @"^(\d+\.?\d*)\s*kg$");
         if (mWm.Success && GetDouble(mpV, "weight") is double dW && dW > 0)
+            //匹配数字kg并替换为新重量
             return Regex.Replace(sCell, @"\d+\.?\d*\s*kg", $"{FormatDouble(dW)} kg")
                 + MakeZombie(mpV, bHasZombie, "<br><span style=\"color:#ff6905;\">{0} kg</span>", FormatDouble(GetDouble(mpV, "zombie_weight")));
 
+        //匹配弹重格g (gr)捕获g和gr数值
         var mBwm = Regex.Match(sClean, @"^(\d+\.?\d*)\s*g\s*\((\d+\.?\d*)\s*gr\)$");
         if (mBwm.Success && GetDouble(mpV, "bullet_weight") is double dBwk && dBwk > 0)
+            //匹配g (gr)形式并替换为重新计算的弹重
             return Regex.Replace(sCell, @"\d+\.?\d*\s*g\s*\(\d+\.?\d*\s*gr\)",
                 $"{FormatDouble(Math.Round(dBwk * 1000, 1))} g ({FormatDouble(Math.Round(dBwk * 15432.36, 2))} gr)")
                 + MakeZombie(mpV, bHasZombie, "<br><span style=\"color:#ff6905;\">{0} g ({1} gr)</span>",
                     FormatDouble(Math.Round(GetDouble(mpV, "zombie_bullet_weight") * 1000, 1)),
                     FormatDouble(Math.Round(GetDouble(mpV, "zombie_bullet_weight") * 15432.36, 2)));
 
+        //匹配纯字母的射击模式格 如Auto或Auto+Semi
         var mFireMode = Regex.Match(sClean, @"^[A-Za-z]+(\+[A-Za-z]+)*$");
         if (mFireMode.Success && mpV.TryGetValue("SupportedFireModes", out var sFm) && !string.IsNullOrEmpty(sFm))
         {
             if (sClean != sFm)
+                //匹配字母射击模式字符串并替换为脚本值
                 return Regex.Replace(sCell, @"[A-Za-z]+(\+[A-Za-z]+)*", sFm);
         }
 
         if (!bIsExplosive)
         {
+            //匹配弹匣格数字/数字形式 捕获前后两个数值
             var mClip = Regex.Match(sClean, @"^(\d+).*?/\s*(\d+)$");
             if (mClip.Success && mpV.TryGetValue("clip_size", out var sClip) && !string.IsNullOrEmpty(sClip) && sClip != "-1" && sClip != "0/0" && !sClip.StartsWith("-1/") && sClip.Contains('/'))
             {
@@ -395,6 +424,7 @@ public static class WikiTableConverter
                 if (rgClipParts.Length == 2)
                 {
                     string sExtra = mpV.TryGetValue("extrabulletchamber", out var sExc) && sExc == "1" ? "[[+1]]" : "";
+                    //匹配弹匣格式 含可选的[[+1]]标记 并替换为脚本弹量
                     return Regex.Replace(sCell, @"\d+\[\[.*?\]\]?\s*/\s*\d+|\d+\s*/\s*\d+", $"{rgClipParts[0].Trim()}{sExtra} / {rgClipParts[1].Trim()}")
                         + MakeZombieClip(mpV, bHasZombie);
                 }
@@ -403,12 +433,14 @@ public static class WikiTableConverter
 
         bool bIsStandardGun = GetDouble(mpV, "damagegeneric") > 0 && GetDouble(mpV, "damageheadmultiplier") > 0;
         bool bIsDamageColumn = iCol == 5 || iCol == 6;
+        //检测整格是否为纯整数/小数伤害数值 用于胸/头伤害列
         if (bIsDamageColumn && (bIsExplosive || bIsStandardGun) && Regex.IsMatch(sClean, @"^[1-9]\d*\.?\d*$"))
         {
             //容差<100防止替换弹药数量等非伤害数字
             string sKey = (iCol == 6 && mpV.ContainsKey("__head_dmg")) ? "__head_dmg" : "__chest_dmg";
             if (mpV.TryGetValue(sKey, out var sDmgStr) && double.TryParse(sDmgStr, NumberStyles.Float, CultureInfo.InvariantCulture, out double dDmgVal)
                 && Math.Abs(double.Parse(sClean, CultureInfo.InvariantCulture) - dDmgVal) < 100)
+                //匹配数字并替换为预计算的伤害值
                 return Regex.Replace(sCell, @"\d+\.?\d*", sDmgStr)
                     + MakeZombiePure(mpV, bHasZombie, sKey);
         }
@@ -555,8 +587,11 @@ public static class WikiTableConverter
 
     private static string StripWikiMarkup(string sCell)
     {
+        //处理wikitext链接[[别名|显示文本]] 保留显示文本
         string sResult = Regex.Replace(sCell, @"\[\[[^\]|]+\|([^\]]+)\]\]", "$1");
+        //处理无别名链接[[目标]] 去掉双方括号
         sResult = Regex.Replace(sResult, @"\[\[([^\]]+)\]\]", "$1");
+        //去除剩余HTML标签
         return Regex.Replace(sResult, @"<[^>]+>", "");
     }
 

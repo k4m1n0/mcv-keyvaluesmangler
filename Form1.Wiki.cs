@@ -89,6 +89,7 @@ public partial class Form1
         txtPage.TextChanged += (_, _) =>
         {
             string sT = txtPage.Text;
+            //从URL或wikitext提取标题 匹配wiki/或title=之后 直到? # &为止的片段
             var mUrl = Regex.Match(sT, @"(?:wiki/|title=)([^?#&]+)");
             if (mUrl.Success)
             {
@@ -513,6 +514,7 @@ public partial class Form1
             if (sSelectedDir == null || !Directory.Exists(sSelectedDir)) PickDir();
             if (sSelectedDir == null) return;
             if (!await EnsureSource()) return;
+            //校验整行是否为=[[...]]=形式的摘要页标题
             if (!Regex.IsMatch(txtInput.Text, @"^=\[\[.+\]\]=\s*$", RegexOptions.Multiline)) { lblStatus.Text = "Not a summary page."; return; }
             var rgLinks = WikiService.ExtractWeaponLinks(txtInput.Text, mpTitleToScript);
             if (rgLinks.Count == 0) { lblStatus.Text = "No weapon links found"; return; }

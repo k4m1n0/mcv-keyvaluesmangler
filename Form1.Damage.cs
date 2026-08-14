@@ -146,6 +146,13 @@ public partial class Form1
                 nudAdsRecoilRightL.Enabled = false;
                 nudIronsightSpeedScaleL.Enabled = false;
             }
+            else
+            {
+                nudAdsSpreadL.Enabled = true;
+                nudAdsRecoilUpL.Enabled = true;
+                nudAdsRecoilRightL.Enabled = true;
+                nudIronsightSpeedScaleL.Enabled = true;
+            }
         }
         else
         {
@@ -198,6 +205,13 @@ public partial class Form1
                 nudAdsRecoilUpR.Enabled = false;
                 nudAdsRecoilRightR.Enabled = false;
                 nudIronsightSpeedScaleR.Enabled = false;
+            }
+            else
+            {
+                nudAdsSpreadR.Enabled = true;
+                nudAdsRecoilUpR.Enabled = true;
+                nudAdsRecoilRightR.Enabled = true;
+                nudIronsightSpeedScaleR.Enabled = true;
             }
         }
     }

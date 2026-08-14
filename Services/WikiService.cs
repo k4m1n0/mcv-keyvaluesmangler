@@ -31,6 +31,7 @@ public static class WikiService
             }
             sIdx = sIdx.Replace("\r\n", "\n").Replace('\r', '\n');
             var mpMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            //匹配表格行 捕获|weapon_xxx脚本名及其下方|[[标题]] 用于建立标题->脚本名映射
             foreach (Match m in Regex.Matches(sIdx, @"\|\s*(weapon_[^\s|]+)\s*\n\|\s*\[\[([^\]]+)\]\]"))
                 mpMap[m.Groups[2].Value.Trim()] = m.Groups[1].Value;
             LogService.Info($"Script index built: {mpMap.Count} entries");
@@ -47,6 +48,7 @@ public static class WikiService
     public static string ConvertWikiSource(string sInput, string sScriptsDir, Dictionary<string, string>? mpTitleToScript)
     {
         sInput = sInput.Replace("\r\n", "\n").Replace('\r', '\n');
+        //检测汇总页 是否存在=[[...]]=形式的标题行
         if (Regex.IsMatch(sInput, @"^=\[\[.+\]\]=\s*$", RegexOptions.Multiline))
         {
             LogService.Info("ConvertWikiSource: detected summary page, building printname map...");
@@ -55,6 +57,7 @@ public static class WikiService
             {
                 string sSn = Path.GetFileNameWithoutExtension(sPath);
                 string sContent = WeaponScriptService.ReadScriptFile(sPath).Replace("\r\n", "\n");
+                //从脚本中提取"printname"字段的双引号值
                 var mPm = Regex.Match(sContent, @"""printname""\s+""([^""]*)""");
                 string sD = mPm.Success ? mPm.Groups[1].Value.TrimStart('#') : sSn;
                 if (!mpMap.ContainsKey(sD.Replace("_", " "))) mpMap[sD.Replace("_", " ")] = sSn;
@@ -70,6 +73,7 @@ public static class WikiService
     {
         if (mpTitleToScript == null || mpTitleToScript.Count == 0) return new();
         var hsLinks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        //匹配wikitext内部链接[[...]] 排除含 | : # < > 的非法链接文本
         foreach (Match m in Regex.Matches(sPageSource, @"\[\[([^\]|:#<>]+)\]\]"))
             if (mpTitleToScript.ContainsKey(m.Groups[1].Value.Trim()))
                 hsLinks.Add(m.Groups[1].Value.Trim());

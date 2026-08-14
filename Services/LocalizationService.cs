@@ -27,15 +27,18 @@ public static class LocalizationService
             string sLine = StripComment(sRawLine).Trim();
             if (string.IsNullOrEmpty(sLine)) continue;
 
+            //匹配行首带引号的块名后跟{ 如"Foo" { 用于压栈块名
             var mInlineOpen = Regex.Match(sLine, @"^""([^""]+)""\s*\{");
             if (mInlineOpen.Success) { rgStack.Add(mInlineOpen.Groups[1].Value); continue; }
             if (sLine == "{") { rgStack.Add(sPendingKey ?? "__anon__"); sPendingKey = null; continue; }
             if (sLine == "}") { if (rgStack.Count > 0) rgStack.RemoveAt(rgStack.Count - 1); continue; }
 
+            //匹配"key" "value"键值对 捕获键和值
             var mKv = Regex.Match(sLine, @"""([^""]+)""\s+""([^""]*)""");
             if (mKv.Success && IsInsideTokensBlock(rgStack))
                 mpTokens[mKv.Groups[1].Value] = mKv.Groups[2].Value;
 
+            //匹配行尾单独的"key" 用于记录待下一个{解析的块名
             var mKeyOnly = Regex.Match(sLine, @"""([^""]+)""$");
             if (mKeyOnly.Success) sPendingKey = mKeyOnly.Groups[1].Value;
         }
