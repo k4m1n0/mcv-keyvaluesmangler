@@ -75,7 +75,6 @@ public static class LogService
     {
         //FATAL级别始终写入文件 无视所有开关
         bool bIsFatal = lvl == Level.Fatal;
-        
         if (!bIsFatal && !bEnabled) return;
 
         //Debug.Write始终输出 不受MinLevel限制
