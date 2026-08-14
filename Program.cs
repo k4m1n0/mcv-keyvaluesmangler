@@ -90,9 +90,6 @@ internal static class Program
         Application.ThreadException += (_, e) =>
         {
             LogService.Error(e.Exception, "UI ThreadException");
-            MessageBox.Show(
-                $"Unexpected error:\n\n{e.Exception.Message}\n\nSee mangler.log for details.",
-                "Mangler - Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             Application.Exit();
         };
         Application.Run(new Form1());
