@@ -94,8 +94,8 @@ public partial class Form1 : Form
             tmrUndo.Tick += (_, _) => { tmrUndo.Stop(); if (bUndoPending) { bUndoPending = false; PushUndo(); } };
 
             InitCenterPanels();
-            InitLeftPanel(rgWeapons);
-            InitRightPanel(rgWeapons);
+            InitLeftPanel();
+            InitRightPanel();
             InitC64Labels();
             StartC64Anim();
             InitTopButtons();

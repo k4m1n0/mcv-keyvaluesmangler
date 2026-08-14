@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Windows.Forms;
 using WeaponDamageCalc.Models;
 using WeaponDamageCalc.Services;
@@ -23,7 +22,7 @@ public partial class Form1
     private Label lblHeadDmgL = null!, lblChestDmgL = null!, lblStomachDmgL = null!, lblLegDmgL = null!, lblArmDmgL = null!;
     private CheckBox chkVestL = null!;
 
-    private void InitLeftPanel(List<WeaponData> rgWeapons)
+    private void InitLeftPanel()
     {
         int iX = 5;
         cmbWeaponsL = new ComboBox { Location = new Point(340, 6), Size = new Size(180, 23), AutoCompleteMode = AutoCompleteMode.SuggestAppend, AutoCompleteSource = AutoCompleteSource.ListItems, DisplayMember = "PrintName" };

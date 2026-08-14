@@ -42,10 +42,10 @@ public partial class Form1
 
     private static string FormatMemoryStatus()
     {
-        long lPrivate = s_proc.PrivateMemorySize64;
+        long lWorkingSet = s_proc.WorkingSet64;
         long lGcCommitted = GC.GetGCMemoryInfo().TotalCommittedBytes;
-        long lFree = Math.Max(0, lPrivate - lGcCommitted);
-        return $"{lPrivate / 1024 / 1024}M RAM SYSTEM  {lFree / 1024} NATIVE KBYTES FREE";
+        long lNative = Math.Max(0, lWorkingSet - lGcCommitted);
+        return $"{lWorkingSet / 1024 / 1024}M RAM WORKING  {lNative / 1024} NATIVE KBYTES FREE";
     }
 
     private void InitC64Labels()

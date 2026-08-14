@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Windows.Forms;
 using WeaponDamageCalc.Models;
 using WeaponDamageCalc.Services;
@@ -23,7 +22,7 @@ public partial class Form1
     private Label lblHeadDmgR = null!, lblChestDmgR = null!, lblStomachDmgR = null!, lblLegDmgR = null!, lblArmDmgR = null!;
     private CheckBox chkVestR = null!;
 
-    private void InitRightPanel(List<WeaponData> rgWeapons)
+    private void InitRightPanel()
     {
         int iX = 825;
         this.Controls.Add(new Label { Text = "WeaponR", Location = new Point(iX + 190, 8), Size = new Size(70, 20) });

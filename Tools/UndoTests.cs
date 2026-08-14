@@ -504,7 +504,7 @@ public static class UndoTests
         var tmrSnap = (System.Windows.Forms.Timer?)tForm.GetField("tmrSnapshotCheck", BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(frm);
         tmrSnap?.Stop(); tmrSnap?.Dispose();
         await frm.RefreshWeaponList();
-        Task.Run(async () =>
+        _ = Task.Run(async () =>
         {
             await Task.Delay(1000);
             frm.BeginInvoke(() => GetControl<Label>("lblC64_3").Text = "TEST DONE.");
