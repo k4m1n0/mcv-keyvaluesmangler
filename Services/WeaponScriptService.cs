@@ -23,7 +23,7 @@ public static class WeaponScriptService
             if (rgBytes.Length >= 2 && rgBytes[0] == 0xFE && rgBytes[1] == 0xFF)
                 return Encoding.BigEndianUnicode.GetString(rgBytes);
             if (rgBytes.Length >= 3 && rgBytes[0] == 0xEF && rgBytes[1] == 0xBB && rgBytes[2] == 0xBF)
-                return Encoding.UTF8.GetString(rgBytes);
+                return Encoding.UTF8.GetString(rgBytes, 3, rgBytes.Length - 3);
             return Encoding.UTF8.GetString(rgBytes);
         }
         catch (Exception ex)
