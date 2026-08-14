@@ -435,7 +435,7 @@ public partial class Form1
     #endregion
     #region 导入与转换
 
-    private void BtnCsvToScripts_Click(object? sender, EventArgs e)
+    private async void BtnCsvToScripts_Click(object? sender, EventArgs e)
     {
         string sInitialDir = string.IsNullOrEmpty(sLastScriptsDir) ? AppContext.BaseDirectory : sLastScriptsDir;
         using var dlg = new FolderBrowserDialog { Description = "Select the folder containing weapon scripts (will be overwritten)", UseDescriptionForTitle = true, InitialDirectory = sInitialDir };
@@ -445,19 +445,17 @@ public partial class Form1
         if (MessageBox.Show($"Overwrite all scripts in the folder below with CSV data?\n\n{sDir}", "Confirm Overwrite", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
         string sCsv = Path.Combine(AppContext.BaseDirectory, "weapons.csv");
         LogService.Info($"BtnCsvToScripts: exporting to {sDir}");
-        Task.Run(() =>
+        try
         {
-            try
-            {
-                string sLog = WeaponScriptService.ExportCsvToScripts(sCsv, sDir);
-                this.Invoke(() => { var lf = new LogForm("Export Complete", sLog, bDarkMode); lf.Show(this); });
-            }
-            catch (Exception ex)
-            {
-                LogService.Error(ex, "BtnCsvToScripts");
-                this.Invoke(() => MessageBox.Show($"Export failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error));
-            }
-        });
+            string sLog = await Task.Run(() => WeaponScriptService.ExportCsvToScripts(sCsv, sDir));
+            var lf = new LogForm("Export Complete", sLog, bDarkMode);
+            lf.Show(this);
+        }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, "BtnCsvToScripts");
+            MessageBox.Show($"Export failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     private async void BtnQuickExport_Click(object? sender, EventArgs e)
@@ -510,7 +508,7 @@ public partial class Form1
         finally { System.Threading.Interlocked.Exchange(ref iSaveLock, 0); }
     }
 
-    private void BtnScriptsToCsv_Click(object? sender, EventArgs e)
+    private async void BtnScriptsToCsv_Click(object? sender, EventArgs e)
     {
         string sInitialDir = string.IsNullOrEmpty(sLastScriptsDir) ? AppContext.BaseDirectory : sLastScriptsDir;
         using var dlg = new FolderBrowserDialog { Description = "Select folder containing weapon scripts", UseDescriptionForTitle = true, InitialDirectory = sInitialDir };
@@ -519,22 +517,22 @@ public partial class Form1
         string sDir = dlg.SelectedPath;
         string sCsv = Path.Combine(AppContext.BaseDirectory, "weapons.csv");
         LogService.Info($"BtnScriptsToCsv: importing from {sDir}");
-        Task.Run(() =>
+        try
         {
-            try
-            {
-                string sLog = WeaponScriptService.ImportScriptsToCsv(sDir, sCsv);
-                this.Invoke(() => { RefreshWeaponList(); ClearUndoHistory(); var lf = new LogForm("Import Complete", sLog, bDarkMode); lf.Show(this); });
-            }
-            catch (Exception ex)
-            {
-                LogService.Error(ex, "BtnScriptsToCsv");
-                this.Invoke(() => MessageBox.Show($"Import failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error));
-            }
-        });
+            string sLog = await Task.Run(() => WeaponScriptService.ImportScriptsToCsv(sDir, sCsv));
+            await RefreshWeaponList();
+            ClearUndoHistory();
+            var lf = new LogForm("Import Complete", sLog, bDarkMode);
+            lf.Show(this);
+        }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, "BtnScriptsToCsv");
+            MessageBox.Show($"Import failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
-    private void BtnConvertToTemplate_Click(object? sender, EventArgs e)
+    private async void BtnConvertToTemplate_Click(object? sender, EventArgs e)
     {
         string sInitialDir = string.IsNullOrEmpty(sLastScriptsDir) ? AppContext.BaseDirectory : sLastScriptsDir;
         using var dlg = new FolderBrowserDialog { Description = "Select folder containing weapon scripts to convert", UseDescriptionForTitle = true, InitialDirectory = sInitialDir };
@@ -545,19 +543,18 @@ public partial class Form1
         if (drResult == DialogResult.Cancel) return;
         bool bSimpleMode = (drResult == DialogResult.No);
         LogService.Info($"BtnConvertToTemplate: dir={sDir}, simpleMode={bSimpleMode}");
-        Task.Run(() =>
+        try
         {
-            try
-            {
-                string sLog = Tools.ScriptToTemplateConverter.ConvertAll(sDir, bSimpleMode);
-                this.Invoke(() => { RefreshWeaponList(); var lf = new LogForm("Template Convert", sLog, bDarkMode); lf.Show(this); });
-            }
-            catch (Exception ex)
-            {
-                LogService.Error(ex, "BtnConvertToTemplate");
-                this.Invoke(() => MessageBox.Show($"Template convert failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error));
-            }
-        });
+            string sLog = await Task.Run(() => Tools.ScriptToTemplateConverter.ConvertAll(sDir, bSimpleMode));
+            await RefreshWeaponList();
+            var lf = new LogForm("Template Convert", sLog, bDarkMode);
+            lf.Show(this);
+        }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, "BtnConvertToTemplate");
+            MessageBox.Show($"Template convert failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     private bool PickScriptsDir(string sDescription)
@@ -618,13 +615,13 @@ public partial class Form1
     #endregion
     #region 刷新和快捷键
 
-    private void BtnRefresh_Click(object? sender, EventArgs e)
+    private async void BtnRefresh_Click(object? sender, EventArgs e)
     {
         LogService.Debug("BtnRefresh clicked");
-        RefreshWeaponList();
+        await RefreshWeaponList();
     }
 
-    public async void RefreshWeaponList()
+    public async Task RefreshWeaponList()
     {
         if (bRefreshing) return;
         bRefreshing = true;
@@ -634,78 +631,72 @@ public partial class Form1
         LogService.Info($"RefreshWeaponList: from CSV, restoring {sLeftName} / {sRightName}");
         try
         {
-            await Task.Run(() =>
+            string sCsv = Path.Combine(AppContext.BaseDirectory, "weapons.csv");
+            rgWeapons = await Task.Run(() => CsvService.LoadWeapons(sCsv));
+            try
             {
-                string sCsv = Path.Combine(AppContext.BaseDirectory, "weapons.csv");
-                rgWeapons = CsvService.LoadWeapons(sCsv);
-                this.Invoke(() =>
+                //先解绑事件防止刷新时弹出未保存确认
+                cmbWeaponsL.SelectedIndexChanged -= (s, ev) => WeaponSelected(true, s, ev);
+                cmbWeaponsR.SelectedIndexChanged -= (s, ev) => WeaponSelected(false, s, ev);
+                //DataSource设为null再赋值新列表 触发重新绑定
+                cmbWeaponsL.DataSource = null; cmbWeaponsL.DataSource = new List<WeaponData>(rgWeapons); cmbWeaponsL.DisplayMember = "PrintName";
+                cmbWeaponsR.DataSource = null; cmbWeaponsR.DataSource = new List<WeaponData>(rgWeapons); cmbWeaponsR.DisplayMember = "PrintName";
+                if (rgWeapons.Count > 0)
                 {
-                    try
+                    RestoreComboSelection(cmbWeaponsR, sRightName);
+                    RestoreComboSelection(cmbWeaponsL, sLeftName);
+                    cmbWeaponsL.SelectedIndexChanged += (s, ev) => WeaponSelected(true, s, ev); cmbWeaponsR.SelectedIndexChanged += (s, ev) => WeaponSelected(false, s, ev);
+                    wCurrentLeft = cmbWeaponsL.SelectedItem as WeaponData;
+                    wCurrentRight = cmbWeaponsR.SelectedItem as WeaponData;
+                    if (wCurrentLeft != null) { LoadWeaponToControls(wCurrentLeft, true); }
+                    if (wCurrentRight != null) { LoadWeaponToControls(wCurrentRight, false); }
+                    if (bShowingAltStats)
                     {
-                    //先解绑事件防止刷新时弹出未保存确认
-                    cmbWeaponsL.SelectedIndexChanged -= (s, ev) => WeaponSelected(true, s, ev);
-                    cmbWeaponsR.SelectedIndexChanged -= (s, ev) => WeaponSelected(false, s, ev);
-                    //DataSource设为null再赋值新列表 触发重新绑定
-                    cmbWeaponsL.DataSource = null; cmbWeaponsL.DataSource = new List<WeaponData>(rgWeapons); cmbWeaponsL.DisplayMember = "PrintName";
-                    cmbWeaponsR.DataSource = null; cmbWeaponsR.DataSource = new List<WeaponData>(rgWeapons); cmbWeaponsR.DisplayMember = "PrintName";
-                    if (rgWeapons.Count > 0)
+                        if (wCurrentLeft != null && WeaponHasAltStats(wCurrentLeft, amCurrentAltStat))
+                            LoadAltStatsToControls(true, amCurrentAltStat);
+                        if (wCurrentRight != null && WeaponHasAltStats(wCurrentRight, amCurrentAltStat))
+                            LoadAltStatsToControls(false, amCurrentAltStat);
+                    }
+                    StoreSnapshot();
+                    if (bShowingAltStats)
+                        HighlightAltStatButton(amCurrentAltStat);
+                    UpdateAllDamage();
+                    pnlSpread.Invalidate();
+                    pnlRecoil.Invalidate();
+                }
+                else
+                {
+                    cmbWeaponsL.SelectedIndexChanged += (s, ev) => WeaponSelected(true, s, ev);
+                    cmbWeaponsR.SelectedIndexChanged += (s, ev) => WeaponSelected(false, s, ev);
+                    if (bShowingAltStats)
                     {
-                        RestoreComboSelection(cmbWeaponsR, sRightName);
-                        RestoreComboSelection(cmbWeaponsL, sLeftName);
-                        cmbWeaponsL.SelectedIndexChanged += (s, ev) => WeaponSelected(true, s, ev); cmbWeaponsR.SelectedIndexChanged += (s, ev) => WeaponSelected(false, s, ev);
-                        wCurrentLeft = cmbWeaponsL.SelectedItem as WeaponData;
-                        wCurrentRight = cmbWeaponsR.SelectedItem as WeaponData;
-                        if (wCurrentLeft != null) { LoadWeaponToControls(wCurrentLeft, true); }
-                        if (wCurrentRight != null) { LoadWeaponToControls(wCurrentRight, false); }
-                        if (bShowingAltStats)
-                        {
-                            if (wCurrentLeft != null && WeaponHasAltStats(wCurrentLeft, amCurrentAltStat))
-                                LoadAltStatsToControls(true, amCurrentAltStat);
-                            if (wCurrentRight != null && WeaponHasAltStats(wCurrentRight, amCurrentAltStat))
-                                LoadAltStatsToControls(false, amCurrentAltStat);
-                        }
-                        StoreSnapshot();
-                        if (bShowingAltStats)
-                            HighlightAltStatButton(amCurrentAltStat);
-                        UpdateAllDamage();
-                        pnlSpread.Invalidate();
-                        pnlRecoil.Invalidate();
+                        bShowingAltStats = false;
+                        RestoreAllNudEnabled(true);
+                        RestoreAllNudEnabled(false);
+                        ResetAltStatButtons();
                     }
-                    else
-                    {
-                        cmbWeaponsL.SelectedIndexChanged += (s, ev) => WeaponSelected(true, s, ev);
-                        cmbWeaponsR.SelectedIndexChanged += (s, ev) => WeaponSelected(false, s, ev);
-                        if (bShowingAltStats)
-                        {
-                            bShowingAltStats = false;
-                            RestoreAllNudEnabled(true);
-                            RestoreAllNudEnabled(false);
-                            ResetAltStatButtons();
-                        }
-                        wCurrentLeft = null;
-                        wCurrentRight = null;
-                        var wEmpty = new WeaponData();
-                        LoadWeaponToControls(wEmpty, true);
-                        LoadWeaponToControls(wEmpty, false);
-                        wSnapshotLeft = null;
-                        wSnapshotRight = null;
-                        UpdateAllDamage();
-                        pnlSpread.Invalidate();
-                        pnlRecoil.Invalidate();
-                    }
-                    UpdateC64Labels(rgWeapons.Count > 0);
-                    }
-                    catch (Exception ex)
-                    {
-                        LogService.Error(ex, "RefreshWeaponList.Invoke");
-                    }
-                });
-            });
+                    wCurrentLeft = null;
+                    wCurrentRight = null;
+                    var wEmpty = new WeaponData();
+                    LoadWeaponToControls(wEmpty, true);
+                    LoadWeaponToControls(wEmpty, false);
+                    wSnapshotLeft = null;
+                    wSnapshotRight = null;
+                    UpdateAllDamage();
+                    pnlSpread.Invalidate();
+                    pnlRecoil.Invalidate();
+                }
+                UpdateC64Labels(rgWeapons.Count > 0);
+            }
+            catch (Exception ex)
+            {
+                LogService.Error(ex, "RefreshWeaponList.Invoke");
+            }
         }
         catch (Exception ex)
         {
             LogService.Error(ex, "RefreshWeaponList");
-            this.Invoke(() => MessageBox.Show($"Refresh failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error));
+            MessageBox.Show($"Refresh failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally { bRefreshing = false; SetC64Status("READY."); }
     }
@@ -718,25 +709,31 @@ public partial class Form1
         cmb.SelectedIndex = 0;
     }
 
-    private void Form1_KeyDown(object? sender, KeyEventArgs e)
+    private async void Form1_KeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Control && e.Shift && e.KeyCode == Keys.S) { LogService.Debug("Hotkey: Ctrl+Shift+S"); e.SuppressKeyPress = true; FlashButton(btnQuickExport); BtnQuickExport_Click(sender, e); }
-        else if (e.Control && e.KeyCode == Keys.S) { LogService.Debug("Hotkey: Ctrl+S"); e.SuppressKeyPress = true; FlashButton(btnSave); BtnSave_Click(sender, e); }
-        else if (e.Control && e.KeyCode == Keys.Y) { LogService.Debug("Hotkey: Ctrl+Y (redo)"); e.SuppressKeyPress = true; PopRedo(); }
-        else if (e.Control && e.KeyCode == Keys.Z) { LogService.Debug("Hotkey: Ctrl+Z (undo)"); e.SuppressKeyPress = true; PopUndo(); }
-        else if (e.Control && e.KeyCode == Keys.D1) { LogService.Debug("Hotkey: Ctrl+1 (focus L)"); e.SuppressKeyPress = true; cmbWeaponsL.Focus(); cmbWeaponsL.DroppedDown = true; }
-        else if (e.Control && e.KeyCode == Keys.D2) { LogService.Debug("Hotkey: Ctrl+2 (focus R)"); e.SuppressKeyPress = true; cmbWeaponsR.Focus(); cmbWeaponsR.DroppedDown = true; }
-        else if (e.Control && e.KeyCode == Keys.R) { LogService.Debug("Hotkey: Ctrl+R (refresh)"); e.SuppressKeyPress = true; FlashButton(btnRefresh); RefreshWeaponList(); }
-        else if (e.Control && e.KeyCode is Keys.Up or Keys.Down or Keys.Left or Keys.Right) { LogService.Debug($"Hotkey: Ctrl+{e.KeyCode} (navigate focus)"); e.SuppressKeyPress = true; e.Handled = true; NavigateFocus(e.KeyCode); }
-        else if (e.KeyCode == Keys.F5) { LogService.Debug("Hotkey: F5 (refresh)"); e.SuppressKeyPress = true; FlashButton(btnRefresh); RefreshWeaponList(); }
-        #if DEBUG
-                else if (e.Control && e.Shift && e.KeyCode == Keys.F12)
-                {
-                    e.SuppressKeyPress = true;
-                    WeaponDamageCalc.Tools.CsvMapperTests.RunAll();
-                    WeaponDamageCalc.Tools.UndoTests.RunAll(this);
-                }
-        #endif
+        try
+        {
+            if (e.Control && e.Shift && e.KeyCode == Keys.S) { LogService.Debug("Hotkey: Ctrl+Shift+S"); e.SuppressKeyPress = true; FlashButton(btnQuickExport); BtnQuickExport_Click(sender, e); }
+            else if (e.Control && e.KeyCode == Keys.S) { LogService.Debug("Hotkey: Ctrl+S"); e.SuppressKeyPress = true; FlashButton(btnSave); BtnSave_Click(sender, e); }
+            else if (e.Control && e.KeyCode == Keys.Y) { LogService.Debug("Hotkey: Ctrl+Y (redo)"); e.SuppressKeyPress = true; PopRedo(); }
+            else if (e.Control && e.KeyCode == Keys.Z) { LogService.Debug("Hotkey: Ctrl+Z (undo)"); e.SuppressKeyPress = true; PopUndo(); }
+            else if (e.Control && e.KeyCode == Keys.D1) { LogService.Debug("Hotkey: Ctrl+1 (focus L)"); e.SuppressKeyPress = true; cmbWeaponsL.Focus(); cmbWeaponsL.DroppedDown = true; }
+            else if (e.Control && e.KeyCode == Keys.D2) { LogService.Debug("Hotkey: Ctrl+2 (focus R)"); e.SuppressKeyPress = true; cmbWeaponsR.Focus(); cmbWeaponsR.DroppedDown = true; }
+            else if ((e.Control && e.KeyCode == Keys.R) || e.KeyCode == Keys.F5) { LogService.Debug($"Hotkey: {(e.Control ? "Ctrl+R" : "F5")} (refresh)"); e.SuppressKeyPress = true; FlashButton(btnRefresh); await RefreshWeaponList(); }
+            else if (e.Control && e.KeyCode is Keys.Up or Keys.Down or Keys.Left or Keys.Right) { LogService.Debug($"Hotkey: Ctrl+{e.KeyCode} (navigate focus)"); e.SuppressKeyPress = true; e.Handled = true; NavigateFocus(e.KeyCode); }
+            #if DEBUG
+                    else if (e.Control && e.Shift && e.KeyCode == Keys.F12)
+                    {
+                        e.SuppressKeyPress = true;
+                        WeaponDamageCalc.Tools.CsvMapperTests.RunAll();
+                        await WeaponDamageCalc.Tools.UndoTests.RunAll(this);
+                    }
+            #endif
+        }
+        catch (Exception ex)
+        {
+            LogService.Error(ex, "Form1_KeyDown");
+        }
     }
     #endregion
 }

@@ -19,7 +19,7 @@ public static class UndoTests
     private static MethodInfo? s_miHasUnsavedChanges;
     private static readonly Dictionary<string, FieldInfo> mpFields = new();
 
-    public static void RunAll(Form1 frm)
+    public static async Task RunAll(Form1 frm)
     {
         s_frm = frm;
         var tForm = typeof(Form1);
@@ -503,7 +503,7 @@ public static class UndoTests
         tmrC64?.Stop(); tmrC64?.Dispose();
         var tmrSnap = (System.Windows.Forms.Timer?)tForm.GetField("tmrSnapshotCheck", BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(frm);
         tmrSnap?.Stop(); tmrSnap?.Dispose();
-        frm.RefreshWeaponList();
+        await frm.RefreshWeaponList();
         Task.Run(async () =>
         {
             await Task.Delay(1000);
