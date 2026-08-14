@@ -41,7 +41,7 @@ public static class WeaponScriptService
         [AltStatMode.Zombie] = "zombie_stats",
     };
 
-    private static readonly HashSet<string> hsNonFirearmTypes = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> hsNonStdFirearmTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "GrenadeLauncher", "RocketLauncher", "Melee", "Equipment",
         "SmokeGrenade", "Grenade", "RifleGrenade", "C4",
@@ -751,7 +751,7 @@ public static class WeaponScriptService
         if (sName.Contains("_zombie", StringComparison.OrdinalIgnoreCase)) return false;
         if (sName.StartsWith("weapon_cubemap", StringComparison.OrdinalIgnoreCase)) return false;
         var sType = ExtractValue(sContent, "WeaponType");
-        if (!string.IsNullOrEmpty(sType) && hsNonFirearmTypes.Contains(sType)) return false;
+        if (!string.IsNullOrEmpty(sType) && hsNonStdFirearmTypes.Contains(sType)) return false;
         if (ExtractValue(sContent, "ExplosionDamage") != null) return false;
         if (ExtractValue(sContent, "DamageGeneric") == null) return false;
         return true;
