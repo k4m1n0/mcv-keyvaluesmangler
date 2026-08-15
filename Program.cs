@@ -86,14 +86,7 @@ internal static class Program
         if (sGuiLogLvl != null)
         {
             LogService.Enabled = true;
-            LogService.MinLevel = sGuiLogLvl.ToLowerInvariant() switch
-            {
-                "debug" => LogService.Level.Debug,
-                "info"  => LogService.Level.Info,
-                "warn"  => LogService.Level.Warn,
-                "error" => LogService.Level.Error,
-                _       => LogService.Level.Debug
-            };
+            LogService.MinLevel = ParseLogLevel(sGuiLogLvl, LogService.Level.Debug);
         }
 
         Application.EnableVisualStyles();
@@ -108,13 +101,14 @@ internal static class Program
         return 0;
     }
 
-    static LogService.Level ParseLogLevel(string sLevel) => sLevel.ToLowerInvariant() switch
+static LogService.Level ParseLogLevel(string sLevel, LogService.Level lvlDefault = LogService.Level.Warn) =>
+    sLevel.ToLowerInvariant() switch
     {
         "debug" => LogService.Level.Debug,
         "info"  => LogService.Level.Info,
         "warn"  => LogService.Level.Warn,
         "error" => LogService.Level.Error,
-        _       => LogService.Level.Warn
+        _       => lvlDefault
     };
 
     static int RunCliMode(string[] rgArgs, LogService.Level lvlLog)
