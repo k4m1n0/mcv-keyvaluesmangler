@@ -10,180 +10,180 @@ namespace WeaponDamageCalc;
 
 public partial class Form1
 {
-    private CancellationTokenSource? _flashCts;
-    private Control? _flashTarget;
-    private Color _flashOldColor;
-    private const double MaxHorizontalDistance = 460;
-    private const double MaxVerticalDistance = 620;
-    private const double CrossAxisPenalty = 1.5;//跨轴距离惩罚系数
-    private const double SameAxisFarThreshold = 60;//bestSame超过此距离时考虑bestAny
+    private CancellationTokenSource? ctsFlash = null;
+    private Control? ctrlFlashTarget = null;
+    private Color cFlashOldColor;
+    private const double dMaxHorizontalDistance = 460;
+    private const double dMaxVerticalDistance = 620;
+    private const double dCrossAxisPenalty = 1.5;//跨轴距离惩罚系数
+    private const double dSameAxisFarThreshold = 60;//bestSame超过此距离时考虑bestAny
 
-    private void NavigateFocus(Keys dir)
+    private void NavigateFocus(Keys kDir)
     {
-        var cur = ActiveControl;
-        if (cur == null) return;
+        var ctrlCur = ActiveControl;
+        if (ctrlCur == null) return;
 
-        if (cur is TextBox && cur.Parent is NumericUpDown nud)
+        if (ctrlCur is TextBox && ctrlCur.Parent is NumericUpDown nud)
         {
-            cur = nud;
+            ctrlCur = nud;
         }
 
-        var target = FindNearest(cur, dir);
-        if (target == null) return;
+        var ctrlTarget = FindNearest(ctrlCur, kDir);
+        if (ctrlTarget == null) return;
 
-        LogService.Debug($"Nav: {cur.Name ?? cur.GetType().Name} -> {target.Name ?? target.GetType().Name} ({dir})");
+        LogService.Debug($"Nav: {ctrlCur.Name ?? ctrlCur.GetType().Name} -> {ctrlTarget.Name ?? ctrlTarget.GetType().Name} ({kDir})");
 
-        target.Focus();
-        ScrollToVisible(target);
-        FlashControl(target);
+        ctrlTarget.Focus();
+        ScrollToVisible(ctrlTarget);
+        FlashControl(ctrlTarget);
     }
 
     //优先保持行/列不动 跨轴控件只在同轴缺失时才作为兜底
-    private Control? FindNearest(Control cur, Keys dir)
+    private Control? FindNearest(Control ctrlCur, Keys kDir)
     {
-        var curBounds = BoundsInForm(cur);
-        bool vertical = dir is Keys.Up or Keys.Down;
+        var rctCurBounds = BoundsInForm(ctrlCur);
+        bool bVertical = kDir is Keys.Up or Keys.Down;
 
-        Control? bestSame = null;
-        double bestSameDist = double.MaxValue;
-        Control? bestAny = null;
-        double bestAnyDist = double.MaxValue;
-        bool curIsButton = cur is Button;
+        Control? ctrlBestSame = null;
+        double dBestSameDist = double.MaxValue;
+        Control? ctrlBestAny = null;
+        double dBestAnyDist = double.MaxValue;
+        bool bCurIsButton = ctrlCur is Button;
 
-        foreach (var c in GetNavigableControls())
+        foreach (var ctrl in GetNavigableControls())
         {
-            if (c == cur) continue;
-            var cBounds = BoundsInForm(c);
+            if (ctrl == ctrlCur) continue;
+            var rctCtrlBounds = BoundsInForm(ctrl);
 
-            if (cur.Parent == c || c.Parent == cur)
+            if (ctrlCur.Parent == ctrl || ctrl.Parent == ctrlCur)
             {
                 continue;
             }
 
-            double dx, dy;
-            if (dir == Keys.Right)
-                dx = cBounds.Left - curBounds.Right;
-            else if (dir == Keys.Left)
-                dx = curBounds.Left - cBounds.Right;
+            double dDx, dDy;
+            if (kDir == Keys.Right)
+                dDx = rctCtrlBounds.Left - rctCurBounds.Right;
+            else if (kDir == Keys.Left)
+                dDx = rctCurBounds.Left - rctCtrlBounds.Right;
             else
-                dx = cBounds.Left + cBounds.Width / 2.0 - (curBounds.Left + curBounds.Width / 2.0);
+                dDx = rctCtrlBounds.Left + rctCtrlBounds.Width / 2.0 - (rctCurBounds.Left + rctCurBounds.Width / 2.0);
 
-            if (dir == Keys.Down)
-                dy = cBounds.Top - curBounds.Bottom;
-            else if (dir == Keys.Up)
-                dy = curBounds.Top - cBounds.Bottom;
+            if (kDir == Keys.Down)
+                dDy = rctCtrlBounds.Top - rctCurBounds.Bottom;
+            else if (kDir == Keys.Up)
+                dDy = rctCurBounds.Top - rctCtrlBounds.Bottom;
             else
-                dy = cBounds.Top + cBounds.Height / 2.0 - (curBounds.Top + curBounds.Height / 2.0);
+                dDy = rctCtrlBounds.Top + rctCtrlBounds.Height / 2.0 - (rctCurBounds.Top + rctCurBounds.Height / 2.0);
 
-            const double overlapTolerance = 10;
-            if (dir == Keys.Right && dx < -overlapTolerance) continue;
-            if (dir == Keys.Left && dx < -overlapTolerance) continue;
-            if (dir == Keys.Down && dy < -overlapTolerance) continue;
-            if (dir == Keys.Up && dy < -overlapTolerance) continue;
+            const double dOverlapTolerance = 10;
+            if (kDir == Keys.Right && dDx < -dOverlapTolerance) continue;
+            if (kDir == Keys.Left && dDx < -dOverlapTolerance) continue;
+            if (kDir == Keys.Down && dDy < -dOverlapTolerance) continue;
+            if (kDir == Keys.Up && dDy < -dOverlapTolerance) continue;
 
-            double main = vertical ? Math.Abs(dy) : Math.Abs(dx);
-            double cross = vertical ? Math.Abs(dx) : Math.Abs(dy);
+            double dMain = bVertical ? Math.Abs(dDy) : Math.Abs(dDx);
+            double dCross = bVertical ? Math.Abs(dDx) : Math.Abs(dDy);
 
-            if (vertical && Math.Abs(dy) > MaxVerticalDistance) continue;
-            if (!vertical && Math.Abs(dx) > MaxHorizontalDistance) continue;
+            if (bVertical && Math.Abs(dDy) > dMaxVerticalDistance) continue;
+            if (!bVertical && Math.Abs(dDx) > dMaxHorizontalDistance) continue;
 
-            if (curIsButton && c is not Button && vertical)
+            if (bCurIsButton && ctrl is not Button && bVertical)
             {
-                main *= 10.0;
+                dMain *= 10.0;
             }
 
-            if (curIsButton && c is Button && vertical)
+            if (bCurIsButton && ctrl is Button && bVertical)
             {
-                main *= 0.3;
+                dMain *= 0.3;
             }
 
-            bool sameAxis;
-            if (vertical)
+            bool bSameAxis;
+            if (bVertical)
             {
-                sameAxis = !(cBounds.Right < curBounds.Left || cBounds.Left > curBounds.Right);
-            }
-            else
-            {
-                sameAxis = !(cBounds.Bottom < curBounds.Top || cBounds.Top > curBounds.Bottom);
-            }
-
-            if (sameAxis)
-            {
-                if (main < bestSameDist) { bestSameDist = main; bestSame = c; }
+                bSameAxis = !(rctCtrlBounds.Right < rctCurBounds.Left || rctCtrlBounds.Left > rctCurBounds.Right);
             }
             else
             {
-                if (!vertical && Math.Abs(dy) > Math.Max(curBounds.Height, cBounds.Height) * 2.0)
+                bSameAxis = !(rctCtrlBounds.Bottom < rctCurBounds.Top || rctCtrlBounds.Top > rctCurBounds.Bottom);
+            }
+
+            if (bSameAxis)
+            {
+                if (dMain < dBestSameDist) { dBestSameDist = dMain; ctrlBestSame = ctrl; }
+            }
+            else
+            {
+                if (!bVertical && Math.Abs(dDy) > Math.Max(rctCurBounds.Height, rctCtrlBounds.Height) * 2.0)
                 {
                     continue;
                 }
-                if (vertical && Math.Abs(dx) > Math.Max(curBounds.Width, cBounds.Width) * 2.0)
+                if (bVertical && Math.Abs(dDx) > Math.Max(rctCurBounds.Width, rctCtrlBounds.Width) * 2.0)
                 {
                     continue;
                 }
-                double score = main * CrossAxisPenalty + cross;
-                if (score < bestAnyDist)
+                double dScore = dMain * dCrossAxisPenalty + dCross;
+                if (dScore < dBestAnyDist)
                 {
-                    bestAnyDist = score; bestAny = c;
+                    dBestAnyDist = dScore; ctrlBestAny = ctrl;
                 }
             }
         }
 
-        if (bestSame != null && bestAny != null && bestAnyDist < bestSameDist * 0.5)
+        if (ctrlBestSame != null && ctrlBestAny != null && dBestAnyDist < dBestSameDist * 0.5)
         {
-            return bestAny;
+            return ctrlBestAny;
         }
-        return bestSame ?? bestAny;
+        return ctrlBestSame ?? ctrlBestAny;
     }
 
     private IEnumerable<Control> GetNavigableControls()
     {
-        foreach (var c in GetAllDescendants(this))
-            if (c.CanSelect && c.TabStop && c.Visible && c.Enabled && c is not (TextBox and { Parent: NumericUpDown }))
-                yield return c;
+        foreach (var ctrl in GetAllDescendants(this))
+            if (ctrl.CanSelect && ctrl.TabStop && ctrl.Visible && ctrl.Enabled && ctrl is not (TextBox and { Parent: NumericUpDown }))
+                yield return ctrl;
     }
 
-    private Rectangle BoundsInForm(Control c)
+    private Rectangle BoundsInForm(Control ctrl)
     {
-        var tl = c.PointToScreen(Point.Empty);
-        var br = c.PointToScreen(new Point(c.Width, c.Height));
-        var tlClient = PointToClient(tl);
-        var brClient = PointToClient(br);
-        return new Rectangle(tlClient.X, tlClient.Y, brClient.X - tlClient.X, brClient.Y - tlClient.Y);
+        var ptTopLeft = ctrl.PointToScreen(Point.Empty);
+        var ptBottomRight = ctrl.PointToScreen(new Point(ctrl.Width, ctrl.Height));
+        var ptTopLeftClient = PointToClient(ptTopLeft);
+        var ptBottomRightClient = PointToClient(ptBottomRight);
+        return new Rectangle(ptTopLeftClient.X, ptTopLeftClient.Y, ptBottomRightClient.X - ptTopLeftClient.X, ptBottomRightClient.Y - ptTopLeftClient.Y);
     }
 
-    private static void ScrollToVisible(Control c)
+    private static void ScrollToVisible(Control ctrl)
     {
-        for (var p = c.Parent; p != null; p = p.Parent)
-            if (p is ScrollableControl { AutoScroll: true } sc)
-                sc.ScrollControlIntoView(c);
+        for (var ctrlParent = ctrl.Parent; ctrlParent != null; ctrlParent = ctrlParent.Parent)
+            if (ctrlParent is ScrollableControl { AutoScroll: true } sc)
+                sc.ScrollControlIntoView(ctrl);
     }
 
     //快速连按时先还原上一个 避免残留高亮色
-    private async void FlashControl(Control c)
+    private async void FlashControl(Control ctrl)
     {
-        if (_flashTarget != null)
+        if (ctrlFlashTarget != null)
         {
-            _flashTarget.BackColor = _flashOldColor;
-            _flashCts?.Cancel();
-            _flashCts?.Dispose();
+            ctrlFlashTarget.BackColor = cFlashOldColor;
+            ctsFlash?.Cancel();
+            ctsFlash?.Dispose();
         }
 
-        _flashTarget = c;
-        _flashOldColor = c.BackColor;
-        _flashCts = new CancellationTokenSource();
-        var cts = _flashCts;
-        var target = c;
-        var old = _flashOldColor;
+        ctrlFlashTarget = ctrl;
+        cFlashOldColor = ctrl.BackColor;
+        ctsFlash = new CancellationTokenSource();
+        var ctsCur = ctsFlash;
+        var ctrlTarget = ctrl;
+        var cOld = cFlashOldColor;
 
-        target.BackColor = Color.FromArgb(150, 150, 150);
+        ctrlTarget.BackColor = Color.FromArgb(150, 150, 150);
         try
         {
-            await Task.Delay(300, cts.Token);
-            if (ReferenceEquals(_flashTarget, target))
+            await Task.Delay(300, ctsCur.Token);
+            if (ReferenceEquals(ctrlFlashTarget, ctrlTarget))
             {
-                target.BackColor = old;
-                _flashTarget = null;
+                ctrlTarget.BackColor = cOld;
+                ctrlFlashTarget = null;
             }
         }
         catch (TaskCanceledException) { }
