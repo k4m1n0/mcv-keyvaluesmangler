@@ -312,9 +312,9 @@ Examples:
                     var sScripts = Arg(rgArgs, 2) ?? ".";
                     bool bSingle = HasFlag(rgArgs, "--single");
                     if (sPage == null) { Console.WriteLine("Usage: --wiki-dryrun <page> <scripts_dir> [--single] [--verbose]"); return iErrUsage; }
-                    var (sFinalPage, sResult, iCode) = await FetchAndConvertAsync(sPage, sScripts, bSingle, bVerbose);
+                    var (sResolvedPage, sResult, iCode) = await FetchAndConvertAsync(sPage, sScripts, bSingle, bVerbose);
                     if (iCode != iOk || sResult == null) return iCode;
-                    string sFn = sFinalPage.Replace(" ", "_").Replace("/", "_") + ".txt";
+                    string sFn = sResolvedPage.Replace(" ", "_").Replace("/", "_") + ".txt";
                     WikiService.SaveToWikiDir(sFn, sResult);
                     Console.WriteLine($"Saved: {WikiService.GetWikiDir()}\\{sFn}  ({sResult.Split('\n').Length} lines)");
                     return iOk;
@@ -329,11 +329,11 @@ Examples:
                     if (sPage == null || sUser == null || sPw == null) { Console.WriteLine("Usage: --wiki-upload <page> <scripts_dir> --user <u> --pw <p> [--single] [--verbose]"); return iErrUsage; }
                     Verbose("Logging in...", bVerbose);
                     if (!await WikiService.LoginAsync(sUser, sPw)) { Console.WriteLine("Login failed"); return iErrLogin; }
-                    var (sFinalPage, sResult, iCode) = await FetchAndConvertAsync(sPage, sScripts, bSingle, bVerbose);
+                    var (sResolvedPage, sResult, iCode) = await FetchAndConvertAsync(sPage, sScripts, bSingle, bVerbose);
                     if (iCode != iOk || sResult == null) return iCode;
-                    if (await WikiApiService.IsSameContentAsync(sFinalPage, sResult)) { Console.WriteLine("Unchanged, skip"); return iOk; }
+                    if (await WikiApiService.IsSameContentAsync(sResolvedPage, sResult)) { Console.WriteLine("Unchanged, skip"); return iOk; }
                     Verbose("Uploading...", bVerbose);
-                    bool bOk = await WikiApiService.SavePageAsync(sFinalPage, sResult, "Update weapon data from scripts");
+                    bool bOk = await WikiApiService.SavePageAsync(sResolvedPage, sResult, "Update weapon data from scripts");
                     Console.WriteLine(bOk ? "Saved!" : "Save failed");
                     return bOk ? iOk : iErrException;
                 }
