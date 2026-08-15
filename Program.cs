@@ -260,6 +260,19 @@ Examples:
         return (sPage, sResult, iOk);
     }
 
+    static async Task<(List<string>? rgLinks, int iCode)> FetchWeaponLinksAsync(
+        string sSummaryPage, bool bVerbose)
+    {
+        Verbose($"Fetching summary: {sSummaryPage}", bVerbose);
+        var sSource = await WikiApiService.GetPageSourceAsync(sSummaryPage);
+        if (sSource == null) { Console.WriteLine($"Page not found: {sSummaryPage}"); return (null, iErrPageNotFound); }
+        Verbose("Building script index...", bVerbose);
+        var mpIndex = await WikiService.BuildScriptIndexAsync();
+        var rgLinks = WikiService.ExtractWeaponLinks(sSource, mpIndex);
+        if (rgLinks.Count == 0) { Console.WriteLine("No weapon links found"); return (null, iOk); }
+        return (rgLinks, iOk);
+    }
+
     static async Task<int> RunCli(string[] rgArgs)
     {
         var sCmd = rgArgs[0].ToLowerInvariant();
@@ -380,13 +393,8 @@ Examples:
 
     static async Task<int> RunBatchDryrun(string sSummaryPage, string sScriptsDir, bool bSkipCached, bool bVerbose)
     {
-        Verbose($"Fetching summary: {sSummaryPage}", bVerbose);
-        var sSource = await WikiApiService.GetPageSourceAsync(sSummaryPage);
-        if (sSource == null) { Console.WriteLine($"Page not found: {sSummaryPage}"); return iErrPageNotFound; }
-        Verbose("Building script index...", bVerbose);
-        var mpIndex = await WikiService.BuildScriptIndexAsync();
-        var rgLinks = WikiService.ExtractWeaponLinks(sSource, mpIndex);
-        if (rgLinks.Count == 0) { Console.WriteLine("No weapon links found"); return iOk; }
+        var (rgLinks, iCode) = await FetchWeaponLinksAsync(sSummaryPage, bVerbose);
+        if (rgLinks == null) return iCode;
 
         string sWikiDir = WikiService.GetWikiDir();
         Directory.CreateDirectory(sWikiDir);
@@ -434,13 +442,8 @@ Examples:
 
     static async Task<int> RunBatchUpload(string sSummaryPage, string sScriptsDir, bool bVerbose)
     {
-        Verbose($"Fetching summary: {sSummaryPage}", bVerbose);
-        var sSource = await WikiApiService.GetPageSourceAsync(sSummaryPage);
-        if (sSource == null) { Console.WriteLine($"Page not found: {sSummaryPage}"); return iErrPageNotFound; }
-        Verbose("Building script index...", bVerbose);
-        var mpIndex = await WikiService.BuildScriptIndexAsync();
-        var rgLinks = WikiService.ExtractWeaponLinks(sSource, mpIndex);
-        if (rgLinks.Count == 0) { Console.WriteLine("No weapon links found"); return iOk; }
+        var (rgLinks, iCode) = await FetchWeaponLinksAsync(sSummaryPage, bVerbose);
+        if (rgLinks == null) return iCode;
 
         string sWikiDir = WikiService.GetWikiDir();
         if (!Directory.Exists(sWikiDir)) { Console.WriteLine("No wiki folder found. Run --batch-dryrun first."); return iErrUsage; }
