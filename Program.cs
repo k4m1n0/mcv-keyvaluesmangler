@@ -241,6 +241,25 @@ Examples:
         if (bVerbose) Console.WriteLine($"  [{DateTime.Now:HH:mm:ss}] {sMsg}");
     }
 
+    //提取wiki-dryrun和wiki-upload的公共逻辑：获取+反查+转换
+    static async Task<(string sPage, string? sResult, int iCode)> FetchAndConvertAsync(
+        string sPage, string sScripts, bool bSingle, bool bVerbose)
+    {
+        Verbose($"Fetching: {sPage}", bVerbose);
+        var sSource = await WikiApiService.GetPageSourceAsync(sPage);
+        if (sSource == null)
+        {
+            //反查脚本名
+            var mpIdx = await WikiService.BuildScriptIndexAsync();
+            string? sFound = WikiService.ReverseLookup(sPage, mpIdx);
+            if (sFound != null) { sPage = sFound; sSource = await WikiApiService.GetPageSourceAsync(sFound); }
+        }
+        if (sSource == null) { Console.WriteLine($"Page not found: {sPage}"); return (sPage, null, iErrPageNotFound); }
+        Verbose("Converting...", bVerbose);
+        var sResult = bSingle ? WikiTableConverter.Convert(sSource, sScripts) : WikiService.ConvertWikiSource(sSource, sScripts, null);
+        return (sPage, sResult, iOk);
+    }
+
     static async Task<int> RunCli(string[] rgArgs)
     {
         var sCmd = rgArgs[0].ToLowerInvariant();
@@ -293,19 +312,9 @@ Examples:
                     var sScripts = Arg(rgArgs, 2) ?? ".";
                     bool bSingle = HasFlag(rgArgs, "--single");
                     if (sPage == null) { Console.WriteLine("Usage: --wiki-dryrun <page> <scripts_dir> [--single] [--verbose]"); return iErrUsage; }
-                    Verbose($"Fetching: {sPage}", bVerbose);
-                    var sSource = await WikiApiService.GetPageSourceAsync(sPage);
-                    if (sSource == null)
-                    {
-                        //反查脚本名
-                        var mpIdx = await WikiService.BuildScriptIndexAsync();
-                        string? sFound = WikiService.ReverseLookup(sPage, mpIdx);
-                        if (sFound != null) { sPage = sFound; sSource = await WikiApiService.GetPageSourceAsync(sFound); }
-                    }
-                    if (sSource == null) { Console.WriteLine($"Page not found: {sPage}"); return iErrPageNotFound; }
-                    Verbose("Converting...", bVerbose);
-                    var sResult = bSingle ? WikiTableConverter.Convert(sSource, sScripts) : WikiService.ConvertWikiSource(sSource, sScripts, null);
-                    string sFn = sPage.Replace(" ", "_").Replace("/", "_") + ".txt";
+                    var (sFinalPage, sResult, iCode) = await FetchAndConvertAsync(sPage, sScripts, bSingle, bVerbose);
+                    if (iCode != iOk || sResult == null) return iCode;
+                    string sFn = sFinalPage.Replace(" ", "_").Replace("/", "_") + ".txt";
                     WikiService.SaveToWikiDir(sFn, sResult);
                     Console.WriteLine($"Saved: {WikiService.GetWikiDir()}\\{sFn}  ({sResult.Split('\n').Length} lines)");
                     return iOk;
@@ -320,21 +329,11 @@ Examples:
                     if (sPage == null || sUser == null || sPw == null) { Console.WriteLine("Usage: --wiki-upload <page> <scripts_dir> --user <u> --pw <p> [--single] [--verbose]"); return iErrUsage; }
                     Verbose("Logging in...", bVerbose);
                     if (!await WikiService.LoginAsync(sUser, sPw)) { Console.WriteLine("Login failed"); return iErrLogin; }
-                    Verbose($"Fetching: {sPage}", bVerbose);
-                    var sSource = await WikiApiService.GetPageSourceAsync(sPage);
-                    if (sSource == null)
-                    {
-                        //反查
-                        var mpIdx = await WikiService.BuildScriptIndexAsync();
-                        string? sFound = WikiService.ReverseLookup(sPage, mpIdx);
-                        if (sFound != null) { sPage = sFound; sSource = await WikiApiService.GetPageSourceAsync(sFound); }
-                    }
-                    if (sSource == null) { Console.WriteLine($"Page not found: {sPage}"); return iErrPageNotFound; }
-                    Verbose("Converting...", bVerbose);
-                    var sResult = bSingle ? WikiTableConverter.Convert(sSource, sScripts) : WikiService.ConvertWikiSource(sSource, sScripts, null);
-                    if (await WikiApiService.IsSameContentAsync(sPage, sResult)) { Console.WriteLine("Unchanged, skip"); return iOk; }
+                    var (sFinalPage, sResult, iCode) = await FetchAndConvertAsync(sPage, sScripts, bSingle, bVerbose);
+                    if (iCode != iOk || sResult == null) return iCode;
+                    if (await WikiApiService.IsSameContentAsync(sFinalPage, sResult)) { Console.WriteLine("Unchanged, skip"); return iOk; }
                     Verbose("Uploading...", bVerbose);
-                    bool bOk = await WikiApiService.SavePageAsync(sPage, sResult, "Update weapon data from scripts");
+                    bool bOk = await WikiApiService.SavePageAsync(sFinalPage, sResult, "Update weapon data from scripts");
                     Console.WriteLine(bOk ? "Saved!" : "Save failed");
                     return bOk ? iOk : iErrException;
                 }
