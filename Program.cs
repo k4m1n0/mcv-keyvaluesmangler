@@ -70,9 +70,10 @@ internal static class Program
         using var hMutex = new Mutex(true, sMutexName, out bool bCreatedNew);
         if (!bCreatedNew)
         {
-            LogService.Info("Mutex locked - another instance is already running in this folder");
-            MessageBox.Show("Only one instance of the same folder can be running at one time.",
-                "Mangler - Warning", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            LogService.Warn("Mutex locked - another instance is already running in this folder");
+            if (rgCliArgsArr.Length == 0)
+                MessageBox.Show("Only one instance of the same folder can be running at one time.",
+                    "Mangler - Warning", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return 0;
         }
 
