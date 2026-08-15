@@ -59,8 +59,8 @@ public static class WikiService
                 string sContent = WeaponScriptService.ReadScriptFile(sPath).Replace("\r\n", "\n");
                 //从脚本中提取"printname"字段的双引号值
                 var mPm = Regex.Match(sContent, @"""printname""\s+""([^""]*)""");
-                string sD = mPm.Success ? mPm.Groups[1].Value.TrimStart('#') : sSn;
-                if (!mpMap.ContainsKey(sD.Replace("_", " "))) mpMap[sD.Replace("_", " ")] = sSn;
+                string sD = (mPm.Success ? mPm.Groups[1].Value.TrimStart('#') : sSn).Replace("_", " ");
+                if (!mpMap.ContainsKey(sD)) mpMap[sD] = sSn;
             }
             LogService.Info($"Printname map built: {mpMap.Count} entries");
             return WikiTableConverter.ConvertSummaryPage(sInput, sScriptsDir, mpMap);
@@ -80,6 +80,19 @@ public static class WikiService
         var rgResult = hsLinks.OrderBy(s => s).ToList();
         LogService.Info($"ExtractWeaponLinks: {rgResult.Count} links found");
         return rgResult;
+    }
+
+    //构建反向索引 避免循环内FirstOrDefault线性扫描
+    public static Dictionary<string, string> BuildScriptToTitleIndex(Dictionary<string, string>? mpTitleToScript)
+    {
+        var mpScriptToTitle = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (mpTitleToScript == null) return mpScriptToTitle;
+        foreach (var kvp in mpTitleToScript)
+        {
+            if (!mpScriptToTitle.ContainsKey(kvp.Value))
+                mpScriptToTitle[kvp.Value] = kvp.Key;
+        }
+        return mpScriptToTitle;
     }
 
     public static string GetWikiDir() => Path.Combine(AppContext.BaseDirectory, "wiki");

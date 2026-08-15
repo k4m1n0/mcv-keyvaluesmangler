@@ -9,11 +9,7 @@ public static class LogService
 {
     public enum Level { Debug, Info, Warn, Error, Fatal }
 
-#if DEBUG
-    private static bool bEnabled = true;
-#else
-    private static bool bEnabled = false;//手动开关
-#endif
+    private static bool bEnabled = true;//global kill switch for all logging (fatal bypasses)
 
     private static Level lvlMin = Level.Debug;
     private static readonly object oLock = new();

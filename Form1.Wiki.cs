@@ -85,52 +85,38 @@ public partial class Form1
         bool bDryRunDone = false, bBatchDryDone = false;
         CancellationTokenSource? ctsDryRun = null, ctsBatch = null, ctsGen = null;
 
-        //page改变时清空source和状态
-        txtPage.TextChanged += (_, _) =>
-        {
-            string sT = txtPage.Text;
-            //从URL或wikitext提取标题 匹配wiki/或title=之后 直到? # &为止的片段
-            var mUrl = Regex.Match(sT, @"(?:wiki/|title=)([^?#&]+)");
-            if (mUrl.Success)
-            {
-                string sExtracted = Uri.UnescapeDataString(mUrl.Groups[1].Value).Replace('_', ' ');
-                if (sT != sExtracted)
-                {
-                    txtPage.Text = sExtracted;
-                    txtPage.SelectionStart = sExtracted.Length;
-                    sT = sExtracted;
-                }
-            }
-            if (sT != sLastPageText)
-            {
-                sLastPageText = sT;
-                txtInput.Clear();
-                txtOutput.Clear();
-                bOutputEditable = false;
-                txtOutput.ReadOnly = true;
-                txtOutput.BackColor = bDarkMode ? Color.FromArgb(40, 40, 40) : SystemColors.Control;
-                mpTitleToScript = null;
-                if (bDryRunDone) { bDryRunDone = false; btnDryRun.Text = "DryRun"; btnDryRun.BackColor = cWikiInactive; SetEditControlsEnabled(btnConvert, btnSelectDir, true); }
-                if (bBatchDryDone) { bBatchDryDone = false; btnBatchDR.Text = "BatchDR"; btnBatchDR.BackColor = cWikiInactive; SetEditControlsEnabled(btnConvert, btnSelectDir, true); }
-                if (ctsGen != null) { ctsGen.Cancel(); ctsGen.Dispose(); ctsGen = null; }
-                SetGenerateState(btnGenerate, GenState.Ready);
-            }
-        };
-
-        void ResetBatchState()
-        {
-            bBatchDryDone = false; btnBatchDR.Text = "BatchDR"; btnBatchDR.BackColor = cWikiInactive;
-            bDryRunDone = false; btnDryRun.Text = "DryRun"; btnDryRun.BackColor = cWikiInactive;
-            SetEditControlsEnabled(btnConvert, btnSelectDir, true);
-            bOutputEditable = false;
-            txtOutput.ReadOnly = true;
-            txtOutput.BackColor = bDarkMode ? Color.FromArgb(40, 40, 40) : SystemColors.Control;
-        }
-
         void SetEditControlsEnabled(Button btnConv, Button btnDir, bool bEnabled)
         {
             btnConv.Enabled = bEnabled;
             btnDir.Enabled = bEnabled;
+        }
+
+        void SetOutputEditable(bool bEditable)
+        {
+            bOutputEditable = bEditable;
+            txtOutput.ReadOnly = !bEditable;
+            if (bEditable)
+                txtOutput.BackColor = bDarkMode ? Color.FromArgb(50, 50, 50) : SystemColors.Window;
+            else
+                txtOutput.BackColor = bDarkMode ? Color.FromArgb(40, 40, 40) : SystemColors.Control;
+        }
+
+        void ResetDryRunState()
+        {
+            bDryRunDone = false; btnDryRun.Text = "DryRun"; btnDryRun.BackColor = cWikiInactive;
+        }
+
+        void ResetBatchDryState()
+        {
+            bBatchDryDone = false; btnBatchDR.Text = "BatchDR"; btnBatchDR.BackColor = cWikiInactive;
+        }
+
+        void ResetBatchState()
+        {
+            ResetDryRunState();
+            ResetBatchDryState();
+            SetEditControlsEnabled(btnConvert, btnSelectDir, true);
+            SetOutputEditable(false);
         }
 
         void PickDir()
@@ -193,12 +179,7 @@ public partial class Form1
             btnDryRun.Text = bDryRunDone ? "Upload" : "DryRun";
             btnDryRun.BackColor = bDryRunDone ? cWikiActive : cWikiInactive;
             SetEditControlsEnabled(btnConvert, btnSelectDir, !bDryRunDone);
-            bOutputEditable = bDryRunDone;
-            txtOutput.ReadOnly = !bOutputEditable;
-            if (bOutputEditable)
-                txtOutput.BackColor = bDarkMode ? Color.FromArgb(50, 50, 50) : SystemColors.Window;
-            else
-                txtOutput.BackColor = bDarkMode ? Color.FromArgb(40, 40, 40) : SystemColors.Control;
+            SetOutputEditable(bDryRunDone);
         }
 
         void ToggleBatch()
@@ -208,6 +189,40 @@ public partial class Form1
             btnBatchDR.BackColor = bBatchDryDone ? cWikiActive : cWikiInactive;
             SetEditControlsEnabled(btnConvert, btnSelectDir, !bBatchDryDone);
         }
+
+        //page改变时清空source和状态
+        txtPage.TextChanged += (_, _) =>
+        {
+            string sT = txtPage.Text;
+            //从URL或wikitext提取标题 匹配wiki/或title=之后 直到? # &为止的片段
+            var mUrl = Regex.Match(sT, @"(?:wiki/|title=)([^?#&]+)");
+            if (mUrl.Success)
+            {
+                string sExtracted = Uri.UnescapeDataString(mUrl.Groups[1].Value).Replace('_', ' ');
+                if (sT != sExtracted)
+                {
+                    txtPage.Text = sExtracted;
+                    txtPage.SelectionStart = sExtracted.Length;
+                    sT = sExtracted;
+                }
+            }
+            if (sT != sLastPageText)
+            {
+                sLastPageText = sT;
+                txtInput.Clear();
+                txtOutput.Clear();
+                SetOutputEditable(false);
+                mpTitleToScript = null;
+                if (bDryRunDone || bBatchDryDone)
+                {
+                    if (bDryRunDone) ResetDryRunState();
+                    if (bBatchDryDone) ResetBatchDryState();
+                    SetEditControlsEnabled(btnConvert, btnSelectDir, true);
+                }
+                if (ctsGen != null) { ctsGen.Cancel(); ctsGen.Dispose(); ctsGen = null; }
+                SetGenerateState(btnGenerate, GenState.Ready);
+            }
+        };
 
         btnSelectDir.Click += (_, _) =>
         {
@@ -226,8 +241,8 @@ public partial class Form1
             }
             if (ctsDryRun != null) { lblStatus.Text = "DryRun is running"; return; }
             if (ctsBatch != null) { lblStatus.Text = "Batch is running"; return; }
-            if (bDryRunDone) { bDryRunDone = false; btnDryRun.Text = "DryRun"; btnDryRun.BackColor = cWikiInactive; SetEditControlsEnabled(btnConvert, btnSelectDir, true); bOutputEditable = false; txtOutput.ReadOnly = true; txtOutput.BackColor = bDarkMode ? Color.FromArgb(40, 40, 40) : SystemColors.Control; }
-            if (bBatchDryDone) { bBatchDryDone = false; btnBatchDR.Text = "BatchDR"; btnBatchDR.BackColor = cWikiInactive; SetEditControlsEnabled(btnConvert, btnSelectDir, true); }
+            if (bDryRunDone) { ResetDryRunState(); SetEditControlsEnabled(btnConvert, btnSelectDir, true); SetOutputEditable(false); }
+            if (bBatchDryDone) { ResetBatchDryState(); SetEditControlsEnabled(btnConvert, btnSelectDir, true); }
 
             if (gsState == GenState.Generated && sGenDir != null && Directory.Exists(sGenDir))
             {
@@ -313,6 +328,7 @@ public partial class Form1
                 }
                 ctsGen.Token.ThrowIfCancellationRequested();
                 Out($"Index: {mpTitleToScript?.Count ?? 0} entries");
+                var mpScriptToTitle = WikiService.BuildScriptToTitleIndex(mpTitleToScript);
                 lblStatus.Text = "Fetching templates...";
                 string sDefaultTemplate = await WikiApiService.FetchTemplateAsync(Tools.WikiPageGenerator.sDefaultTemplateUrl) ?? "Template fetch failed";
                 string sLmgTemplate = await WikiApiService.FetchTemplateAsync(Tools.WikiPageGenerator.sLmgTemplateUrl) ?? sDefaultTemplate;
@@ -329,11 +345,8 @@ public partial class Form1
                 foreach (var gpPage in rgGenerated)
                 {
                     string? sWikiTitle = null;
-                    if (mpTitleToScript != null)
-                    {
-                        var kvpMatch = mpTitleToScript.FirstOrDefault(kvp => kvp.Value.Equals(gpPage.ScriptName, StringComparison.OrdinalIgnoreCase));
-                        if (!string.IsNullOrEmpty(kvpMatch.Key)) sWikiTitle = kvpMatch.Key;
-                    }
+                    if (gpPage.ScriptName != null && mpScriptToTitle.TryGetValue(gpPage.ScriptName, out string? sT) && !string.IsNullOrEmpty(sT))
+                        sWikiTitle = sT;
                     rgCheckTitles.Add(sWikiTitle ?? gpPage.Title);
                 }
                 lblStatus.Text = $"Checking {rgCheckTitles.Count} titles on wiki...";
@@ -346,11 +359,8 @@ public partial class Form1
                 foreach (var gpPage in rgGenerated)
                 {
                     string? sWikiTitle = null;
-                    if (mpTitleToScript != null)
-                    {
-                        var kvpMatch = mpTitleToScript.FirstOrDefault(kvp => kvp.Value.Equals(gpPage.ScriptName, StringComparison.OrdinalIgnoreCase));
-                        if (!string.IsNullOrEmpty(kvpMatch.Key)) sWikiTitle = kvpMatch.Key;
-                    }
+                    if (gpPage.ScriptName != null && mpScriptToTitle.TryGetValue(gpPage.ScriptName, out string? sT) && !string.IsNullOrEmpty(sT))
+                        sWikiTitle = sT;
                     bool bExists = hsExisting.Contains(sWikiTitle ?? gpPage.Title)
                                || (sWikiTitle != null && mpTitleToScript != null && mpTitleToScript.ContainsKey(sWikiTitle));
                     if (!bExists || chkOverwriteExisting.Checked) rgNewPages.Add(gpPage);
@@ -424,13 +434,11 @@ public partial class Form1
             if (ctsGen != null) { ctsGen.Cancel(); ctsGen.Dispose(); ctsGen = null; }
             txtPage.Text = "Weapons of Vietnam";
             txtInput.Clear(); txtOutput.Clear(); mpTitleToScript = null;
-            bDryRunDone = false; btnDryRun.Text = "DryRun"; btnDryRun.BackColor = cWikiInactive;
-            bBatchDryDone = false; btnBatchDR.Text = "BatchDR"; btnBatchDR.BackColor = cWikiInactive;
+            ResetDryRunState();
+            ResetBatchDryState();
             SetGenerateState(btnGenerate, GenState.Ready);
             SetEditControlsEnabled(btnConvert, btnSelectDir, true);
-            bOutputEditable = false;
-            txtOutput.ReadOnly = true;
-            txtOutput.BackColor = bDarkMode ? Color.FromArgb(40, 40, 40) : SystemColors.Control;
+            SetOutputEditable(false);
             lblStatus.Text = "";
         };
 
@@ -459,7 +467,7 @@ public partial class Form1
             if (ctsDryRun != null) { ctsDryRun.Cancel(); ctsDryRun.Dispose(); ctsDryRun = null; btnDryRun.Text = bDryRunDone ? "Upload" : "DryRun"; btnDryRun.BackColor = bDryRunDone ? cWikiActive : cWikiInactive; lblStatus.Text = "Cancelled"; return; }
             if (ctsBatch != null) { lblStatus.Text = "Batch is running"; return; }
             if (ctsGen != null) { lblStatus.Text = "Generate is running"; return; }
-            if (bBatchDryDone) { bBatchDryDone = false; btnBatchDR.Text = "BatchDR"; btnBatchDR.BackColor = cWikiInactive; SetEditControlsEnabled(btnConvert, btnSelectDir, true); }
+            if (bBatchDryDone) { ResetBatchDryState(); SetEditControlsEnabled(btnConvert, btnSelectDir, true); }
             if (gsState == GenState.Generated) { SetGenerateState(btnGenerate, GenState.Ready); }
             if (bDryRunDone && string.IsNullOrWhiteSpace(txtOutput.Text)) { lblStatus.Text = "Result is empty."; return; }
 
@@ -508,7 +516,7 @@ public partial class Form1
             if (ctsBatch != null) { ctsBatch.Cancel(); ctsBatch.Dispose(); ctsBatch = null; btnBatchDR.Text = bBatchDryDone ? "BatchUp" : "BatchDR"; btnBatchDR.BackColor = bBatchDryDone ? cWikiActive : cWikiInactive; lblStatus.Text = "Batch cancelled"; return; }
             if (ctsDryRun != null) { lblStatus.Text = "DryRun is running"; return; }
             if (ctsGen != null) { lblStatus.Text = "Generate is running"; return; }
-            if (bDryRunDone) { bDryRunDone = false; btnDryRun.Text = "DryRun"; btnDryRun.BackColor = cWikiInactive; SetEditControlsEnabled(btnConvert, btnSelectDir, true); bOutputEditable = false; txtOutput.ReadOnly = true; txtOutput.BackColor = bDarkMode ? Color.FromArgb(40, 40, 40) : SystemColors.Control; }
+            if (bDryRunDone) { ResetDryRunState(); SetEditControlsEnabled(btnConvert, btnSelectDir, true); SetOutputEditable(false); }
             if (gsState == GenState.Generated) { SetGenerateState(btnGenerate, GenState.Ready); }
 
             if (sSelectedDir == null || !Directory.Exists(sSelectedDir)) PickDir();

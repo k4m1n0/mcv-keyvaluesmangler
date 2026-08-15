@@ -136,15 +136,21 @@ public static class ScriptToTemplateConverter
 
     private static string ConvertSingle(string sScript, string[] rgTemplateLines, RenderOptions roOpts)
     {
+        string sStage = "init";
         try
         {
+            sStage = "ParseTopLevelMap";
             var mpScriptMap = ParseTopLevelMap(sScript);
+
+            sStage = "ExtractAllBlocks";
             var mpScriptBlocks = ExtractAllBlocks(sScript);
 
+            sStage = "ParseTemplateToTree";
             var anTemplateTree = ParseTemplateToTree(rgTemplateLines);
             if (anTemplateTree == null || anTemplateTree.Children.Count == 0)
-                return string.Join("\n", rgTemplateLines);
+                return string.Join("\n", rgTemplateLines!);
 
+            sStage = "FillTreeWithScript";
             var hsMissingKeys = new HashSet<string>(mpScriptMap.Keys, StringComparer.OrdinalIgnoreCase);
             var hsConsumedBlocks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             FillTreeWithScript(anTemplateTree, mpScriptMap, mpScriptBlocks, sScript, hsMissingKeys, hsConsumedBlocks);
@@ -152,6 +158,7 @@ public static class ScriptToTemplateConverter
             if (roOpts.bSkipEmptyValues)
                 RemoveOrphanComments(anTemplateTree);//simple模式删除孤立注释(AST层 向下无活跃kv/块的说明注释)
 
+            sStage = "RenderTree";
             var sbResult = new StringBuilder();
             var rsState = new RenderState();
             RenderTree(anTemplateTree, sbResult, roOpts, rsState);
@@ -165,8 +172,8 @@ public static class ScriptToTemplateConverter
         }
         catch (Exception ex)
         {
-            LogService.Error(ex, "ConvertSingle");
-            return string.Join("\n", rgTemplateLines);
+            LogService.Error(ex, $"ConvertSingle: stage={sStage}, scriptLen={sScript?.Length ?? 0}, templateLines={rgTemplateLines?.Length ?? 0}, opts=[skipEmpty={roOpts.bSkipEmptyValues}, skipSep={roOpts.bSkipSeparators}, compressBlank={roOpts.bCompressBlankLines}]");
+            return string.Join("\n", rgTemplateLines!);
         }
     }
 

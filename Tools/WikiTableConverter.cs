@@ -407,7 +407,11 @@ public static class WikiTableConverter
 
         //匹配纯字母的射击模式格 如Auto或Auto+Semi
         var mFireMode = Regex.Match(sClean, @"^[A-Za-z]+(\+[A-Za-z]+)*$");
-        if (mFireMode.Success && mpV.TryGetValue("SupportedFireModes", out var sFm) && !string.IsNullOrEmpty(sFm))
+        if (mFireMode.Success && !sCell.Contains("[[File:") && !sCell.Contains("<span")
+            && !sCell.Contains("[[")
+            && !sClean.Equals("YES", StringComparison.OrdinalIgnoreCase)
+            && !sClean.Equals("NO", StringComparison.OrdinalIgnoreCase)
+            && mpV.TryGetValue("SupportedFireModes", out var sFm) && !string.IsNullOrEmpty(sFm))
         {
             if (sClean != sFm)
                 //匹配字母射击模式字符串并替换为脚本值
@@ -492,7 +496,7 @@ public static class WikiTableConverter
 
         var rgFiles = Directory.GetFiles(sScriptsDir, "weapon_*.txt");
         LogService.Info($"LoadAllScripts: loading {rgFiles.Length} weapon scripts...");
-        foreach (var sPath in Directory.GetFiles(sScriptsDir, "weapon_*.txt"))
+        foreach (var sPath in rgFiles)
         {
             try
             {

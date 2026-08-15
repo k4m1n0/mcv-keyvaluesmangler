@@ -50,9 +50,8 @@ internal static class Program
 
         if (rgCliArgsArr.Length > 0)
         {
-            var sLogLevelArg = Opt(rgArgs, "--log-level");
             LogService.Enabled = true;
-            LogService.MinLevel = sLogLevelArg != null ? ParseLogLevel(sLogLevelArg) : LogService.Level.Warn;
+            LogService.MinLevel = ResolveLogLevel(rgArgs);
         }
 
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
@@ -82,34 +81,47 @@ internal static class Program
             return RunCliMode(rgCliArgsArr, LogService.MinLevel);
         }
 
-        var sGuiLogLvl = Opt(rgArgs, "--log-level");
-        if (sGuiLogLvl != null)
-        {
-            LogService.Enabled = true;
-            LogService.MinLevel = ParseLogLevel(sGuiLogLvl, LogService.Level.Debug);
-        }
+        LogService.Enabled = true;
+        LogService.MinLevel = ResolveLogLevel(rgArgs);
 
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
         Application.ThreadException += (_, e) =>
         {
-            LogService.Error(e.Exception, "UI ThreadException");
+            var ex = e.Exception;
+            if (ex is TypeLoadException tle &&
+                tle.StackTrace?.Contains("ReleaseUiaProvider", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                LogService.DebugDebounce("uia_flood", $"UIA exception ignored (expected in trimmed build): {tle.Message}");
+                if (Application.OpenForms.Count == 0) Environment.Exit(0);
+                return;
+            }
+            LogService.Fatal(ex, "UI ThreadException");
             Application.Exit();
         };
         Application.Run(new Form1());
         return 0;
     }
 
-static LogService.Level ParseLogLevel(string sLevel, LogService.Level lvlDefault = LogService.Level.Warn) =>
-    sLevel.ToLowerInvariant() switch
-    {
-        "debug" => LogService.Level.Debug,
-        "info"  => LogService.Level.Info,
-        "warn"  => LogService.Level.Warn,
-        "error" => LogService.Level.Error,
-        _       => lvlDefault
-    };
+    static LogService.Level ResolveLogLevel(string[] rgArgs) =>
+        Array.Exists(rgArgs, sA => sA.Equals("--log-level", StringComparison.OrdinalIgnoreCase))
+            ? ParseLogLevel(Opt(rgArgs, "--log-level"))
+    #if DEBUG
+            : LogService.Level.Debug;
+    #else
+            : LogService.Level.Warn;
+    #endif
+
+    static LogService.Level ParseLogLevel(string? sLevel) =>
+        sLevel?.ToLowerInvariant() switch
+        {
+            "debug" => LogService.Level.Debug,
+            "info"  => LogService.Level.Info,
+            "warn"  => LogService.Level.Warn,
+            "error" => LogService.Level.Error,
+            _       => LogService.Level.Debug
+        };
 
     static int RunCliMode(string[] rgArgs, LogService.Level lvlLog)
     {
@@ -148,7 +160,7 @@ Usage:
 Global Options:
   --log-level <debug|info|warn|error>
       Minimum log level written to .\mangler.log
-      (default: GUI=debug, CLI=warn)
+      (default: warn; debug when --log-level is passed without a value)
       DEBUG  Log everything including control value changes and hotkeys
       INFO   Log operations (save, export, import, wiki actions)
       WARN   Log warnings and errors only
@@ -518,6 +530,7 @@ Examples:
         Dictionary<string, string>? mpIndex = await WikiService.BuildScriptIndexAsync();
         if (mpIndex == null)
             LogService.Warn("RunGenerate: script index unavailable, title mapping may be inaccurate");
+        var mpScriptToTitle = WikiService.BuildScriptToTitleIndex(mpIndex);
         Verbose("Generating pages...", bVerbose);
         var rgGenerated = WikiPageGenerator.GenerateAll(sScriptsDir, sResourceDir, mpTokens, mpLoadout,
             sDefaultTemplate, sLmgTemplate, sPistolTemplate, sShortTemplate, new HashSet<string>(), mpIndex);
@@ -526,11 +539,8 @@ Examples:
         //获取wiki真实标题 否则用生成器标题
         string GetWikiTitle(WikiPageGenerator.GeneratedPage gpPage)
         {
-            if (mpIndex != null)
-            {
-                var kvpMatch = mpIndex.FirstOrDefault(kvp => kvp.Value.Equals(gpPage.ScriptName, StringComparison.OrdinalIgnoreCase));
-                if (!string.IsNullOrEmpty(kvpMatch.Key)) return kvpMatch.Key;
-            }
+            if (mpScriptToTitle.TryGetValue(gpPage.ScriptName, out string? sTitle) && !string.IsNullOrEmpty(sTitle))
+                return sTitle;
             return gpPage.Title;
         }
 

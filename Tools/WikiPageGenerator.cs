@@ -45,6 +45,9 @@ public static class WikiPageGenerator
         LogService.Info($"GenerateAll: {rgFiles.Length} weapon scripts found, {hsExistingTitles.Count} existing titles");
         int iSkipped = 0;
 
+        //构建一次反向索引 所有武器共享
+        var mpScriptToTitle = WikiService.BuildScriptToTitleIndex(mpTitleToScript);
+
         foreach (string sPath in rgFiles)
         {
             string sScriptName = Path.GetFileNameWithoutExtension(sPath);
@@ -54,8 +57,8 @@ public static class WikiPageGenerator
                 continue;
             }
             var gpPage = GenerateSingle(sPath, sScriptName, sResourceDir, mpTokens, mpLoadout,
-                sDefaultTemplate, sLmgTemplate, sPistolTemplate, sShortTemplate, mpTitleToScript);
-            if (gpPage != null && !hsExistingTitles.Contains(gpPage.Title))
+                sDefaultTemplate, sLmgTemplate, sPistolTemplate, sShortTemplate, mpScriptToTitle);
+            if (gpPage != null)
                 rgPages.Add(gpPage);
         }
 
@@ -67,8 +70,14 @@ public static class WikiPageGenerator
         string sResourceDir, Dictionary<string, string> mpTokens,
         Dictionary<string, LoadoutInfo> mpLoadout,
         string sDefaultTemplate, string sLmgTemplate, string sPistolTemplate, string sShortTemplate,
-        Dictionary<string, string>? mpTitleToScript = null)
+        Dictionary<string, string>? mpScriptToTitle = null)
     {
+        if (string.IsNullOrEmpty(sScriptName))
+        {
+            LogService.Warn("GenerateSingle: sScriptName is null or empty");
+            return null;
+        }
+
         string sContent = WeaponScriptService.ReadScriptFile(sScriptPath);
         var mpVals = WeaponScriptService.ParseWeaponDataPairs(sContent);
         if (mpVals.Count == 0)
@@ -82,10 +91,10 @@ public static class WikiPageGenerator
         //token查找>脚本名索引>跳过无翻译的武器
 
         string sTitle = LocalizationService.Lookup(mpTokens, sPrintName, "");
-        if (string.IsNullOrEmpty(sTitle) && mpTitleToScript != null)
+        if (string.IsNullOrEmpty(sTitle) && mpScriptToTitle != null)
         {
-            var kvpMatch = mpTitleToScript.FirstOrDefault(kvp => kvp.Value.Equals(sScriptName, StringComparison.OrdinalIgnoreCase));
-            if (!string.IsNullOrEmpty(kvpMatch.Key)) sTitle = kvpMatch.Key;
+            if (mpScriptToTitle.TryGetValue(sScriptName, out string? sWikiTitle) && !string.IsNullOrEmpty(sWikiTitle))
+                sTitle = sWikiTitle;
         }
         if (string.IsNullOrEmpty(sTitle))
         {
@@ -101,18 +110,18 @@ public static class WikiPageGenerator
         string sDetailTemplate = iTemplateIdx == 1 ? sLmgTemplate : iTemplateIdx == 2 ? sPistolTemplate : sDefaultTemplate;
 
         var gpPage = new GeneratedPage { ScriptName = sScriptName, Title = sTitle };
-        gpPage.Content = FillDetailTemplate(sDetailTemplate, sScriptName, sTitle, mpVals, liInfo, sAmmoDisplay, sOrigin, sWeaponType);
-        gpPage.ShortContent = FillShortTemplate(sShortTemplate, sScriptName, sTitle, mpVals, liInfo, sAmmoDisplay, sWeaponType);
+        gpPage.Content = FillDetailTemplate(sDetailTemplate, sScriptName, sTitle, mpVals, liInfo, sAmmoDisplay, sOrigin, sWeaponType, iTemplateIdx);
+        gpPage.ShortContent = FillShortTemplate(sShortTemplate, sScriptName, sTitle, mpVals, liInfo);
         return gpPage;
     }
 
     private static string FillDetailTemplate(string sTmpl, string sScriptName, string sTitle,
         Dictionary<string, string> mpVals, LoadoutInfo liInfo,
-        string sAmmo, string sOrigin, string sWeaponType)
+        string sAmmo, string sOrigin, string sWeaponType, int iTemplateIdx)
     {
         string sResult = sTmpl;
-        bool bIsLmg = sResult.Contains("[[Bipod]]");
-        bool bIsPistol = !sResult.Contains("[[Bayonet]]");
+        bool bIsLmg = iTemplateIdx == 1;
+        bool bIsPistol = iTemplateIdx == 2;
 
         double dDg = WeaponScriptService.GetDoubleVal(mpVals, "damagegeneric");
         string[] rgDmgKeys = { "damageheadmultiplier", "damagechestmultiplier", "damagestomachmultiplier", "damagelegmultiplier", "damagearmmultiplier" };
@@ -204,8 +213,7 @@ public static class WikiPageGenerator
     }
 
     private static string FillShortTemplate(string sTmpl, string sScriptName, string sTitle,
-        Dictionary<string, string> mpVals, LoadoutInfo liInfo,
-        string sAmmo, string sWeaponType)
+        Dictionary<string, string> mpVals, LoadoutInfo liInfo)
     {
         string sResult = sTmpl;
         double dDg = WeaponScriptService.GetDoubleVal(mpVals, "damagegeneric");
@@ -240,7 +248,7 @@ public static class WikiPageGenerator
             if (iMissingCount <= 2 && iMissingCount > 0)
             {
                 var rgMissing = rgAllMainClasses.Where(sC => !liInfo.Classes.Contains(sC)).ToList();
-                return $"<b>Everyone Except {string.Join(" and ", rgMissing.Select(Capitalize))}<br>";
+                return $"<b>Everyone Except {string.Join(" and ", rgMissing.Select(Capitalize))}</b><br>";
             }
 
             var sb = new StringBuilder();
