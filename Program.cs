@@ -30,18 +30,6 @@ internal static class Program
     [STAThread]
     static int Main(string[] rgArgs)
     {
-        string sCurrentDir = AppContext.BaseDirectory;
-        string sMutexName = @"WeaponDamageCalc_" + Convert.ToHexString(SHA256.HashData(
-            Encoding.UTF8.GetBytes(sCurrentDir.ToLowerInvariant())))[..16];
-        using var hMutex = new Mutex(true, sMutexName, out bool bCreatedNew);
-        if (!bCreatedNew)
-        {
-            LogService.Info("Mutex locked - another instance is already running in this folder");
-            MessageBox.Show("Only one instance of the same folder can be running at one time.",
-                "Mangler - Warning", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return 0;
-        }
-
         var rgCliArgs = new List<string>();
         for (int i = 0; i < rgArgs.Length; i++)
         {
@@ -58,13 +46,39 @@ internal static class Program
             else
                 rgCliArgs.Add(rgArgs[i]);
         }
-
         var rgCliArgsArr = rgCliArgs.ToArray();
 
         if (rgCliArgsArr.Length > 0)
         {
             var sLogLevelArg = Opt(rgArgs, "--log-level");
-            return RunCliMode(rgCliArgsArr, sLogLevelArg != null ? ParseLogLevel(sLogLevelArg) : LogService.Level.Warn);
+            LogService.Enabled = true;
+            LogService.MinLevel = sLogLevelArg != null ? ParseLogLevel(sLogLevelArg) : LogService.Level.Warn;
+        }
+
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            var ex = e.ExceptionObject as Exception
+                ?? new Exception($"Non-Exception: {e.ExceptionObject?.GetType().Name ?? "null"}");
+            try { LogService.Fatal(ex, "UnhandledException"); }
+            catch { }
+            Environment.Exit(iErrException);
+        };
+
+        string sCurrentDir = AppContext.BaseDirectory;
+        string sMutexName = @"WeaponDamageCalc_" + Convert.ToHexString(SHA256.HashData(
+            Encoding.UTF8.GetBytes(sCurrentDir.ToLowerInvariant())))[..16];
+        using var hMutex = new Mutex(true, sMutexName, out bool bCreatedNew);
+        if (!bCreatedNew)
+        {
+            LogService.Info("Mutex locked - another instance is already running in this folder");
+            MessageBox.Show("Only one instance of the same folder can be running at one time.",
+                "Mangler - Warning", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return 0;
+        }
+
+        if (rgCliArgsArr.Length > 0)
+        {
+            return RunCliMode(rgCliArgsArr, LogService.MinLevel);
         }
 
         var sGuiLogLvl = Opt(rgArgs, "--log-level");
