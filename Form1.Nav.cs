@@ -54,6 +54,7 @@ public partial class Form1
             if (ctrl == ctrlCur) continue;
             var rctCtrlBounds = BoundsInForm(ctrl);
 
+            //textbox和其宿主nud同时出现在遍历中会互相干扰
             if (ctrlCur.Parent == ctrl || ctrl.Parent == ctrlCur)
             {
                 continue;
@@ -74,6 +75,7 @@ public partial class Form1
             else
                 dDy = rctCtrlBounds.Top + rctCtrlBounds.Height / 2.0 - (rctCurBounds.Top + rctCurBounds.Height / 2.0);
 
+            //允许一定重叠 方向键在重叠10px内仍视为有效候选
             const double dOverlapTolerance = 10;
             if (kDir == Keys.Right && dDx < -dOverlapTolerance) continue;
             if (kDir == Keys.Left && dDx < -dOverlapTolerance) continue;
@@ -86,14 +88,18 @@ public partial class Form1
             if (bVertical && Math.Abs(dDy) > dMaxVerticalDistance) continue;
             if (!bVertical && Math.Abs(dDx) > dMaxHorizontalDistance) continue;
 
+            //按钮区紧凑 从按钮出发时抬高非按钮候选的代价 防止漂出按钮区
             if (bCurIsButton && ctrl is not Button && bVertical)
             {
-                dMain *= 9.0;
+                dMain *= 4.0;
             }
 
             if (bCurIsButton && ctrl is Button && bVertical)
             {
-                dMain *= 0.3;
+                //按钮间按X轴重叠比例打折 完全对齐时最优先 微弱重叠的按钮不被误选中
+                double dOverlap = Math.Min(rctCurBounds.Right, rctCtrlBounds.Right) - Math.Max(rctCurBounds.Left, rctCtrlBounds.Left);
+                double dOverlapRatio = Math.Clamp(dOverlap / rctCurBounds.Width, 0.0, 1.0);
+                dMain *= 0.25 + (1.0 - dOverlapRatio) * 0.75;
             }
 
             bool bSameAxis;
@@ -112,6 +118,7 @@ public partial class Form1
             }
             else
             {
+                //跨轴候选必须足够近 否则跳过 防止跳到远处的另一列
                 if (!bVertical && Math.Abs(dDy) > Math.Max(rctCurBounds.Height, rctCtrlBounds.Height) * 2.0)
                 {
                     continue;
@@ -128,6 +135,7 @@ public partial class Form1
             }
         }
 
+        //同轴候选太远时 若跨轴候选显著更近则优先跨轴
         if (ctrlBestSame != null && ctrlBestAny != null && dBestAnyDist < dBestSameDist * 0.5)
         {
             return ctrlBestAny;
