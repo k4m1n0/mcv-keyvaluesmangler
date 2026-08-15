@@ -16,7 +16,6 @@ public partial class Form1
     private const double dMaxHorizontalDistance = 460;
     private const double dMaxVerticalDistance = 620;
     private const double dCrossAxisPenalty = 1.5;//跨轴距离惩罚系数
-    private const double dSameAxisFarThreshold = 60;//bestSame超过此距离时考虑bestAny
 
     private void NavigateFocus(Keys kDir)
     {
