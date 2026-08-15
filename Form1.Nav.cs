@@ -88,7 +88,7 @@ public partial class Form1
 
             if (bCurIsButton && ctrl is not Button && bVertical)
             {
-                dMain *= 10.0;
+                dMain *= 9.0;
             }
 
             if (bCurIsButton && ctrl is Button && bVertical)
