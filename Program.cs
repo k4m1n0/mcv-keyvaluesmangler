@@ -48,11 +48,8 @@ internal static class Program
         }
         var rgCliArgsArr = rgCliArgs.ToArray();
 
-        if (rgCliArgsArr.Length > 0)
-        {
-            LogService.Enabled = true;
-            LogService.MinLevel = ResolveLogLevel(rgArgs);
-        }
+        LogService.Enabled = true;
+        LogService.MinLevel = ResolveLogLevel(rgArgs);
 
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
         {
@@ -80,9 +77,6 @@ internal static class Program
         {
             return RunCliMode(rgCliArgsArr, LogService.MinLevel);
         }
-
-        LogService.Enabled = true;
-        LogService.MinLevel = ResolveLogLevel(rgArgs);
 
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
