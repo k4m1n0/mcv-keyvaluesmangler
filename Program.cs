@@ -521,6 +521,8 @@ Examples:
         //构建索引用于token查找的fallback和wiki查重
         Verbose("Building script index...", bVerbose);
         Dictionary<string, string>? mpIndex = await WikiService.BuildScriptIndexAsync();
+        if (mpIndex == null)
+            LogService.Warn("RunGenerate: script index unavailable, title mapping may be inaccurate");
         Verbose("Generating pages...", bVerbose);
         var rgGenerated = WikiPageGenerator.GenerateAll(sScriptsDir, sResourceDir, mpTokens, mpLoadout,
             sDefaultTemplate, sLmgTemplate, sPistolTemplate, sShortTemplate, new HashSet<string>(), mpIndex);
