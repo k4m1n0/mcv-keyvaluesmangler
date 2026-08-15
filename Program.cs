@@ -98,14 +98,21 @@ internal static class Program
         return 0;
     }
 
-    static LogService.Level ResolveLogLevel(string[] rgArgs) =>
-        Array.Exists(rgArgs, sA => sA.Equals("--log-level", StringComparison.OrdinalIgnoreCase))
-            ? ParseLogLevel(Opt(rgArgs, "--log-level"))
+    static LogService.Level ResolveLogLevel(string[] rgArgs)
+    {
+        if (Array.Exists(rgArgs, sA => sA.Equals("--log-level", StringComparison.OrdinalIgnoreCase)))
+        {
+            string? sVal = Opt(rgArgs, "--log-level");
+            if (string.IsNullOrEmpty(sVal) || sVal.StartsWith("--"))
+                return LogService.Level.Debug;
+            return ParseLogLevel(sVal);
+        }
     #if DEBUG
-            : LogService.Level.Debug;
+        return LogService.Level.Debug;
     #else
-            : LogService.Level.Warn;
+        return LogService.Level.Warn;
     #endif
+    }
 
     static LogService.Level ParseLogLevel(string? sLevel) =>
         sLevel?.ToLowerInvariant() switch
@@ -114,6 +121,7 @@ internal static class Program
             "info"  => LogService.Level.Info,
             "warn"  => LogService.Level.Warn,
             "error" => LogService.Level.Error,
+            "fatal" => LogService.Level.Fatal,//bruh
             _       => LogService.Level.Debug
         };
 
