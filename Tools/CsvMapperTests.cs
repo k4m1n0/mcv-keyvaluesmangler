@@ -22,7 +22,7 @@ public static class CsvMapperTests
 
         #region 读写往返
 
-        Test("Round trip basic", () =>
+        Test("Basic round trip", () =>
         {
             string sPath = Path.GetTempFileName();
             try
@@ -36,7 +36,7 @@ public static class CsvMapperTests
             finally { File.Delete(sPath); }
         });
 
-        Test("Blank lines and all comma lines skipped", () =>
+        Test("Blank and comma only rows skipped", () =>
         {
             string sPath = Path.GetTempFileName();
             try
@@ -48,7 +48,7 @@ public static class CsvMapperTests
             finally { File.Delete(sPath); }
         });
 
-        Test("UTF-8 BOM handling", () =>
+        Test("UTF8 BOM stripped", () =>
         {
             string sPath = Path.GetTempFileName();
             try
@@ -66,7 +66,7 @@ public static class CsvMapperTests
         #endregion
         #region 字段容错
 
-        Test("Missing fields filled with defaults", () =>
+        Test("Missing fields default to null", () =>
         {
             string sPath = Path.GetTempFileName();
             try
@@ -79,7 +79,7 @@ public static class CsvMapperTests
             finally { File.Delete(sPath); }
         });
 
-        Test("Extra fields ignored", () =>
+        Test("Extra columns ignored", () =>
         {
             string sPath = Path.GetTempFileName();
             try
@@ -92,7 +92,7 @@ public static class CsvMapperTests
             finally { File.Delete(sPath); }
         });
 
-        Test("Non numeric int field defaults to null", () =>
+        Test("Non numeric int becomes null", () =>
         {
             string sPath = Path.GetTempFileName();
             try
@@ -105,7 +105,7 @@ public static class CsvMapperTests
             finally { File.Delete(sPath); }
         });
 
-        Test("Duplicate column names: first wins", () =>
+        Test("Duplicate column: first wins", () =>
         {
             string sPath = Path.GetTempFileName();
             try
@@ -118,7 +118,7 @@ public static class CsvMapperTests
             finally { File.Delete(sPath); }
         });
 
-        Test("Empty quoted fields", () =>
+        Test("Empty quoted string becomes null", () =>
         {
             string sPath = Path.GetTempFileName();
             try
@@ -132,7 +132,7 @@ public static class CsvMapperTests
             finally { File.Delete(sPath); }
         });
 
-        Test("Negative values", () =>
+        Test("Negative numbers parse", () =>
         {
             string sPath = Path.GetTempFileName();
             try
@@ -147,7 +147,7 @@ public static class CsvMapperTests
             finally { File.Delete(sPath); }
         });
 
-        Test("Clip size format with slash", () =>
+        Test("Clip size with slash", () =>
         {
             string sPath = Path.GetTempFileName();
             try
@@ -160,7 +160,7 @@ public static class CsvMapperTests
             finally { File.Delete(sPath); }
         });
 
-        Test("Field with trailing spaces inside quotes", () =>
+        Test("Trailing spaces trimmed", () =>
         {
             string sPath = Path.GetTempFileName();
             try
@@ -173,7 +173,7 @@ public static class CsvMapperTests
             finally { File.Delete(sPath); }
         });
 
-        Test("Real row round trip: write then read matches original", () =>
+        Test("Write then read matches original", () =>
         {
             string sPath = Path.GetTempFileName();
             try
@@ -216,7 +216,7 @@ public static class CsvMapperTests
             finally { File.Delete(sPath); }
         });
 
-        Test("Mixed empty and non-empty fields in single row", () =>
+        Test("Mixed empty fields parse", () =>
         {
             string sPath = Path.GetTempFileName();
             try
@@ -232,7 +232,7 @@ public static class CsvMapperTests
             finally { File.Delete(sPath); }
         });
 
-        Test("Column name with dot in header", () =>
+        Test("Dot in column name maps to subproperty", () =>
         {
             string sPath = Path.GetTempFileName();
             try
@@ -245,7 +245,7 @@ public static class CsvMapperTests
             finally { File.Delete(sPath); }
         });
 
-        Test("Row with more commas than header columns still parses", () =>
+        Test("Extra trailing commas tolerated", () =>
         {
             string sPath = Path.GetTempFileName();
             try
@@ -262,7 +262,7 @@ public static class CsvMapperTests
         #endregion
         #region 引号与转义
 
-        Test("Quoted field with comma", () =>
+        Test("Comma inside quotes", () =>
         {
             string sPath = Path.GetTempFileName();
             try
@@ -275,7 +275,7 @@ public static class CsvMapperTests
             finally { File.Delete(sPath); }
         });
 
-        Test("Escaped double quote in field", () =>
+        Test("Escaped double quotes", () =>
         {
             string sPath = Path.GetTempFileName();
             try
@@ -301,7 +301,7 @@ public static class CsvMapperTests
             finally { File.Delete(sPath); }
         });
 
-        Test("Unclosed quote in row skipped", () =>
+        Test("Unclosed quote: row skipped", () =>
         {
             string sPath = Path.GetTempFileName();
             try
@@ -315,7 +315,7 @@ public static class CsvMapperTests
             finally { File.Delete(sPath); }
         });
 
-        Test("Unclosed multiline quote exceeds limit: broken line discarded, swallowed lines recovered", () =>
+        Test("Unclosed multiline quote recovers after limit", () =>
         {
             string sPath = Path.GetTempFileName();
             try
@@ -323,10 +323,7 @@ public static class CsvMapperTests
                 var sb = new StringBuilder();
                 sb.AppendLine("\"SupportedFireModes\",\"FireRate\"");
                 sb.AppendLine("\"bad_start");
-                sb.AppendLine("swallowed_line_2");
-                sb.AppendLine("swallowed_line_3");
-                sb.AppendLine("swallowed_line_4");
-                sb.AppendLine("swallowed_line_5");
+                sb.AppendLine("swallowed_line_qwertyuiopasdfghjklzxcvbnm12345678_with_some_more_content_to_exceed_limit_blah_blah_blah");
                 sb.AppendLine("\"recovered_row\",800");
                 File.WriteAllText(sPath, sb.ToString());
 

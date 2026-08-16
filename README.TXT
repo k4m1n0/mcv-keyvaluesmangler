@@ -137,7 +137,8 @@
 
   --log-level <debug|info|warn|error>
     Minimum log level written to mangler.log
-    (default: warn; debug when --log-level is passed without a value)
+    (default: warn for GUI, info for CLI;
+     debug when --log-level is passed without a value)
       DEBUG  Log everything including control value changes and hotkeys
       INFO   Log operations (save, export, import, wiki actions)
       WARN   Log warnings and errors only (missing files, failed ops)

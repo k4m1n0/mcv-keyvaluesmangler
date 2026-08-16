@@ -40,7 +40,7 @@ public static class UndoTests
         void Test(string sName, Action act)
         {
             frm.ClearUndoHistory();
-            frm.PushUndoNow();//初始状态入栈确保后续ChangeNud有可撤销的历史
+            frm.PushUndoNow();
             try { act(); nPassed++; Log($"[PASS] {sName}"); }
             catch (Exception ex) { Log($"[FAIL] {sName}: {ex.Message}"); nFailed++; }
         }
@@ -65,7 +65,7 @@ public static class UndoTests
         void ChangeNud(string sName, decimal decValue)
         {
             var nud = GetControl<NumericUpDown>(sName);
-            nud.Value = decValue;//触发ValueChanged->ScheduleUndo
+            nud.Value = decValue;
             PushUndoNow();
         }
 
@@ -81,7 +81,7 @@ public static class UndoTests
 
         #region 基础撤销重做
 
-        Test("NUD value change -> undo restores original", () =>
+        Test("NUD undo restores original", () =>
         {
             var nud = GetControl<NumericUpDown>("nudHipSpreadL");
             decimal decOld = nud.Value;
@@ -90,7 +90,7 @@ public static class UndoTests
             if (nud.Value != decOld) throw new Exception($"Expected {decOld}, got {nud.Value}");
         });
 
-        Test("Undo then redo restores changed value", () =>
+        Test("Redo restores changed value", () =>
         {
             var nud = GetControl<NumericUpDown>("nudHipSpreadL");
             decimal decTarget = nud.Value + 1.0m;
@@ -100,7 +100,7 @@ public static class UndoTests
             if (nud.Value != decTarget) throw new Exception($"Expected {decTarget}, got {nud.Value}");
         });
 
-        Test("Two consecutive undos traverse stack correctly", () =>
+        Test("Consecutive undos traverse correctly", () =>
         {
             var nud = GetControl<NumericUpDown>("nudHipSpreadL");
             decimal decOrig = nud.Value;
@@ -112,24 +112,24 @@ public static class UndoTests
                 throw new Exception($"Expected {decOrig}, got {nud.Value}");
         });
 
-        Test("Undo at stack bottom is silently ignored", () =>
+        Test("Bottom undo is ignored", () =>
         {
             var nud = GetControl<NumericUpDown>("nudHipSpreadL");
             ChangeNud("nudHipSpreadL", nud.Value + 0.3m);
             Undo();
             decimal decAfterFirst = nud.Value;
-            Undo();//栈<2 PopUndo直接return
+            Undo();
             if (nud.Value != decAfterFirst)
                 throw new Exception("Second undo at stack bottom should be ignored");
         });
 
-        Test("New change after undo clears redo stack", () =>
+        Test("New change clears redo stack", () =>
         {
             var nud = GetControl<NumericUpDown>("nudHipSpreadL");
             decimal decOrig = nud.Value;
             ChangeNud("nudHipSpreadL", decOrig + 0.5m);
             Undo();
-            ChangeNud("nudHipSpreadL", decOrig + 0.6m);//新操作使redo失效
+            ChangeNud("nudHipSpreadL", decOrig + 0.6m);
             Redo();
             if (Math.Abs(nud.Value - (decOrig + 0.6m)) > 0.005m)
                 throw new Exception("Redo should have no effect after new change");
@@ -138,7 +138,7 @@ public static class UndoTests
         #endregion
         #region 多控件类型
 
-        Test("TextBox change -> undo restores original text", () =>
+        Test("TextBox undo restores text", () =>
         {
             var txt = GetControl<TextBox>("txtFireModesL");
             string sOld = txt.Text;
@@ -148,7 +148,7 @@ public static class UndoTests
             if (txt.Text != sOld) throw new Exception($"Expected '{sOld}', got '{txt.Text}'");
         });
 
-        Test("IronSight toggle -> undo restores ADS enabled state", () =>
+        Test("IronSight undo restores ADS state", () =>
         {
             var nudIS = GetControl<NumericUpDown>("nudIronSightL");
             var nudAds = GetControl<NumericUpDown>("nudAdsSpreadL");
@@ -161,7 +161,7 @@ public static class UndoTests
             if (nudAds.Enabled != bAdsWasEnabled) throw new Exception("ADS enabled state not restored");
         });
 
-        Test("IronSight=0 -> modify other value -> undo keeps ADS disabled", () =>
+        Test("IronSight=0 undo keeps ADS disabled", () =>
         {
             var nudIS = GetControl<NumericUpDown>("nudIronSightL");
             var nudAds = GetControl<NumericUpDown>("nudAdsSpreadL");
@@ -174,7 +174,7 @@ public static class UndoTests
             if (nudAds.Enabled) throw new Exception("ADS should remain disabled when IronSight=0");
         });
 
-        Test("Slider change -> undo restores both TrackBar and NUD", () =>
+        Test("Slider undo restores both", () =>
         {
             var nud = GetControl<NumericUpDown>("nudHeadL");
             var tb = (TrackBar)nud.Tag!;
@@ -190,7 +190,7 @@ public static class UndoTests
         #endregion
         #region 防抖与时机
 
-        Test("Rapid changes within debounce window record only final value", () =>
+        Test("Debounce records final value only", () =>
         {
             var nud = GetControl<NumericUpDown>("nudHipSpreadL");
             decimal decOrig = nud.Value;
@@ -203,26 +203,26 @@ public static class UndoTests
                 throw new Exception($"Expected {decOrig}, got {nud.Value}");
         });
 
-        Test("Undo during debounce period saves pending value first", () =>
+        Test("Undo flushes pending debounce", () =>
         {
             var nud = GetControl<NumericUpDown>("nudHipSpreadL");
             decimal decOrig = nud.Value;
             nud.Value = decOrig + 0.5m;
-            frm.ScheduleUndo();//防抖中
-            Undo();//PopUndo内部检测到bUndoPending->PushUndo(false)强制保存->再撤销
+            frm.ScheduleUndo();
+            Undo();
             if (Math.Abs(nud.Value - decOrig) > 0.005m)
                 throw new Exception($"Expected {decOrig}, got {nud.Value}");
         });
 
-        Test("Redo during debounce period saves pending value first", () =>
+        Test("Redo flushes pending debounce", () =>
         {
             var nud = GetControl<NumericUpDown>("nudHipSpreadL");
             decimal decOrig = nud.Value;
             ChangeNud("nudHipSpreadL", decOrig + 0.5m);
-            Undo();//redo栈有1条 控件值=orig
+            Undo();
             nud.Value = decOrig + 0.7m;
-            frm.ScheduleUndo();//防抖
-            Redo();//PopRedo内部 PushUndo(false)保存当前值->再重做
+            frm.ScheduleUndo();
+            Redo();
             if (Math.Abs(nud.Value - (decOrig + 0.5m)) > 0.005m)
                 throw new Exception($"Expected {decOrig + 0.5m} after redo, got {nud.Value}");
         });
@@ -230,7 +230,7 @@ public static class UndoTests
         #endregion
         #region 多字段
 
-        Test("Multiple fields changed -> undo restores all", () =>
+        Test("Multi field undo restores all", () =>
         {
             var nudSpread = GetControl<NumericUpDown>("nudHipSpreadL");
             var nudRate = GetControl<NumericUpDown>("nudFireRateL");
@@ -253,7 +253,7 @@ public static class UndoTests
         #endregion
         #region 双面板
 
-        Test("Left and right panels undo independently", () =>
+        Test("Panels undo independently", () =>
         {
             var nudL = GetControl<NumericUpDown>("nudHipSpreadL");
             var nudR = GetControl<NumericUpDown>("nudHipSpreadR");
@@ -261,13 +261,13 @@ public static class UndoTests
             decimal decOldR = nudR.Value;
             ChangeNud("nudHipSpreadL", decOldL + 0.5m);
             ChangeNud("nudHipSpreadR", decOldR + 0.5m);
-            Undo();//后入栈的右侧先出
+            Undo();
             if (Math.Abs(nudR.Value - decOldR) > 0.005m) throw new Exception("Right panel not restored first");
             Undo();
             if (Math.Abs(nudL.Value - decOldL) > 0.005m) throw new Exception("Left panel not restored second");
         });
 
-        Test("Same weapon left-right: undo restores independent panel states", () =>
+        Test("Same weapon panel states independent", () =>
         {
             var cmbL = GetControl<ComboBox>("cmbWeaponsL");
             var cmbR = GetControl<ComboBox>("cmbWeaponsR");
@@ -307,7 +307,7 @@ public static class UndoTests
             if (GetC64Text() != "REDONE.") throw new Exception($"Expected 'REDONE.', got '{GetC64Text()}'");
         });
 
-        Test("C64 shows READY after undo to original value", () =>
+        Test("C64 READY after undo to original", () =>
         {
             var nud = GetControl<NumericUpDown>("nudHipSpreadL");
             ChangeNud("nudHipSpreadL", nud.Value + 0.5m);
@@ -316,7 +316,7 @@ public static class UndoTests
             if (sC64 != "READY.") throw new Exception($"Expected 'READY.', got '{sC64}'");
         });
 
-        Test("C64 shows READY after undo to different value (snapshot matches restored stats)", () =>
+        Test("C64 READY after undo to restored stats", () =>
         {
             var nud = GetControl<NumericUpDown>("nudHipSpreadL");
             ChangeNud("nudHipSpreadL", nud.Value + 0.3m);
@@ -327,7 +327,7 @@ public static class UndoTests
                 throw new Exception($"Expected 'READY.', got '{sC64}'");
         });
 
-        Test("HasUnsavedChanges returns false after undo (snapshot matches restored data)", () =>
+        Test("Unsaved false after undo", () =>
         {
             var nud = GetControl<NumericUpDown>("nudHipSpreadL");
             ChangeNud("nudHipSpreadL", nud.Value + 0.3m);
@@ -340,7 +340,7 @@ public static class UndoTests
         #endregion
         #region Altstats
 
-        Test("Enter AltStat -> undo exits AltStat and restores normal values", () =>
+        Test("Undo exits AltStat", () =>
         {
             var nud = GetControl<NumericUpDown>("nudHipSpreadL");
             decimal decOld = nud.Value;
@@ -350,7 +350,7 @@ public static class UndoTests
                 throw new Exception($"Expected {decOld}, got {nud.Value}");
         });
 
-        Test("Exit AltStat -> undo re-enters AltStat", () =>
+        Test("Undo reenters Altstat", () =>
         {
             var nud = GetControl<NumericUpDown>("nudHipSpreadL");
             decimal decNormal = nud.Value;
@@ -364,10 +364,10 @@ public static class UndoTests
                 throw new Exception($"Expected {decNormal}, got {nud.Value}");
         });
 
-        Test("Modify in AltStat -> undo restores previous alt value", () =>
+        Test("AltStat modify undo restores", () =>
         {
             var nud = GetControl<NumericUpDown>("nudHipSpreadL");
-            decimal decNormal = nud.Value;//进入AltStat前的普通值
+            decimal decNormal = nud.Value;
             ToggleAltStats(WeaponScriptService.AltStatMode.Zombie);
             ChangeNud("nudHipSpreadL", nud.Value + 0.5m);
             Undo();
@@ -376,7 +376,7 @@ public static class UndoTests
             ToggleAltStats(WeaponScriptService.AltStatMode.Zombie);
         });
 
-        Test("AltStat DoV -> switch to Zmb -> undo restores DoV", () =>
+        Test("AltStat mode undo restores", () =>
         {
             var nud = GetControl<NumericUpDown>("nudHipSpreadL");
             ToggleAltStats(WeaponScriptService.AltStatMode.Dov);
@@ -388,7 +388,7 @@ public static class UndoTests
         #endregion
         #region 武器切换
 
-        Test("Weapon switch -> undo restores previous weapon", () =>
+        Test("Undo restores weapon", () =>
         {
             var cmb = GetControl<ComboBox>("cmbWeaponsL");
             var wOld = (WeaponData)cmb.SelectedItem!;
@@ -401,7 +401,7 @@ public static class UndoTests
                 throw new Exception($"Expected '{wOld.ScriptName}', got '{wRestored.ScriptName}'");
         });
 
-        Test("Weapon switch -> modify -> undo twice restores original weapon and values", () =>
+        Test("Weapon+modify double undo restores", () =>
         {
             var cmb = GetControl<ComboBox>("cmbWeaponsL");
             var nud = GetControl<NumericUpDown>("nudHipSpreadL");
@@ -425,7 +425,7 @@ public static class UndoTests
         #endregion
         #region 快速操作
 
-        Test("Rapid consecutive undos traverse stack correctly", () =>
+        Test("Rapid undos traverse correctly", () =>
         {
             var nud = GetControl<NumericUpDown>("nudHipSpreadL");
             decimal decOrig = nud.Value;
@@ -437,7 +437,7 @@ public static class UndoTests
                 throw new Exception($"Expected {decOrig}, got {nud.Value}");
         });
 
-        Test("Rapid undos cancel previous snapshot check timer", () =>
+        Test("Rapid undos cancel snapshot timer", () =>
         {
             var nud = GetControl<NumericUpDown>("nudHipSpreadL");
             ChangeNud("nudHipSpreadL", nud.Value + 0.5m);
@@ -448,21 +448,26 @@ public static class UndoTests
             if (sC64 != "READY.") throw new Exception($"Expected 'READY.', got '{sC64}'");
         });
 
-        Test("100 random operations do not crash or corrupt state", () =>
+        Test("Random operations preserve integrity", () =>
         {
             var nud = GetControl<NumericUpDown>("nudHipSpreadL");
             var rng = new Random(42);
-            decimal decBase = nud.Value;
-            decimal decCurrent = decBase;
+
+            decimal decOriginal = nud.Value;
+            decimal decBase = 3.00m;
+            nud.Value = decBase;
+            PushUndoNow();
+
+            int iPushCount = 0;
 
             for (int k = 0; k < 100; k++)
             {
                 int iOp = rng.Next(3);
                 if (iOp == 0)
                 {
-                    decCurrent += 0.01m;
-                    nud.Value = decCurrent;
+                    nud.Value = nud.Value + 0.01m;
                     PushUndoNow();
+                    iPushCount++;
                 }
                 else if (iOp == 1)
                 {
@@ -472,10 +477,21 @@ public static class UndoTests
                 {
                     Redo();
                 }
+
+                decimal decMaxExpected = decBase + iPushCount * 0.01m;
+                if (nud.Value < decBase || nud.Value > decMaxExpected)
+                    throw new Exception($"k={k}: value {nud.Value} out of range [{decBase}, {decMaxExpected}]");
             }
+
+            if (iPushCount < 30)
+                throw new Exception($"Too few pushes: {iPushCount}");
+
+            nud.Value = decOriginal;
+            frm.ClearUndoHistory();
+            frm.PushUndoNow();
         });
 
-        Test("Stack overflow removes oldest entry correctly", () =>
+        Test("Overflow removes oldest entry", () =>
         {
             var nud = GetControl<NumericUpDown>("nudHipSpreadL");
             decimal decFirst = decimal.Parse(nud.Text);
