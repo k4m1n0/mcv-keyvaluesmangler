@@ -30,7 +30,7 @@
                  \______/  \______/  \______/  \______/
 
 ==============================================================================
-  0. WHAT IS THIS
+  00. WHAT IS THIS
 ==============================================================================
 
   Keyvalues Mangler (TM) 5000 is a weapon data editor and wiki publishing
@@ -48,7 +48,7 @@
       (Win / GTK / Xfce / KDE)
 
 ==============================================================================
-  1. SYSTEM REQUIREMENTS
+  01. SYSTEM REQUIREMENTS
 ==============================================================================
 
   MINIMUM:
@@ -65,7 +65,7 @@
     - Internet connection for wiki stuff
 
 ==============================================================================
-  2. QUICK START
+  02. QUICK START
 ==============================================================================
 
   GUI MODE:
@@ -84,7 +84,7 @@
     keyvaluesmangler_x.x.x.x_win_amd64[-selfcontained].exe --help
 
 ==============================================================================
-  3. KEYBOARD SHORTCUTS
+  03. KEYBOARD SHORTCUTS
 ==============================================================================
 
   Ctrl+S            Save changes to weapons.csv (do this often)
@@ -98,7 +98,7 @@
   Ctrl+Arrows       Move focus by direction
 
 ==============================================================================
-  4. FILE REFERENCE
+  04. FILE REFERENCE
 ==============================================================================
 
   weapons.csv       Master weapon database
@@ -108,7 +108,7 @@
   wiki\             Wiki conversion cache directory
 
 ==============================================================================
-  5. WIKI INTEGRATION
+  05. WIKI INTEGRATION
 ==============================================================================
 
   The Wiki Stats Updater (press the Wiki button) provides three functions:
@@ -126,7 +126,7 @@
   Wiki credentials are stored in memory only and cleared on exit
 
 ==============================================================================
-  6. PARAMETERS USAGE
+  06. PARAMETERS USAGE
 ==============================================================================
 
   GUI MODE:
@@ -159,7 +159,7 @@
   RETURN CODES: 0=OK  1=Usage  2=Login  3=Not Found  4=Unknown  5=Error
 
 ==============================================================================
-  7. LIMITATIONS
+  07. LIMITATIONS
 ==============================================================================
 
   - Self contained build is ~38 MiB and go blame Microsoft
@@ -169,7 +169,7 @@
   - Two copies from the same folder will not open, this is intentional
 
 ==============================================================================
-  8. BUILD FROM SOURCE
+  08. BUILD FROM SOURCE
 ==============================================================================
 
   It just needs a .NET 8.0 SDK
@@ -182,7 +182,7 @@
   Then grab the EXE from .\publish\ and do whatever you want with it
 
 ==============================================================================
-  9. DEBUG BUILD
+  09. DEBUG BUILD
 ==============================================================================
 
   Debug builds include integrated tests and print results to mangler.log
@@ -203,12 +203,17 @@
     - Pass magically because you really need this build right now
 
 ==============================================================================
-  A. LAMARR
+  0A. LAMARR
 ==============================================================================
 
-  Keyvalues Mangler bundles its dependencies through a self extracting
-  compressor called Lamarr to stay under a 360 KiB budget. It decompresses
-  the payload into memory at startup, loads it as an assembly and runs it
+  Keyvalues Mangler bundles its dependencies through an IL self extracting
+  compression stub called Lamarr to stay under a 360 KiB budget. It decompresses
+  the payload into memory at startup, loads it as an assembly, and runs it
+
+  Lamarr runs a decompressor inside a virtual machine, and the program that is 
+  decompressed by the decompressor that runs inside the virtual machine is
+  a program that will run inside the same virtual machine that the decompressor
+  is running in. This sounds like a joke. It is not
 
   No temp files. No console window flash. HELL YEAH
 
@@ -238,7 +243,7 @@
     dependencies beyond .NET 8.0, released under WTFPL too :)))
 
 ==============================================================================
-  B. CREDITS
+  0B. CREDITS
 ==============================================================================
 
 
