@@ -907,7 +907,7 @@ public partial class Form1 : Form
     {
         bool bLeftAds = nudIronSightL.Value != 0;
         bool bRightAds = nudIronSightR.Value != 0;
-        float fMaxScale = (bShowingAltStats && amCurrentAltStat == WeaponScriptService.AltStatMode.Dov) ? 1.0f : 2.0f;
+        float fMaxScale = (bShowingAltStats && amCurrentAltStat == WeaponScriptService.AltStatMode.Dov) ? 1.25f : 2.5f;
         prRecoilRenderer.DrawRecoil(e.Graphics, wCurrentLeft, wCurrentRight,
             (double)nudHipRecoilUpL.Value, (double)nudHipRecoilRightL.Value,
             bLeftAds ? (double)nudAdsRecoilUpL.Value : 0, bLeftAds ? (double)nudAdsRecoilRightL.Value : 0,

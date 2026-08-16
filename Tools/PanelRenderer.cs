@@ -79,7 +79,7 @@ public class PanelRenderer
     public void DrawRecoil(Graphics g, WeaponData? wLeft, WeaponData? wRight,
         double dHipUpL, double dHipRtL, double dAdsUpL, double dAdsRtL,
         double dHipUpR, double dHipRtR, double dAdsUpR, double dAdsRtR,
-        float fMaxScale = 2.0f)
+        float fMaxScale = 2.5f)
     {
         //for game side unused up_max and right_max features
         /*
@@ -208,11 +208,13 @@ public class PanelRenderer
     }
 
     //ditto, for game side unused features
-    //private static bool HasAuto(WeaponData? w)
-    //{
-    //    if (w == null || string.IsNullOrEmpty(w.FireModes)) return false;
-    //    string sModes = w.FireModes.ToLowerInvariant();
-    //    return sModes.Contains("auto");
-    //}
+    /*
+    private static bool HasAuto(WeaponData? w)
+    {
+        if (w == null || string.IsNullOrEmpty(w.FireModes)) return false;
+        string sModes = w.FireModes.ToLowerInvariant();
+        return sModes.Contains("auto");
+    }
+    */
     #endregion
 }
