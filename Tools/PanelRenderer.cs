@@ -72,7 +72,7 @@ public class PanelRenderer
         int iCx = pnlPanel.Width / 2;
         int iCy = pnlPanel.Height - 30;
         int iShots = 30;
-        float fMaxUp = Math.Max(Math.Max(dHipUpL, dAdsUpL),
+        float fMaxUp = (float)Math.Max(Math.Max(dHipUpL, dAdsUpL),
                         wRight != null ? Math.Max(dHipUpR, dAdsUpR) : 0.01);
         float fS = Math.Min(fMaxScale, (float)((pnlPanel.Height - 40) / (Math.Max(fMaxUp, 0.01) * iShots)));
         //scale钳制到maxScale 防止低后座时扇形过大 取两侧最大后座防溢出
@@ -98,7 +98,7 @@ public class PanelRenderer
     {
         if (fRadius <= 0) return;
         using var penCircle = new Pen(cColor, 1.2f) { DashStyle = dsStyle };
-        g.DrawEllipse(pen, iCx - fRadius, iCy - fRadius, fRadius * 2, fRadius * 2);
+        g.DrawEllipse(penCircle, iCx - fRadius, iCy - fRadius, fRadius * 2, fRadius * 2);
     }
 
     private void DrawLeftLegend(Graphics g, int iX, int iY, Color cHip, Color cBipod)
