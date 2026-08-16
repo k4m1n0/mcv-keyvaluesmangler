@@ -72,8 +72,10 @@ public class PanelRenderer
         int iCx = pnlPanel.Width / 2;
         int iCy = pnlPanel.Height - 30;
         int iShots = 30;
-        float fS = Math.Min(fMaxScale, (float)((pnlPanel.Height - 40) / (Math.Max(dHipUpL, 0.01) * iShots)));
-        //scale钳制到maxScale 防止低后座时扇形过大 用hipUpL防除零
+        float fMaxUp = Math.Max(Math.Max(dHipUpL, dAdsUpL),
+                        wRight != null ? Math.Max(dHipUpR, dAdsUpR) : 0.01);
+        float fS = Math.Min(fMaxScale, (float)((pnlPanel.Height - 40) / (Math.Max(fMaxUp, 0.01) * iShots)));
+        //scale钳制到maxScale 防止低后座时扇形过大 取两侧最大后座防溢出
 
         DrawSector(g, iCx, iCy, (float)dHipUpL, (float)dHipRtL, iShots, fS,
             Color.FromArgb(80, 255, 0, 0), Color.Red, "L Hip", "left");
@@ -92,10 +94,10 @@ public class PanelRenderer
     #endregion
     #region 绘图辅助
 
-    private void DrawCircle(Graphics g, int iCx, int iCy, float fRadius, Color color, DashStyle dsStyle)
+    private void DrawCircle(Graphics g, int iCx, int iCy, float fRadius, Color cColor, DashStyle dsStyle)
     {
         if (fRadius <= 0) return;
-        using var pen = new Pen(color, 1.2f) { DashStyle = dsStyle };
+        using var penCircle = new Pen(cColor, 1.2f) { DashStyle = dsStyle };
         g.DrawEllipse(pen, iCx - fRadius, iCy - fRadius, fRadius * 2, fRadius * 2);
     }
 
