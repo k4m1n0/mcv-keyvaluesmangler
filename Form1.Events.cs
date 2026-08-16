@@ -83,7 +83,9 @@ public partial class Form1
             {
                 if (bIsLeft) wCurrentLeft = w;
                 else wCurrentRight = w;
+                bUpdatingControls = true;
                 LoadWeaponToControls(w, bIsLeft);
+                bUpdatingControls = false;
                 UpdateAllDamage();
                 pnlSpread.Invalidate();
                 pnlRecoil.Invalidate();
@@ -106,7 +108,9 @@ public partial class Form1
                 if (bShowingAltStats && !WeaponHasAltStats(w, amCurrentAltStat))
                 {
                     RestoreAllNudEnabled(bIsLeft);
+                    bUpdatingControls = true;
                     LoadWeaponToControls(w, bIsLeft);
+                    bUpdatingControls = false;
                     HighlightAltStatButton(amCurrentAltStat);
                     UpdateAllDamage();
                     pnlSpread.Invalidate();

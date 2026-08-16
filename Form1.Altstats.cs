@@ -442,7 +442,8 @@ public partial class Form1
             wWeapon.DovMetalDamageModifier = wWeapon.MetalDamageModifier; wWeapon.DovGlassDamageModifier = wWeapon.GlassDamageModifier;
             wWeapon.DovConcreteDamageModifier = wWeapon.ConcreteDamageModifier; wWeapon.DovWoodDamageModifier = wWeapon.WoodDamageModifier;
             wWeapon.DovOtherDamageModifier = wWeapon.OtherDamageModifier; wWeapon.DovNearwallDistance = wWeapon.NearwallDistance;
-            wWeapon.DovSecondaryFireRate = wWeapon.SecondaryFireRate; wWeapon.DovIronSight = wWeapon.IronSight;
+            wWeapon.DovSecondaryFireRate = (int)GetNud(bIsLeft, nudSecondaryFireRateL, nudSecondaryFireRateR).Value;
+            wWeapon.DovIronSight = (int)GetNud(bIsLeft, nudIronSightL, nudIronSightR).Value;
         }
         else
         {
@@ -484,7 +485,8 @@ public partial class Form1
             wWeapon.ZombieMetalDamageModifier = wWeapon.MetalDamageModifier; wWeapon.ZombieGlassDamageModifier = wWeapon.GlassDamageModifier;
             wWeapon.ZombieConcreteDamageModifier = wWeapon.ConcreteDamageModifier; wWeapon.ZombieWoodDamageModifier = wWeapon.WoodDamageModifier;
             wWeapon.ZombieOtherDamageModifier = wWeapon.OtherDamageModifier; wWeapon.ZombieNearwallDistance = wWeapon.NearwallDistance;
-            wWeapon.ZombieSecondaryFireRate = wWeapon.SecondaryFireRate; wWeapon.ZombieIronSight = wWeapon.IronSight;
+            wWeapon.ZombieSecondaryFireRate = (int)GetNud(bIsLeft, nudSecondaryFireRateL, nudSecondaryFireRateR).Value;
+            wWeapon.ZombieIronSight = (int)GetNud(bIsLeft, nudIronSightL, nudIronSightR).Value;
         }
         }
         catch (Exception ex)

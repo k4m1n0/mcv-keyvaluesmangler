@@ -20,6 +20,9 @@ public class PanelRenderer
         double dHipL, double dAdsL, double dBipodHipL, double dBipodAdsL,
         double dHipR, double dAdsR, double dBipodHipR, double dBipodAdsR)
     {
+        //仅半自动绘图补偿精度+20% 圆半径缩小到83.3%
+        if (IsSemiOnly(wLeft)) { dHipL /= 1.2; dAdsL /= 1.2; dBipodHipL /= 1.2; dBipodAdsL /= 1.2; }
+        if (wRight != null && IsSemiOnly(wRight)) { dHipR /= 1.2; dAdsR /= 1.2; dBipodHipR /= 1.2; dBipodAdsR /= 1.2; }
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.Clear(Color.Black);
         int iCx = pnlPanel.Width / 2, iCy = pnlPanel.Height / 2;
@@ -65,8 +68,19 @@ public class PanelRenderer
     public void DrawRecoil(Graphics g, WeaponData? wLeft, WeaponData? wRight,
         double dHipUpL, double dHipRtL, double dAdsUpL, double dAdsRtL,
         double dHipUpR, double dHipRtR, double dAdsUpR, double dAdsRtR,
-        float fMaxScale = 2.5f)
+        float fMaxScale = 2.0f)
     {
+        //全自动/点射后座绘图补偿 Hip +1.0 Up/+0.5 Rt, ADS +0.5 Up/+0.25 Rt
+        if (HasAutoOrBurst(wLeft))
+        {
+            dHipUpL += 1.0; dHipRtL += 0.5;
+            if (dAdsUpL + dAdsRtL > 0) { dAdsUpL += 0.5; dAdsRtL += 0.25; }
+        }
+        if (wRight != null && HasAutoOrBurst(wRight))
+        {
+            dHipUpR += 1.0; dHipRtR += 0.5;
+            if (dAdsUpR + dAdsRtR > 0) { dAdsUpR += 0.5; dAdsRtR += 0.25; }
+        }
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.Clear(Color.Black);
         int iCx = pnlPanel.Width / 2;
@@ -156,6 +170,20 @@ public class PanelRenderer
             ? iCx - fTotalRight - szfLabel.Width - 4
             : iCx + fTotalRight + 4;
         g.DrawString(sLabel, fntLabel, brLabel, fLabelX, iCy - fTotalUp - szfLabel.Height);
+    }
+
+    private static bool IsSemiOnly(WeaponData? w)
+    {
+        if (w == null || string.IsNullOrEmpty(w.FireModes)) return false;
+        string sModes = w.FireModes.ToLowerInvariant();
+        return sModes.Contains("semi") && !sModes.Contains("auto") && !sModes.Contains("burst");
+    }
+
+    private static bool HasAutoOrBurst(WeaponData? w)
+    {
+        if (w == null || string.IsNullOrEmpty(w.FireModes)) return false;
+        string sModes = w.FireModes.ToLowerInvariant();
+        return sModes.Contains("auto") || sModes.Contains("burst");
     }
     #endregion
 }
