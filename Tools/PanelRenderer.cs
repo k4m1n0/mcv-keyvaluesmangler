@@ -23,6 +23,17 @@ public class PanelRenderer
         //仅半自动绘图补偿精度+20% 圆半径缩小到83.3%
         if (IsSemiOnly(wLeft)) { dHipL /= 1.2; dAdsL /= 1.2; dBipodHipL /= 1.2; dBipodAdsL /= 1.2; }
         if (wRight != null && IsSemiOnly(wRight)) { dHipR /= 1.2; dAdsR /= 1.2; dBipodHipR /= 1.2; dBipodAdsR /= 1.2; }
+        //全自动后座绘图补偿 按持续射击时间线性增长到最大值
+        //if (HasAuto(wLeft))
+        //{
+        //    dHipUpL = Math.Min(dHipUpL + dAdsUpMaxL * dTransitionL, dAdsUpMaxL);
+        //    dHipRtL = Math.Min(dHipRtL + dAdsRtMaxL * dTransitionL, dAdsRtMaxL);
+        //}
+        //if (wRight != null && HasAuto(wRight))
+        //{
+        //    dHipUpR = Math.Min(dHipUpR + dAdsUpMaxR * dTransitionR, dAdsUpMaxR);
+        //    dHipRtR = Math.Min(dHipRtR + dAdsRtMaxR * dTransitionR, dAdsRtMaxR);
+        //}
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.Clear(Color.Black);
         int iCx = pnlPanel.Width / 2, iCy = pnlPanel.Height / 2;
@@ -70,17 +81,31 @@ public class PanelRenderer
         double dHipUpR, double dHipRtR, double dAdsUpR, double dAdsRtR,
         float fMaxScale = 2.0f)
     {
-        //全自动/点射后座绘图补偿 Hip +1.0 Up/+0.5 Rt, ADS +0.5 Up/+0.25 Rt
-        if (HasAutoOrBurst(wLeft))
+        //for game side unused up_max and right_max features
+        /*
+        if (HasAuto(wLeft))
         {
-            dHipUpL += 1.0; dHipRtL += 0.5;
-            if (dAdsUpL + dAdsRtL > 0) { dAdsUpL += 0.5; dAdsRtL += 0.25; }
+            double dShotsPerSecL = (wLeft?.FireRate ?? 600) / 60.0;
+            int iTransShotsL = Math.Max(1, (int)Math.Ceiling(dTransitionSecL * dShotsPerSecL));
+            int iRampL = Math.Min(30, iTransShotsL);
+            int iHoldL = 30 - iRampL;
+            double dUpStepL = (dAdsUpMaxL - dHipUpL) / iTransShotsL;
+            double dRtStepL = (dAdsRtMaxL - dHipRtL) / iTransShotsL;
+            dHipUpL = iRampL * dHipUpL + dUpStepL * iRampL * (iRampL - 1) / 2.0 + iHoldL * dAdsUpMaxL;
+            dHipRtL = iRampL * dHipRtL + dRtStepL * iRampL * (iRampL - 1) / 2.0 + iHoldL * dAdsRtMaxL;
         }
-        if (wRight != null && HasAutoOrBurst(wRight))
+        if (wRight != null && HasAuto(wRight))
         {
-            dHipUpR += 1.0; dHipRtR += 0.5;
-            if (dAdsUpR + dAdsRtR > 0) { dAdsUpR += 0.5; dAdsRtR += 0.25; }
+            double dShotsPerSecR = (wRight?.FireRate ?? 600) / 60.0;
+            int iTransShotsR = Math.Max(1, (int)Math.Ceiling(dTransitionSecR * dShotsPerSecR));
+            int iRampR = Math.Min(30, iTransShotsR);
+            int iHoldR = 30 - iRampR;
+            double dUpStepR = (dAdsUpMaxR - dHipUpR) / iTransShotsR;
+            double dRtStepR = (dAdsRtMaxR - dHipRtR) / iTransShotsR;
+            dHipUpR = iRampR * dHipUpR + dUpStepR * iRampR * (iRampR - 1) / 2.0 + iHoldR * dAdsUpMaxR;
+            dHipRtR = iRampR * dHipRtR + dRtStepR * iRampR * (iRampR - 1) / 2.0 + iHoldR * dAdsRtMaxR;
         }
+        */
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.Clear(Color.Black);
         int iCx = pnlPanel.Width / 2;
@@ -176,14 +201,18 @@ public class PanelRenderer
     {
         if (w == null || string.IsNullOrEmpty(w.FireModes)) return false;
         string sModes = w.FireModes.ToLowerInvariant();
-        return sModes.Contains("semi") && !sModes.Contains("auto") && !sModes.Contains("burst");
+        bool bFireRateOk = (w.FireRate ?? 0) >= 200;
+        bool bSinglePellet = (w.BulletsPerShot ?? 1) <= 1;
+        return sModes.Contains("semi") && !sModes.Contains("auto") && !sModes.Contains("burst")
+            && bFireRateOk && bSinglePellet;
     }
 
-    private static bool HasAutoOrBurst(WeaponData? w)
-    {
-        if (w == null || string.IsNullOrEmpty(w.FireModes)) return false;
-        string sModes = w.FireModes.ToLowerInvariant();
-        return sModes.Contains("auto") || sModes.Contains("burst");
-    }
+    //ditto, for game side unused features
+    //private static bool HasAuto(WeaponData? w)
+    //{
+    //    if (w == null || string.IsNullOrEmpty(w.FireModes)) return false;
+    //    string sModes = w.FireModes.ToLowerInvariant();
+    //    return sModes.Contains("auto");
+    //}
     #endregion
 }
