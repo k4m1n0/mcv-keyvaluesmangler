@@ -91,9 +91,17 @@ public static class LogService
                 {
                     var fi = new FileInfo(sLogPath);
                     if (fi.Exists && fi.Length > cbMaxFile)
-                        File.WriteAllText(sLogPath, sLine);
+                    {
+                        string sContent = File.ReadAllText(sLogPath);
+                        int iHalf = sContent.Length / 2;
+                        int iNewline = sContent.IndexOf('\n', iHalf);
+                        if (iNewline < 0) iNewline = iHalf;
+                        File.WriteAllText(sLogPath, sContent.Substring(iNewline + 1) + sLine);
+                    }
                     else
+                    {
                         File.AppendAllText(sLogPath, sLine);
+                    }
                 }
                 catch
                 {
