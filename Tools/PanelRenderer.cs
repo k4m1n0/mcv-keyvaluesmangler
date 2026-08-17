@@ -21,6 +21,7 @@ public class PanelRenderer
         double dHipR, double dAdsR, double dBipodHipR, double dBipodAdsR)
     {
         //仅半自动绘图补偿精度+20% 圆半径缩小到83.3%
+        //DO NOT REMOVE UNTIL THE GAME SIDE IS NO LONGER HARDCODED
         if (IsSemiOnly(wLeft)) { dHipL /= 1.2; dAdsL /= 1.2; dBipodHipL /= 1.2; dBipodAdsL /= 1.2; }
         if (wRight != null && IsSemiOnly(wRight)) { dHipR /= 1.2; dAdsR /= 1.2; dBipodHipR /= 1.2; dBipodAdsR /= 1.2; }
         g.SmoothingMode = SmoothingMode.AntiAlias;
