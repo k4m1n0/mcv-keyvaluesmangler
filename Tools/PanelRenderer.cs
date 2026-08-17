@@ -202,7 +202,8 @@ public class PanelRenderer
     {
         if (w == null || string.IsNullOrEmpty(w.FireModes)) return false;
         string sModes = w.FireModes.ToLowerInvariant();
-        return sModes.Contains("auto");
+        return sModes.Contains("auto")
+            || (sModes.Contains("fast") && sModes.Contains("slow"));
     }
     */
     #endregion
