@@ -31,6 +31,7 @@ internal static class Program
     static int Main(string[] rgArgs)
     {
         var rgCliArgs = new List<string>();
+        string? sLogLevelArg = null;
         for (int i = 0; i < rgArgs.Length; i++)
         {
             if (rgArgs[i].Equals("--darkmode", StringComparison.OrdinalIgnoreCase))
@@ -40,7 +41,10 @@ internal static class Program
             else if (rgArgs[i].Equals("--log-level", StringComparison.OrdinalIgnoreCase))
             {
                 if (i + 1 < rgArgs.Length && !rgArgs[i + 1].StartsWith("--"))
+                {
+                    sLogLevelArg = rgArgs[i + 1];
                     i++;
+                }
                 continue;
             }
             else
@@ -49,7 +53,7 @@ internal static class Program
         var rgCliArgsArr = rgCliArgs.ToArray();
 
         LogService.Enabled = true;
-        LogService.MinLevel = ResolveLogLevel(rgArgs, rgCliArgsArr.Length > 0);
+        LogService.MinLevel = ResolveLogLevel(sLogLevelArg, rgCliArgsArr.Length > 0);
 
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
         {
@@ -98,15 +102,10 @@ internal static class Program
         return 0;
     }
 
-    static LogService.Level ResolveLogLevel(string[] rgArgs, bool bCliMode)
+    static LogService.Level ResolveLogLevel(string? sLogLevelArg, bool bCliMode)
     {
-        if (Array.Exists(rgArgs, sA => sA.Equals("--log-level", StringComparison.OrdinalIgnoreCase)))
-        {
-            string? sVal = Opt(rgArgs, "--log-level");
-            if (string.IsNullOrEmpty(sVal) || sVal.StartsWith("--"))
-                return LogService.Level.Debug;
-            return ParseLogLevel(sVal);
-        }
+        if (!string.IsNullOrEmpty(sLogLevelArg))
+            return ParseLogLevel(sLogLevelArg);
         if (bCliMode)
             return LogService.Level.Info;
     #if DEBUG
@@ -135,10 +134,11 @@ internal static class Program
         LogService.Info($"CLI started: {string.Join(" ", rgArgs)} (log level: {lvlLog})");
         int iCode = Task.Run(() => RunCli(rgArgs)).GetAwaiter().GetResult();
         Console.Out.Flush();
-        if (!Console.IsOutputRedirected && (rgArgs[0].Equals("--help", StringComparison.OrdinalIgnoreCase)
-                                        || rgArgs[0].Equals("-h", StringComparison.OrdinalIgnoreCase)
-                                        || rgArgs[0].Equals("/?", StringComparison.OrdinalIgnoreCase)
-                                        || rgArgs[0].Equals("--fuckyou", StringComparison.OrdinalIgnoreCase)))
+        if (!Console.IsOutputRedirected && !Console.IsInputRedirected
+            && (rgArgs[0].Equals("--help", StringComparison.OrdinalIgnoreCase)
+            || rgArgs[0].Equals("-h", StringComparison.OrdinalIgnoreCase)
+            || rgArgs[0].Equals("/?", StringComparison.OrdinalIgnoreCase)
+            || rgArgs[0].Equals("--fuckyou", StringComparison.OrdinalIgnoreCase)))
         {
             Console.WriteLine("\nPress any key to exit...");
             Console.ReadKey();
