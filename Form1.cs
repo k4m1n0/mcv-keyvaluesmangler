@@ -20,6 +20,7 @@ public partial class Form1 : Form
     private static string? sLastWikiUser = null;
 
     private bool bUpdatingControls = false;
+    private bool bRestoringSelection = false;
     private bool bInitializing = true;
 
     private const double dSliderMin = 0.0;
@@ -250,9 +251,9 @@ public partial class Form1 : Form
         btnRefresh.Click += BtnRefresh_Click;
         this.Controls.Add(btnRefresh);
 
-        var btnCopy = new Button { Text = "L>R", Location = new Point(iCenterX + 22, 618), Size = new Size(48, 26) };
-        btnCopy.Click += CopyLeftToRight;
-        this.Controls.Add(btnCopy);
+        var btnCopyL = new Button { Text = "L>R", Location = new Point(iCenterX + 22, 618), Size = new Size(48, 26) };
+        btnCopyL.Click += CopyLeftToRight;
+        this.Controls.Add(btnCopyL);
 
         //glory to our coders all i dont need to write a hook myself but just call a cvar
         btnQuickExport = new Button { Text = "wpn_reload_script all", Location = new Point(iCenterX + 73, 618), Size = new Size(152, 26) };
@@ -290,12 +291,12 @@ public partial class Form1 : Form
         ttTooltip.SetToolTip(btnCsvToScripts, "Export CSV data to weapon script files");
         ttTooltip.SetToolTip(btnScriptsToCsv, "Import weapon script files to CSV");
         ttTooltip.SetToolTip(btnRefresh, "Reload weapon list from CSV (Ctrl+R)");
-        ttTooltip.SetToolTip(btnCopy, "Copy left panel values to right");
+        ttTooltip.SetToolTip(btnCopyL, "Copy visible values from left to right\nOnly the currently displayed values are copied");
         ttTooltip.SetToolTip(btnQuickExport, "Quick export: save CSV and export to scripts (Ctrl+Shift+S)\nRight-click to cancel");
         ttTooltip.SetToolTip(btnConvertToTemplate, "Convert old scripts to preset_file template format");
         ttTooltip.SetToolTip(btnToggleDov, "Toggle Day of Victory alternate stats");
         ttTooltip.SetToolTip(btnToggleZombie, "Toggle Zombie Mode alternate stats");
-        ttTooltip.SetToolTip(btnCopyR, "Copy right panel values to left");
+        ttTooltip.SetToolTip(btnCopyR, "Copy visible values from right to left\nOnly the currently displayed values are copied");
         ttTooltip.SetToolTip(btnWiki, "Open Wiki Stats Updater");
     }
 
@@ -464,11 +465,11 @@ public partial class Form1 : Form
     #endregion
     #region 复制
 
-    private void CopyLeftToRight(object? sender, EventArgs e) => CopyWeaponData(true);
+    private void CopyLeftToRight(object? sender, EventArgs e) => CopyVisibleValues(true);
 
-    private void CopyRightToLeft(object? sender, EventArgs e) => CopyWeaponData(false);
+    private void CopyRightToLeft(object? sender, EventArgs e) => CopyVisibleValues(false);
 
-    private void CopyWeaponData(bool bLeftToRight)
+    private void CopyVisibleValues(bool bLeftToRight)
     {
         var wSrc = bLeftToRight ? wCurrentLeft : wCurrentRight;
         var wDst = bLeftToRight ? wCurrentRight : wCurrentLeft;
@@ -478,33 +479,17 @@ public partial class Form1 : Form
         LogService.Debug($"Copy {sDir}: {wSrc.ScriptName} -> {wDst.ScriptName}");
         PushUndo();
 
+        var wTemp = new WeaponData();
+        SaveControlsToWeapon(wTemp, bLeftToRight);
         bUpdatingControls = true;
         try
         {
-            if (bShowingAltStats)
-            {
-                SyncAltStatFields(wSrc, amCurrentAltStat, bLeftToRight);
-                var wTemp = wSrc.ShallowClone();
-                wTemp.ScriptName = wDst.ScriptName;
-                wTemp.PrintName = wDst.PrintName;
-                wTemp.PrimaryAmmo = wDst.PrimaryAmmo;
-                SaveControlsToWeapon(wTemp, bLeftToRight);
-                LoadWeaponToControls(wTemp, !bLeftToRight);
-                if (WeaponHasAltStats(wTemp, amCurrentAltStat))
-                    LoadAltStatsToControls(!bLeftToRight, amCurrentAltStat);
-            }
-            else
-            {
-                var wTemp = new WeaponData();
-                SaveControlsToWeapon(wTemp, bLeftToRight);
-                LoadWeaponToControls(wTemp, !bLeftToRight);
-            }
+            LoadWeaponToControls(wTemp, !bLeftToRight);
         }
         finally
         {
             bUpdatingControls = false;
         }
-        StoreSnapshot(bLeftOnly: !bLeftToRight);
         UpdateAllDamage();
         pnlSpread.Invalidate();
         pnlRecoil.Invalidate();

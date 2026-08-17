@@ -22,6 +22,7 @@ public partial class Form1
             var dtRapidDeadline = bIsLeft ? dtRapidDeadlineL : dtRapidDeadlineR;
             var sRapidStart = bIsLeft ? sRapidStartLeft : sRapidStartRight;
 
+            if (bRestoringSelection) return;
             if (bInitializing)
             {
                 if (cmb.SelectedItem is WeaponData wInit)
@@ -52,9 +53,11 @@ public partial class Form1
                             "Unsaved Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
                         if (drResult != DialogResult.Yes)
                         {
+                            bRestoringSelection = true;
                             cmb.SelectedIndexChanged -= (s, ev) => WeaponSelected(bIsLeft, s, ev);
                             cmb.SelectedItem = wCurrent;
                             cmb.SelectedIndexChanged += (s, ev) => WeaponSelected(bIsLeft, s, ev);
+                            bRestoringSelection = false;
                             return;
                         }
                     }
@@ -65,9 +68,11 @@ public partial class Form1
                         "Unsaved Changes", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
                     if (drResult != DialogResult.Yes)
                     {
+                        bRestoringSelection = true;
                         cmb.SelectedIndexChanged -= (s, ev) => WeaponSelected(bIsLeft, s, ev);
                         cmb.SelectedItem = wCurrent;
                         cmb.SelectedIndexChanged += (s, ev) => WeaponSelected(bIsLeft, s, ev);
+                        bRestoringSelection = false;
                         return;
                     }
                 }
