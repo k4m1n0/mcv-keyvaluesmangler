@@ -481,7 +481,7 @@ public partial class Form1 : Form
 
         var wTemp = new WeaponData();
         SaveControlsToWeapon(wTemp, bLeftToRight);
-        var wDst = new WeaponData();
+        var wDstCur = new WeaponData();
         SaveControlsToWeapon(wDst, !bLeftToRight);
         if (!WeaponDataEquals(wTemp, wDst))
         {
