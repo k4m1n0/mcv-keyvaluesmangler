@@ -36,7 +36,7 @@ public static class CsvMapper
     #endregion
     #region 公开接口
 
-    public static List<T> Read<T>(string sPath) where T : new()
+    public static List<T> Read<T>(string sPath, bool bShowWarnings = true) where T : new()
     {
         var rgResult = new List<T>();
         var rgWarnings = new List<string>();
@@ -116,7 +116,7 @@ public static class CsvMapper
             }
             rgResult.Add(obj);
         }
-        if (rgResult.Count > 0)
+        if (rgResult.Count > 0 && bShowWarnings)
             ShowWarnings(rgWarnings);
         return rgResult;
     }
@@ -147,7 +147,7 @@ public static class CsvMapper
         File.WriteAllText(sPath, sb.ToString(), new UTF8Encoding(false));
     }
 
-    internal static bool s_bSuppressMessageBox = false;
+    private static bool bSuppressMessageBox = false;
 
     private static void ShowWarnings(List<string> rgWarnings)
     {
@@ -158,7 +158,9 @@ public static class CsvMapper
             {
                 int iColon = s.IndexOf(':');
                 if (iColon < 0) return s;
-                return s[..iColon].Replace("int", "number").Replace("double", "number");
+                return s[..iColon]
+                    .Replace(" int ", " number ")
+                    .Replace(" double ", " number ");
             })
             .Select(g => g.Count() == 1 ? g.First() : $"{g.Count()} fields: {g.Key}")
             .ToList();
@@ -175,7 +177,7 @@ public static class CsvMapper
             sb.AppendLine("Check the log file for full details.");
         }
 
-        if (!s_bSuppressMessageBox)
+        if (!bSuppressMessageBox)
             MessageBox.Show(sb.ToString(), $"CSV Parse Warnings ({rgWarnings.Count})",
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }

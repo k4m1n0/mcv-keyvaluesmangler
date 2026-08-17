@@ -121,6 +121,6 @@ public static class WikiService
                 || sSnStem.Equals(sInputNoExt, StringComparison.OrdinalIgnoreCase))
                 return kvp.Key;
         }
-        return mpIndex.Keys.FirstOrDefault(sK => sK.Equals(sInput, StringComparison.OrdinalIgnoreCase));
+        return null;
     }
 }

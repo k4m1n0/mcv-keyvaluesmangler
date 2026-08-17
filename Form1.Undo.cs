@@ -40,6 +40,7 @@ public partial class Form1
     {
         if (bInitializing)
         {
+            //DO NOT REMOVE: callers may fire before Shown
             LogService.Debug("StoreSnapshot: skipped (initializing)");
             return;
         }
@@ -60,7 +61,7 @@ public partial class Form1
 
     private void ScheduleSnapshotCheck(WeaponData wSnapL, WeaponData wSnapR, string sSource)
     {
-        if (wSnapL == null) return;
+        if (wSnapL == null && wSnapR == null) return;
 
         tmrSnapshotCheck?.Stop(); tmrSnapshotCheck?.Dispose();
         tmrSnapshotCheck = new System.Windows.Forms.Timer { Interval = 1145 };
@@ -69,7 +70,7 @@ public partial class Form1
             tmrSnapshotCheck.Stop(); tmrSnapshotCheck.Dispose(); tmrSnapshotCheck = null;
             var wTempL = new WeaponData(); SaveControlsToWeapon(wTempL, true);
             var wTempR = new WeaponData(); SaveControlsToWeapon(wTempR, false);
-            bool bChanged = !WeaponDataEquals(wTempL, wSnapL) || !WeaponDataEquals(wTempR, wSnapR);
+            bool bChanged = !VisibleValuesEqual(wTempL, wSnapL) || !VisibleValuesEqual(wTempR, wSnapR);
 
             if (bChanged) SetC64Status("UNSAVED CHANGES.");
             else { StoreSnapshot(); SetC64Status("READY.", false); }
@@ -123,8 +124,8 @@ public partial class Form1
 
         if (!bUndoPending)
         {
-            bool bLeftChanged = wSnapshotLeft != null && !WeaponDataEquals(ueEntry.LeftData, wSnapshotLeft);
-            bool bRightChanged = wSnapshotRight != null && !WeaponDataEquals(ueEntry.RightData, wSnapshotRight);
+            bool bLeftChanged = wSnapshotLeft != null && !VisibleValuesEqual(ueEntry.LeftData, wSnapshotLeft);
+            bool bRightChanged = wSnapshotRight != null && !VisibleValuesEqual(ueEntry.RightData, wSnapshotRight);
             if (!bLeftChanged && !bRightChanged)
                 SetC64Status("READY.");
             else

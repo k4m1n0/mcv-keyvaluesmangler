@@ -11,8 +11,6 @@ public static class CsvMapperTests
 {
     public static void RunAll()
     {
-        CsvMapper.s_bSuppressMessageBox = true;
-
         int nPassed = 0, nFailed = 0;
         void Test(string sName, Action act)
         {
@@ -28,7 +26,7 @@ public static class CsvMapperTests
             try
             {
                 File.WriteAllText(sPath, "\"DamageHeadMultiplier\",\"FireRate\",\"SupportedFireModes\"\n2.75,600,\"Auto+Semi\"");
-                var rgLoaded = CsvMapper.Read<WeaponData>(sPath);
+                var rgLoaded = CsvMapper.Read<WeaponData>(sPath, false);
                 if (rgLoaded.Count != 1) throw new Exception($"Expected 1, got {rgLoaded.Count}");
                 if (rgLoaded[0].DamageHeadMultiplier != 2.75) throw new Exception("DamageHeadMultiplier mismatch");
                 if (rgLoaded[0].FireRate != 600) throw new Exception("FireRate mismatch");
@@ -42,7 +40,7 @@ public static class CsvMapperTests
             try
             {
                 File.WriteAllText(sPath, "\"SupportedFireModes\"\n\n\n\"Auto\"\n,,,\n\"Semi\"");
-                var rgLoaded = CsvMapper.Read<WeaponData>(sPath);
+                var rgLoaded = CsvMapper.Read<WeaponData>(sPath, false);
                 if (rgLoaded.Count != 2) throw new Exception($"Expected 2, got {rgLoaded.Count}");
             }
             finally { File.Delete(sPath); }
@@ -56,7 +54,7 @@ public static class CsvMapperTests
                 var rgBytes = new List<byte> { 0xEF, 0xBB, 0xBF };
                 rgBytes.AddRange(Encoding.UTF8.GetBytes("\"SupportedFireModes\"\n\"bom_test\""));
                 File.WriteAllBytes(sPath, rgBytes.ToArray());
-                var rgLoaded = CsvMapper.Read<WeaponData>(sPath);
+                var rgLoaded = CsvMapper.Read<WeaponData>(sPath, false);
                 if (rgLoaded.Count != 1) throw new Exception($"Expected 1, got {rgLoaded.Count}");
                 if (rgLoaded[0].FireModes != "bom_test") throw new Exception("FireModes mismatch");
             }
@@ -72,7 +70,7 @@ public static class CsvMapperTests
             try
             {
                 File.WriteAllText(sPath, "\"SupportedFireModes\",\"FireRate\"\n\"Auto\",600");
-                var rgLoaded = CsvMapper.Read<WeaponData>(sPath);
+                var rgLoaded = CsvMapper.Read<WeaponData>(sPath, false);
                 if (rgLoaded.Count != 1) throw new Exception($"Expected 1, got {rgLoaded.Count}");
                 if (rgLoaded[0].DamageHeadMultiplier != null) throw new Exception("Expected null for missing field");
             }
@@ -85,7 +83,7 @@ public static class CsvMapperTests
             try
             {
                 File.WriteAllText(sPath, "\"SupportedFireModes\",\"FireRate\"\n\"Auto\",600,\"extra\",123");
-                var rgLoaded = CsvMapper.Read<WeaponData>(sPath);
+                var rgLoaded = CsvMapper.Read<WeaponData>(sPath, false);
                 if (rgLoaded.Count != 1) throw new Exception($"Expected 1, got {rgLoaded.Count}");
                 if (rgLoaded[0].FireRate != 600) throw new Exception("FireRate mismatch");
             }
@@ -98,7 +96,7 @@ public static class CsvMapperTests
             try
             {
                 File.WriteAllText(sPath, "\"SupportedFireModes\",\"FireRate\"\n\"Auto\",\"not_a_number\"");
-                var rgLoaded = CsvMapper.Read<WeaponData>(sPath);
+                var rgLoaded = CsvMapper.Read<WeaponData>(sPath, false);
                 if (rgLoaded.Count != 1) throw new Exception($"Expected 1, got {rgLoaded.Count}");
                 if (rgLoaded[0].FireRate != null) throw new Exception($"Expected null, got {rgLoaded[0].FireRate}");
             }
@@ -111,7 +109,7 @@ public static class CsvMapperTests
             try
             {
                 File.WriteAllText(sPath, "\"FireRate\",\"FireRate\"\n600,700");
-                var rgLoaded = CsvMapper.Read<WeaponData>(sPath);
+                var rgLoaded = CsvMapper.Read<WeaponData>(sPath, false);
                 if (rgLoaded.Count != 1) throw new Exception($"Expected 1, got {rgLoaded.Count}");
                 if (rgLoaded[0].FireRate != 600) throw new Exception($"Expected 600 (first), got {rgLoaded[0].FireRate}");
             }
@@ -124,7 +122,7 @@ public static class CsvMapperTests
             try
             {
                 File.WriteAllText(sPath, "\"SupportedFireModes\",\"FireRate\"\n\"\",600");
-                var rgLoaded = CsvMapper.Read<WeaponData>(sPath);
+                var rgLoaded = CsvMapper.Read<WeaponData>(sPath, false);
                 if (rgLoaded.Count != 1) throw new Exception($"Expected 1, got {rgLoaded.Count}");
                 if (rgLoaded[0].FireModes != null) throw new Exception($"Expected null for empty quoted field, got '{rgLoaded[0].FireModes}'");
                 if (rgLoaded[0].FireRate != 600) throw new Exception("FireRate mismatch");
@@ -138,7 +136,7 @@ public static class CsvMapperTests
             try
             {
                 File.WriteAllText(sPath, "\"DamageHeadMultiplier\",\"SecondaryFireRate\"\n-0.25,-1");
-                var rgLoaded = CsvMapper.Read<WeaponData>(sPath);
+                var rgLoaded = CsvMapper.Read<WeaponData>(sPath, false);
                 if (rgLoaded.Count != 1) throw new Exception($"Expected 1, got {rgLoaded.Count}");
                 if (!(rgLoaded[0].DamageHeadMultiplier is double dVal) || Math.Abs(dVal - (-0.25)) > 0.001)
                     throw new Exception("Negative double mismatch");
@@ -153,7 +151,7 @@ public static class CsvMapperTests
             try
             {
                 File.WriteAllText(sPath, "\"clip_size\"\n\"30/90\"");
-                var rgLoaded = CsvMapper.Read<WeaponData>(sPath);
+                var rgLoaded = CsvMapper.Read<WeaponData>(sPath, false);
                 if (rgLoaded.Count != 1) throw new Exception($"Expected 1, got {rgLoaded.Count}");
                 if (rgLoaded[0].ClipSize != "30/90") throw new Exception($"Expected '30/90', got '{rgLoaded[0].ClipSize}'");
             }
@@ -166,7 +164,7 @@ public static class CsvMapperTests
             try
             {
                 File.WriteAllText(sPath, "\"SupportedFireModes\"\n\"Auto \"");
-                var rgLoaded = CsvMapper.Read<WeaponData>(sPath);
+                var rgLoaded = CsvMapper.Read<WeaponData>(sPath, false);
                 if (rgLoaded.Count != 1) throw new Exception($"Expected 1, got {rgLoaded.Count}");
                 if (rgLoaded[0].FireModes != "Auto") throw new Exception($"Expected 'Auto' after trim, got '{rgLoaded[0].FireModes}'");
             }
@@ -204,7 +202,7 @@ public static class CsvMapperTests
                 };
                 var rgOrig = new List<WeaponData> { wOrig };
                 CsvMapper.Write(sPath, rgOrig);
-                var rgLoaded = CsvMapper.Read<WeaponData>(sPath);
+                var rgLoaded = CsvMapper.Read<WeaponData>(sPath, false);
                 if (rgLoaded.Count != 1) throw new Exception($"Expected 1, got {rgLoaded.Count}");
                 var wLoaded = rgLoaded[0];
                 if (wLoaded.ScriptName != wOrig.ScriptName) throw new Exception("ScriptName mismatch");
@@ -222,7 +220,7 @@ public static class CsvMapperTests
             try
             {
                 File.WriteAllText(sPath, "\"ScriptName\",\"FireRate\",\"clip_size\",\"weight\"\n\"test_mixed\",,\"30/90\",");
-                var rgLoaded = CsvMapper.Read<WeaponData>(sPath);
+                var rgLoaded = CsvMapper.Read<WeaponData>(sPath, false);
                 if (rgLoaded.Count != 1) throw new Exception($"Expected 1, got {rgLoaded.Count}");
                 if (rgLoaded[0].ScriptName != "test_mixed") throw new Exception("ScriptName mismatch");
                 if (rgLoaded[0].FireRate != null) throw new Exception($"Expected null FireRate, got {rgLoaded[0].FireRate}");
@@ -238,7 +236,7 @@ public static class CsvMapperTests
             try
             {
                 File.WriteAllText(sPath, "\"ViewSlideRecoil.Up\"\n1.8");
-                var rgLoaded = CsvMapper.Read<WeaponData>(sPath);
+                var rgLoaded = CsvMapper.Read<WeaponData>(sPath, false);
                 if (rgLoaded.Count != 1) throw new Exception($"Expected 1, got {rgLoaded.Count}");
                 if (Math.Abs((rgLoaded[0].ViewSlideRecoilUp ?? 0) - 1.8) > 0.001) throw new Exception("ViewSlideRecoilUp mismatch");
             }
@@ -251,7 +249,7 @@ public static class CsvMapperTests
             try
             {
                 File.WriteAllText(sPath, "\"FireRate\",\"DamageHeadMultiplier\"\n600,2.75,3.0,4.0,5.0");
-                var rgLoaded = CsvMapper.Read<WeaponData>(sPath);
+                var rgLoaded = CsvMapper.Read<WeaponData>(sPath, false);
                 if (rgLoaded.Count != 1) throw new Exception($"Expected 1, got {rgLoaded.Count}");
                 if (rgLoaded[0].FireRate != 600) throw new Exception("FireRate mismatch");
                 if (rgLoaded[0].DamageHeadMultiplier != 2.75) throw new Exception("DamageHeadMultiplier mismatch");
@@ -268,7 +266,7 @@ public static class CsvMapperTests
             try
             {
                 File.WriteAllText(sPath, "\"SupportedFireModes\"\n\"Auto,Semi\"");
-                var rgLoaded = CsvMapper.Read<WeaponData>(sPath);
+                var rgLoaded = CsvMapper.Read<WeaponData>(sPath, false);
                 if (rgLoaded.Count != 1) throw new Exception($"Expected 1, got {rgLoaded.Count}");
                 if (rgLoaded[0].FireModes != "Auto,Semi") throw new Exception($"Expected 'Auto,Semi', got '{rgLoaded[0].FireModes}'");
             }
@@ -281,7 +279,7 @@ public static class CsvMapperTests
             try
             {
                 File.WriteAllText(sPath, "\"SupportedFireModes\"\n\"Auto\"\"Semi\"");
-                var rgLoaded = CsvMapper.Read<WeaponData>(sPath);
+                var rgLoaded = CsvMapper.Read<WeaponData>(sPath, false);
                 if (rgLoaded.Count != 1) throw new Exception($"Expected 1, got {rgLoaded.Count}");
                 if (rgLoaded[0].FireModes != "Auto\"Semi") throw new Exception($"Expected 'Auto\"Semi', got '{rgLoaded[0].FireModes}'");
             }
@@ -294,7 +292,7 @@ public static class CsvMapperTests
             try
             {
                 File.WriteAllText(sPath, "\"SupportedFireModes\"\n\"Line1\nLine2\"");
-                var rgLoaded = CsvMapper.Read<WeaponData>(sPath);
+                var rgLoaded = CsvMapper.Read<WeaponData>(sPath, false);
                 if (rgLoaded.Count != 1) throw new Exception($"Expected 1, got {rgLoaded.Count}");
                 if (rgLoaded[0].FireModes != "Line1\nLine2") throw new Exception($"Expected 'Line1\\nLine2', got '{rgLoaded[0].FireModes}'");
             }
@@ -307,7 +305,7 @@ public static class CsvMapperTests
             try
             {
                 File.WriteAllText(sPath, "\"SupportedFireModes\",\"FireRate\"\n\"bad_row,600\n\"good_row\",700");
-                var rgLoaded = CsvMapper.Read<WeaponData>(sPath);
+                var rgLoaded = CsvMapper.Read<WeaponData>(sPath, false);
                 if (rgLoaded.Count != 1) throw new Exception($"Expected 1, got {rgLoaded.Count}");
                 if (rgLoaded[0].FireModes != "good_row") throw new Exception($"Expected 'good_row', got '{rgLoaded[0].FireModes}'");
                 if (rgLoaded[0].FireRate != 700) throw new Exception("FireRate mismatch");
@@ -327,7 +325,7 @@ public static class CsvMapperTests
                 sb.AppendLine("\"recovered_row\",800");
                 File.WriteAllText(sPath, sb.ToString());
 
-                var rgLoaded = CsvMapper.Read<WeaponData>(sPath);
+                var rgLoaded = CsvMapper.Read<WeaponData>(sPath, false);
                 if (rgLoaded.Count < 1) throw new Exception($"Expected at least 1 recovered row, got {rgLoaded.Count}");
                 if (rgLoaded[^1].FireModes != "recovered_row") throw new Exception($"Expected last row 'recovered_row', got '{rgLoaded[^1].FireModes}'");
                 if (rgLoaded[^1].FireRate != 800) throw new Exception("FireRate mismatch on recovered row");

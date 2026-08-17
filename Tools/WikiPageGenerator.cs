@@ -140,13 +140,14 @@ public static class WikiPageGenerator
         string sFireModes = mpVals.GetValueOrDefault("supportedfiremodes", "?");
         string sHasBayonet = mpVals.GetValueOrDefault("hasbayonet", "0") == "1" ? "YES" : "NO";
 
-        string sFactionText = liInfo.Factions.Count > 0 ? string.Join("/", liInfo.Factions) : "USVC";
+        var hsDisplayFactions = liInfo.MainFactions.Count > 0 ? liInfo.MainFactions : liInfo.Factions;
+        string sFactionText = hsDisplayFactions.Count > 0 ? string.Join("/", hsDisplayFactions) : "USVC";
         //替换阵营占位符[[USVC]]为实际阵营
         sResult = Regex.Replace(sResult, @"\[\[USVC\]\]", sFactionText);
-        if (liInfo.Factions.Count > 0)
+        if (hsDisplayFactions.Count > 0)
         {
-            if (!liInfo.Factions.Contains("US")) sResult = sResult.Replace("[[File:Flag_us_new.png|50px]]", "");
-            if (!liInfo.Factions.Contains("VC")) sResult = sResult.Replace("[[File:Flag_vc_new.png|50px]]", "");
+            if (!hsDisplayFactions.Contains("US")) sResult = sResult.Replace("[[File:Flag_us_new.png|50px]]", "");
+            if (!hsDisplayFactions.Contains("VC")) sResult = sResult.Replace("[[File:Flag_vc_new.png|50px]]", "");
         }
 
         sResult = sResult.Replace("[[File:.png|512px]]", $"[[File:{sTitle}.png|512px]]");
@@ -228,10 +229,10 @@ public static class WikiPageGenerator
         sResult = sResult.Replace("[[+1]] /  ", sClipDisplay);
         sResult = sResult.Replace("||  || ", $"|| {fmt(dDg * dCm)} || {fmt(dDg * dHm)} || ");
 
-        if (liInfo.Factions.Count > 0)
+        if (liInfo.MainFactions.Count > 0)
         {
-            if (!liInfo.Factions.Contains("US")) sResult = sResult.Replace("[[File:Flag_us_new.png|50px]]", "");
-            if (!liInfo.Factions.Contains("VC")) sResult = sResult.Replace("[[File:Flag_vc_new.png|50px]]", "");
+            if (!liInfo.MainFactions.Contains("US")) sResult = sResult.Replace("[[File:Flag_us_new.png|50px]]", "");
+            if (!liInfo.MainFactions.Contains("VC")) sResult = sResult.Replace("[[File:Flag_vc_new.png|50px]]", "");
         }
         return sResult;
     }
@@ -242,18 +243,19 @@ public static class WikiPageGenerator
     {
         if (liInfo.Sources.Contains("main"))
         {
-            if (liInfo.Classes.Count == 0) return "''[[WIP]]''";
+            var hsMainClasses = liInfo.MainClasses.Count > 0 ? liInfo.MainClasses : liInfo.Classes;
+            if (hsMainClasses.Count == 0) return "''[[WIP]]''";
 
-            int iMissingCount = rgAllMainClasses.Length - liInfo.Classes.Count;
+            int iMissingCount = rgAllMainClasses.Length - hsMainClasses.Count;
             if (iMissingCount <= 2 && iMissingCount > 0)
             {
-                var rgMissing = rgAllMainClasses.Where(sC => !liInfo.Classes.Contains(sC)).ToList();
+                var rgMissing = rgAllMainClasses.Where(sC => !hsMainClasses.Contains(sC)).ToList();
                 return $"<b>Everyone Except {string.Join(" and ", rgMissing.Select(Capitalize))}</b><br>";
             }
 
             var sb = new StringBuilder();
             foreach (string sCls in LoadoutService.rgClassOrder)
-                if (liInfo.Classes.Contains(sCls) && LoadoutService.mpClassImage.TryGetValue(sCls, out var sImg))
+                if (hsMainClasses.Contains(sCls) && LoadoutService.mpClassImage.TryGetValue(sCls, out var sImg))
                     sb.Append($"[[File:{sImg}|50px]] <b>[[{Capitalize(sCls)}]]</b><br>");
             return sb.Length > 0 ? sb.ToString() : "''[[WIP]]''";
         }

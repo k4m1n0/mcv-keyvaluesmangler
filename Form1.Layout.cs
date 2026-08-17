@@ -43,8 +43,8 @@ public partial class Form1
     private static string FormatMemoryStatus()
     {
         long lWorkingSet = s_proc.WorkingSet64;
-        long lGcCommitted = GC.GetGCMemoryInfo().TotalCommittedBytes;
-        long lNative = Math.Max(0, lWorkingSet - lGcCommitted);
+        long lManagedBytes = GC.GetTotalMemory(false);
+        long lNative = Math.Max(0, lWorkingSet - lManagedBytes);
         return $"{lWorkingSet / 1024 / 1024}M RAM WORKING  {lNative / 1024} NATIVE KBYTES FREE";
     }
 

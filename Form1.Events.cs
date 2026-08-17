@@ -58,9 +58,7 @@ public partial class Form1
                         if (drResult != DialogResult.Yes)
                         {
                             bRestoringSelection = true;
-                            cmb.SelectedIndexChanged -= (s, ev) => WeaponSelected(bIsLeft, s, ev);
                             cmb.SelectedItem = wCurrent;
-                            cmb.SelectedIndexChanged += (s, ev) => WeaponSelected(bIsLeft, s, ev);
                             BeginInvoke(() => bRestoringSelection = false);
                             return;
                         }
@@ -73,9 +71,7 @@ public partial class Form1
                     if (drResult != DialogResult.Yes)
                     {
                         bRestoringSelection = true;
-                        cmb.SelectedIndexChanged -= (s, ev) => WeaponSelected(bIsLeft, s, ev);
                         cmb.SelectedItem = wCurrent;
-                        cmb.SelectedIndexChanged += (s, ev) => WeaponSelected(bIsLeft, s, ev);
                         BeginInvoke(() => bRestoringSelection = false);
                         return;
                     }
@@ -93,8 +89,8 @@ public partial class Form1
                 if (bIsLeft) wCurrentLeft = w;
                 else wCurrentRight = w;
                 bUpdatingControls = true;
-                LoadWeaponToControls(w, bIsLeft);
-                bUpdatingControls = false;
+                try { LoadWeaponToControls(w, bIsLeft); }
+                finally { bUpdatingControls = false; }
                 UpdateAllDamage();
                 pnlSpread.Invalidate();
                 pnlRecoil.Invalidate();
@@ -123,11 +119,9 @@ public partial class Form1
                     UpdateAllDamage();
                     pnlSpread.Invalidate();
                     pnlRecoil.Invalidate();
-                    StoreSnapshot(bLeftOnly: bIsLeft);
                 }
-                if (!bShowingAltStats)
-                    StoreSnapshot(bLeftOnly: bIsLeft);
-                    SetC64Status("READY.");
+                StoreSnapshot(bLeftOnly: bIsLeft);
+                SetC64Status("READY.");
             }
         }
         catch (Exception ex)
@@ -155,27 +149,27 @@ public partial class Form1
             {
                 var wTemp = new WeaponData();
                 SaveControlsToWeapon(wTemp, bIsLeft);
-                bool bDiff = !WeaponDataEquals(wTemp, wSnap);
+                bool bDiff = !VisibleValuesEqual(wTemp, wSnap);
                 LogService.Debug($"HasUnsavedChanges(sameWeapon, {(bIsLeft ? "L" : "R")} only): diff={bDiff}");
                 return bDiff;
             }
             var wTempL = new WeaponData(); SaveControlsToWeapon(wTempL, true);
             var wTempR = new WeaponData(); SaveControlsToWeapon(wTempR, false);
-            bool bLeftDiff = !WeaponDataEquals(wTempL, wSnapshotLeft);
-            bool bRightDiff = !WeaponDataEquals(wTempR, wSnapshotRight);
+            bool bLeftDiff = !VisibleValuesEqual(wTempL, wSnapshotLeft);
+            bool bRightDiff = !VisibleValuesEqual(wTempR, wSnapshotRight);
             bool bResult = bLeftDiff || bRightDiff;
             LogService.Debug($"HasUnsavedChanges(sameWeapon, both): L={bLeftDiff}, R={bRightDiff} -> {bResult}");
             return bResult;
         }
         var wTemp2 = new WeaponData();
         SaveControlsToWeapon(wTemp2, bIsLeft);
-        bool bDiff2 = !WeaponDataEquals(wTemp2, wSnap);
+        bool bDiff2 = !VisibleValuesEqual(wTemp2, wSnap);
         LogService.Debug($"HasUnsavedChanges({(bIsLeft ? "L" : "R")}): diff={bDiff2}");
         return bDiff2;
         //控件值写入临时对象与保存点快照比对
     }
 
-    private static bool WeaponDataEquals(WeaponData? wA, WeaponData? wB)//双浮点比对容忍0.0001误差 防止SaveControlsToWeapon的SliderStep浮点往返造成假阳性
+    private static bool VisibleValuesEqual(WeaponData? wA, WeaponData? wB)//双浮点比对容忍0.0001误差 防止SaveControlsToWeapon的SliderStep浮点往返造成假阳性
     {
         if (wA == null || wB == null) return wA == wB;
         return NullableEquals(wA.DamageHeadMultiplier, wB.DamageHeadMultiplier)
@@ -242,10 +236,10 @@ public partial class Form1
     {
         var wCmpL = new WeaponData(); SaveControlsToWeapon(wCmpL, true);
         var wCmpR = new WeaponData(); SaveControlsToWeapon(wCmpR, false);
-        if (!WeaponDataEquals(wCmpL, wCmpR))
+        if (!VisibleValuesEqual(wCmpL, wCmpR))
         {
-            bool bLeftDiff = !WeaponDataEquals(wCmpL, wSnapshotLeft);
-            bool bRightDiff = !WeaponDataEquals(wCmpR, wSnapshotRight);
+            bool bLeftDiff = !VisibleValuesEqual(wCmpL, wSnapshotLeft);
+            bool bRightDiff = !VisibleValuesEqual(wCmpR, wSnapshotRight);
             if (bLeftDiff && !bRightDiff) return true;
             if (!bLeftDiff && bRightDiff) return false;
         }
@@ -325,6 +319,10 @@ public partial class Form1
 
     private void CommitCurrentControlsToWeapons()
     {
+        //保存是操作边界 结束rapid序列防止保存后的切换被误判为rapid
+        sRapidStartLeft = null;
+        sRapidStartRight = null;
+
         //强制提交活跃控件的待定输入 防止NUD焦点未移走导致值未更新
         var ctrlActive = this.ActiveControl;
         if (ctrlActive != null) { this.ActiveControl = null; ctrlActive.Focus(); }
@@ -408,7 +406,7 @@ public partial class Form1
             var ueLast = llUndoStack.Last!.Value;
             var wTempL = new WeaponData(); SaveControlsToWeapon(wTempL, true);
             var wTempR = new WeaponData(); SaveControlsToWeapon(wTempR, false);
-            bSameAsTop = WeaponDataEquals(wTempL, ueLast.LeftData) && WeaponDataEquals(wTempR, ueLast.RightData);
+            bSameAsTop = VisibleValuesEqual(wTempL, ueLast.LeftData) && VisibleValuesEqual(wTempR, ueLast.RightData);
         }
         if (!bSameAsTop) PushUndo();
         ClearRedo();

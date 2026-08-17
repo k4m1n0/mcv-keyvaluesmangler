@@ -201,10 +201,7 @@ public partial class Form1
         var wWeapon = bIsLeft ? wCurrentLeft : wCurrentRight;
         if (wWeapon == null) return;
         LogService.Debug($"LoadAltStatsToControls: isLeft={bIsLeft}, mode={amMode}, weapon={wWeapon.ScriptName}");
-        var wTemp = wWeapon.ShallowClone();
-        wTemp.ScriptName = string.Empty;
-        wTemp.PrintName = string.Empty;
-        wTemp.PrimaryAmmo = string.Empty;
+        var wTemp = CloneWeaponData(wWeapon);
 
         bool bIsDov = amMode == WeaponScriptService.AltStatMode.Dov;
 

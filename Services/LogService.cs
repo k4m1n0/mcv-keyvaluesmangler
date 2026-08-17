@@ -10,6 +10,11 @@ public static class LogService
     public enum Level { Debug, Info, Warn, Error, Fatal }
 
     private static bool bEnabled = true;//global kill switch for all logging (fatal bypasses)
+#if DEBUG
+    private static bool bTraceDebugInfo = false;//!!!MASSIVE PERFORMANCE OVERHEAD - DISABLED BY DEFAULT!!!
+#else
+    private static bool bTraceDebugInfo = false;
+#endif
 
     private static Level lvlMin = Level.Debug;
     private static readonly object oLock = new();
@@ -39,8 +44,8 @@ public static class LogService
     private static string sLogPath =>
         sPath ??= Path.Combine(AppContext.BaseDirectory, "mangler.log");
 
-    public static void Debug(string sMsg) => Write("DEBUG", Level.Debug, sMsg, null);
-    public static void Info(string sMsg)  => Write("INFO", Level.Info, sMsg, null);
+    public static void Debug(string sMsg) => Write("DEBUG", Level.Debug, sMsg, bTraceDebugInfo ? new StackTrace(1, true) : null);
+    public static void Info(string sMsg) => Write("INFO", Level.Info, sMsg, bTraceDebugInfo ? new StackTrace(1, true) : null);
     public static void Warn(string sMsg)  => Write("WARN", Level.Warn, sMsg, new StackTrace(1, true));
     public static void Error(string sMsg) => Write("ERROR", Level.Error, sMsg, new StackTrace(1, true));
     public static void Error(Exception ex, string sCtx = "")
@@ -59,6 +64,16 @@ public static class LogService
     {
         lock (mpDebounce)
         {
+            if (mpDebounce.Count > 256)
+            {
+                var dtNow = DateTime.Now;
+                var rgExpired = mpDebounce
+                    .Where(kvp => (dtNow - kvp.Value).TotalMilliseconds >= Math.Max(iCooldownMs, 1000))
+                    .Select(kvp => kvp.Key)
+                    .ToList();
+                foreach (var sExpired in rgExpired)
+                    mpDebounce.Remove(sExpired);
+            }
             if (mpDebounce.TryGetValue(sKey, out var dtLast) &&
                 (DateTime.Now - dtLast).TotalMilliseconds < iCooldownMs)
                 return;

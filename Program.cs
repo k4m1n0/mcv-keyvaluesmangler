@@ -294,6 +294,7 @@ Examples:
         if (sSource == null) { Console.WriteLine($"Page not found: {sSummaryPage}"); return (null, iErrPageNotFound); }
         Verbose("Building script index...", bVerbose);
         var mpIndex = await WikiService.BuildScriptIndexAsync();
+        if (mpIndex == null) LogService.Warn("FetchWeaponLinksAsync: script index unavailable");
         var rgLinks = WikiService.ExtractWeaponLinks(sSource, mpIndex);
         if (rgLinks.Count == 0) { Console.WriteLine("No weapon links found"); return (null, iOk); }
         return (rgLinks, iOk);

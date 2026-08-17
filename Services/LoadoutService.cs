@@ -47,10 +47,11 @@ public static class LoadoutService
             }
             var mpParsed = ParseFile(sPath, rgSourceNames[i]);
             LogService.Info($"  {rgFiles[i]}: {mpParsed.Count} weapons");
+            bool bIsMain = rgSourceNames[i] == "main";
             foreach (var kvp in mpParsed)
             {
                 if (!mpResult.ContainsKey(kvp.Key)) mpResult[kvp.Key] = new LoadoutInfo();
-                mpResult[kvp.Key].Absorb(kvp.Value);
+                mpResult[kvp.Key].Absorb(kvp.Value, bIsMain);
             }
         }
         LogService.Info($"Loadout total: {mpResult.Count} weapons");

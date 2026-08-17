@@ -166,8 +166,10 @@ public partial class Form1
                 sc.ScrollControlIntoView(ctrl);
     }
 
+    private void FlashControl(Control ctrl) => FlashControl(ctrl, Color.FromArgb(150, 150, 150), 300);
+
     //快速连按时先还原上一个 避免残留高亮色
-    private async void FlashControl(Control ctrl)
+    private async void FlashControl(Control ctrl, Color cFlashColor, int iDelayMs)
     {
         if (ctrlFlashTarget != null)
         {
@@ -183,10 +185,10 @@ public partial class Form1
         var ctrlTarget = ctrl;
         var cOld = cFlashOldColor;
 
-        ctrlTarget.BackColor = Color.FromArgb(150, 150, 150);
+        ctrlTarget.BackColor = cFlashColor;
         try
         {
-            await Task.Delay(300, ctsCur.Token);
+            await Task.Delay(iDelayMs, ctsCur.Token);
             if (ReferenceEquals(ctrlFlashTarget, ctrlTarget))
             {
                 ctrlTarget.BackColor = cOld;

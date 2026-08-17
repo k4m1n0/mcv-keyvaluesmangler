@@ -483,7 +483,7 @@ public partial class Form1 : Form
         SaveControlsToWeapon(wTemp, bLeftToRight);
         var wDstCurr = new WeaponData();
         SaveControlsToWeapon(wDst, !bLeftToRight);
-        if (!WeaponDataEquals(wTemp, wDst))
+        if (!VisibleValuesEqual(wTemp, wDst))
         {
             bUpdatingControls = true;
             try { LoadWeaponToControls(wTemp, !bLeftToRight); }
@@ -883,13 +883,7 @@ public partial class Form1 : Form
         SetTitleBarDark();
     }
 
-    private async void FlashButton(Button btn)
-    {
-        Color cOld = btn.BackColor;
-        btn.BackColor = Color.FromArgb(80, 180, 80);
-        await Task.Delay(810);
-        btn.BackColor = cOld;
-    }
+    private void FlashButton(Button btn) => FlashControl(btn, Color.FromArgb(80, 180, 80), 810);
 
     private void PnlSpread_Paint(object? sender, PaintEventArgs e)
     {
