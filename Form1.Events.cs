@@ -22,7 +22,11 @@ public partial class Form1
             var dtRapidDeadline = bIsLeft ? dtRapidDeadlineL : dtRapidDeadlineR;
             var sRapidStart = bIsLeft ? sRapidStartLeft : sRapidStartRight;
 
-            if (bRestoringSelection) return;
+            if (bRestoringSelection)
+            {
+                LogService.Debug("WeaponSelected: restoring selection, skip");
+                return;
+            }
             if (bInitializing)
             {
                 if (cmb.SelectedItem is WeaponData wInit)
@@ -57,7 +61,7 @@ public partial class Form1
                             cmb.SelectedIndexChanged -= (s, ev) => WeaponSelected(bIsLeft, s, ev);
                             cmb.SelectedItem = wCurrent;
                             cmb.SelectedIndexChanged += (s, ev) => WeaponSelected(bIsLeft, s, ev);
-                            bRestoringSelection = false;
+                            BeginInvoke(() => bRestoringSelection = false);
                             return;
                         }
                     }
@@ -72,7 +76,7 @@ public partial class Form1
                         cmb.SelectedIndexChanged -= (s, ev) => WeaponSelected(bIsLeft, s, ev);
                         cmb.SelectedItem = wCurrent;
                         cmb.SelectedIndexChanged += (s, ev) => WeaponSelected(bIsLeft, s, ev);
-                        bRestoringSelection = false;
+                        BeginInvoke(() => bRestoringSelection = false);
                         return;
                     }
                 }

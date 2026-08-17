@@ -481,6 +481,9 @@ public partial class Form1 : Form
 
         var wTemp = new WeaponData();
         SaveControlsToWeapon(wTemp, bLeftToRight);
+        var wDstCurrent = new WeaponData();
+        SaveControlsToWeapon(wDstCurrent, !bLeftToRight);
+        bool bActuallyChanged = !WeaponDataEquals(wTemp, wDstCurrent);
         bUpdatingControls = true;
         try
         {
@@ -493,6 +496,8 @@ public partial class Form1 : Form
         UpdateAllDamage();
         pnlSpread.Invalidate();
         pnlRecoil.Invalidate();
+        if (bActuallyChanged)
+            SetC64Status("UNSAVED CHANGES.");
     }
 
     #endregion
