@@ -127,6 +127,7 @@ public partial class Form1
                 }
                 if (!bShowingAltStats)
                     StoreSnapshot(bLeftOnly: bIsLeft);
+                    SetC64Status("READY.");
             }
         }
         catch (Exception ex)
