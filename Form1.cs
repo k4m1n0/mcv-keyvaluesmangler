@@ -464,34 +464,50 @@ public partial class Form1 : Form
     #endregion
     #region 复制
 
-    private void CopyLeftToRight(object? sender, EventArgs e)
-    {
-        if (wCurrentLeft != null && wCurrentRight != null)
-        {
-            LogService.Debug($"Copy L>R: {wCurrentLeft.ScriptName} -> {wCurrentRight.ScriptName}");
-            PushUndo();
-            var wTemp = new WeaponData();
-            SaveControlsToWeapon(wTemp, true);
-            LoadWeaponToControls(wTemp, false);
-            UpdateAllDamage();
-            pnlSpread.Invalidate();
-            pnlRecoil.Invalidate();
-        }
-    }
+    private void CopyLeftToRight(object? sender, EventArgs e) => CopyWeaponData(true);
 
-    private void CopyRightToLeft(object? sender, EventArgs e)
+    private void CopyRightToLeft(object? sender, EventArgs e) => CopyWeaponData(false);
+
+    private void CopyWeaponData(bool bLeftToRight)
     {
-        if (wCurrentRight != null && wCurrentLeft != null)
+        var wSrc = bLeftToRight ? wCurrentLeft : wCurrentRight;
+        var wDst = bLeftToRight ? wCurrentRight : wCurrentLeft;
+        if (wSrc == null || wDst == null) return;
+
+        string sDir = bLeftToRight ? "L>R" : "R>L";
+        LogService.Debug($"Copy {sDir}: {wSrc.ScriptName} -> {wDst.ScriptName}");
+        PushUndo();
+
+        bUpdatingControls = true;
+        try
         {
-            LogService.Debug($"Copy R>L: {wCurrentRight.ScriptName} -> {wCurrentLeft.ScriptName}");
-            PushUndo();
-            var wTemp = new WeaponData();
-            SaveControlsToWeapon(wTemp, false);
-            LoadWeaponToControls(wTemp, true);
-            UpdateAllDamage();
-            pnlSpread.Invalidate();
-            pnlRecoil.Invalidate();
+            if (bShowingAltStats)
+            {
+                SyncAltStatFields(wSrc, amCurrentAltStat, bLeftToRight);
+                var wTemp = wSrc.ShallowClone();
+                wTemp.ScriptName = wDst.ScriptName;
+                wTemp.PrintName = wDst.PrintName;
+                wTemp.PrimaryAmmo = wDst.PrimaryAmmo;
+                SaveControlsToWeapon(wTemp, bLeftToRight);
+                LoadWeaponToControls(wTemp, !bLeftToRight);
+                if (WeaponHasAltStats(wTemp, amCurrentAltStat))
+                    LoadAltStatsToControls(!bLeftToRight, amCurrentAltStat);
+            }
+            else
+            {
+                var wTemp = new WeaponData();
+                SaveControlsToWeapon(wTemp, bLeftToRight);
+                LoadWeaponToControls(wTemp, !bLeftToRight);
+            }
         }
+        finally
+        {
+            bUpdatingControls = false;
+        }
+        StoreSnapshot(bLeftOnly: !bLeftToRight);
+        UpdateAllDamage();
+        pnlSpread.Invalidate();
+        pnlRecoil.Invalidate();
     }
 
     #endregion

@@ -367,5 +367,6 @@ public class WeaponData
     public string ZombieClipSize { get; set; } = string.Empty;
 
     //浅拷贝 仅在字段为值类型/不可变类型(string)时安全 新增可变引用类型字段(List/数组等)时需改为深拷贝
+    //what are you working on that makes you need a DTO that include List<T>?
     public WeaponData ShallowClone() => (WeaponData)MemberwiseClone();
 }

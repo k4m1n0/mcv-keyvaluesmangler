@@ -93,24 +93,23 @@ public partial class Form1
                     LogService.Debug($"Weapon selected {sSide}: {w.ScriptName}");
                 else
                     LogService.DebugDebounce($"rapid_weapon_{sSide}", $"Rapid weapon {sSide}: {w.ScriptName}", 300);
-                if (bShowingAltStats && WeaponHasAltStats(w, amCurrentAltStat))
+                if (bShowingAltStats)
                 {
-                    bUpdatingControls = true;
-                    LoadAltStatsToControls(bIsLeft, amCurrentAltStat);
-                    SetAltStatReadonly(bIsLeft, amCurrentAltStat);
-                    bUpdatingControls = false;
-                    HighlightAltStatButton(amCurrentAltStat);
-                    UpdateAllDamage();
-                    pnlSpread.Invalidate();
-                    pnlRecoil.Invalidate();
-                    StoreSnapshot(bLeftOnly: bIsLeft);
-                }
-                if (bShowingAltStats && !WeaponHasAltStats(w, amCurrentAltStat))
-                {
-                    RestoreAllNudEnabled(bIsLeft);
-                    bUpdatingControls = true;
-                    LoadWeaponToControls(w, bIsLeft);
-                    bUpdatingControls = false;
+                    bool bHasAltStats = WeaponHasAltStats(w, amCurrentAltStat);
+                    if (bHasAltStats)
+                    {
+                        bUpdatingControls = true;
+                        LoadAltStatsToControls(bIsLeft, amCurrentAltStat);
+                        SetAltStatReadonly(bIsLeft, amCurrentAltStat);
+                        bUpdatingControls = false;
+                    }
+                    else
+                    {
+                        RestoreAllNudEnabled(bIsLeft);
+                        bUpdatingControls = true;
+                        LoadWeaponToControls(w, bIsLeft);
+                        bUpdatingControls = false;
+                    }
                     HighlightAltStatButton(amCurrentAltStat);
                     UpdateAllDamage();
                     pnlSpread.Invalidate();
