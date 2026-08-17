@@ -23,17 +23,6 @@ public class PanelRenderer
         //仅半自动绘图补偿精度+20% 圆半径缩小到83.3%
         if (IsSemiOnly(wLeft)) { dHipL /= 1.2; dAdsL /= 1.2; dBipodHipL /= 1.2; dBipodAdsL /= 1.2; }
         if (wRight != null && IsSemiOnly(wRight)) { dHipR /= 1.2; dAdsR /= 1.2; dBipodHipR /= 1.2; dBipodAdsR /= 1.2; }
-        //全自动后座绘图补偿 按持续射击时间线性增长到最大值
-        //if (HasAuto(wLeft))
-        //{
-        //    dHipUpL = Math.Min(dHipUpL + dAdsUpMaxL * dTransitionL, dAdsUpMaxL);
-        //    dHipRtL = Math.Min(dHipRtL + dAdsRtMaxL * dTransitionL, dAdsRtMaxL);
-        //}
-        //if (wRight != null && HasAuto(wRight))
-        //{
-        //    dHipUpR = Math.Min(dHipUpR + dAdsUpMaxR * dTransitionR, dAdsUpMaxR);
-        //    dHipRtR = Math.Min(dHipRtR + dAdsRtMaxR * dTransitionR, dAdsRtMaxR);
-        //}
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.Clear(Color.Black);
         int iCx = pnlPanel.Width / 2, iCy = pnlPanel.Height / 2;
