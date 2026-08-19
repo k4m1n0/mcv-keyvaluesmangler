@@ -34,6 +34,8 @@ rl: and  eax, 0FFFFFh
     inc  rsi
 ENDM
 
+
+
 lamarr_core PROC
     push rbx
     push rbp
@@ -226,6 +228,8 @@ ex: add  rsp, 8
     pop  rbx
     ret
 lamarr_core ENDP
+
+
 
 StubEntry PROC FRAME
     push rbp
@@ -446,12 +450,15 @@ fexit:
     ret
 StubEntry ENDP
 
+
+
 ; Only swallow access violations / heap-corruption raised OUTSIDE the
 ; apphost image (the exit-time cleanup faults), and at most a bounded
-; number of times.  Genuine faults inside the apphost (or unrelated
+; number of times. Genuine faults inside the apphost (or unrelated
 ; exceptions like breakpoints, stack overflow) fall through to the
 ; normal handler and crash cleanly instead of spinning on a re-executed
 ; faulting instruction.
+
 VectoredHandler PROC
     test rcx, rcx
     jz   vh_search
@@ -495,6 +502,8 @@ VectoredHandler ENDP
 vehBase  dq 0                ; decompressed apphost image base
 vehSize  dq 0                ; image size (bytes)
 vehCount dq 0                ; swallows so far (bounded)
+
+
 
 RegisterModule PROC
     push rbp
@@ -638,6 +647,8 @@ rm_dn:
     ret
 RegisterModule ENDP
 
+
+
 TlsInit PROC
     push rbx
     push r12
@@ -709,6 +720,8 @@ tl_dn:
     ret
 TlsInit ENDP
 
+
+
 ResolveApi PROC
     push rbx
     push rsi
@@ -746,6 +759,8 @@ got:
     mov  rdi, rcx
     jmp  ra_exp
 ResolveApi ENDP
+
+
 
 ResolveApiIn PROC
     push rbx
@@ -797,6 +812,8 @@ ra_wg:
     mov  rdi, r12
     jmp  ra_exp
 ResolveApiIn ENDP
+
+
 
 ra_exp:
     mov  eax, [rdx+3Ch]
@@ -929,6 +946,8 @@ rfail:
     pop  rbx
     ret
 
+
+
 szVirtualAlloc   db "VirtualAlloc",0
 szTlsAlloc       db "TlsAlloc",0
 szTlsSetValue    db "TlsSetValue",0
@@ -941,6 +960,8 @@ szGetModuleFileNameW db "GetModuleFileNameW",0
 szRtlAddFunctionTable db "RtlAddFunctionTable",0
 szAddVectoredExceptionHandler db "AddVectoredExceptionHandler",0
 szNtdll          db "ntdll",0
+
+
 
 ResolveImports PROC
     push rbp
