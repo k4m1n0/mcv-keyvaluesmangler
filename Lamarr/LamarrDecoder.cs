@@ -6,9 +6,9 @@ namespace Lamarr;
 public static class LamarrDecoder
 {
     //编码阈值
-    private const uint LZ_DEFAULT_CNT = 0x12;
-    private const uint LZ_1BYTE_CNT = 0xFF + LZ_DEFAULT_CNT;
-    private const uint LZ_2BYTE_CNT = 0xFFFF + LZ_1BYTE_CNT;
+    private const uint uCntDefault = 0x12;
+    private const uint uCnt1Byte = 0xFF + uCntDefault;
+    private const uint uCnt2Byte = 0xFFFF + uCnt1Byte;
 
     public static int Decode(byte[] rgOut, ref uint pcbOut, byte[] rgIn, uint cbIn)
     {
@@ -90,12 +90,12 @@ public static class LamarrDecoder
                         else
                         {
                             if (iCurNib != 0)
-                                uRCnt = (uint)((ReadLE32Safe(rgIn, uInPos, cbIn) >> 4) & 0xFFFF) + LZ_1BYTE_CNT;
+                                uRCnt = (uint)((ReadLE32Safe(rgIn, uInPos, cbIn) >> 4) & 0xFFFF) + uCnt1Byte;
                             else
-                                uRCnt = (uint)(ReadLE16Safe(rgIn, uInPos, cbIn) + LZ_1BYTE_CNT);
+                                uRCnt = (uint)(ReadLE16Safe(rgIn, uInPos, cbIn) + uCnt1Byte);
                             uInPos += 2;
                             //哨兵值0x111+0xFFFF 触发非压缩块回退
-                            if (uRCnt == LZ_2BYTE_CNT)
+                            if (uRCnt == uCnt2Byte)
                             {
                                 uint uCopyCnt;
                                 if (iCurNib != 0)

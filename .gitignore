@@ -3,8 +3,12 @@
 /obj
 /publish
 /Lamarr/bin
+/Lamarr/Packer/bin
+/Lamarr/Packer/obj
+/Lamarr/Native/bin
+/Lamarr/Native/obj
+/Lamarr/Native/Boot/bin
+/Lamarr/Native/Boot/obj
 /Lamarr/obj
-/LamarrPacker/bin
-/LamarrPacker/obj
 *.bin
 *.exe

@@ -232,13 +232,13 @@ Abstract
             Cursor += 2.
             L := E + 0x111.
 
-    The value E = 0xFFFF produces L = LZMAT_2BYTE_CNT (0x10110),
+    The value E = 0xFFFF produces L = uCnt2Byte (0x10110),
     which is a sentinel triggering a Copy Chunk (Section 4.3) instead
     of a normal match.
 
 4.3.  Copy Chunk  (Uncompressed Fallback)
 
-    When L = LZMAT_2BYTE_CNT, the item is an uncompressed data block. The
+    When L = uCnt2Byte, the item is an uncompressed data block. The
     length C (in units of 4-octet groups) is decoded from context:
 
         nib = 1:   C := ((octet[cursor - 4] & 0xFC) << 5)
@@ -262,14 +262,14 @@ Abstract
     positions.
 
         h(p) := (u16(p) + ((u32(p) >> 9) & 0xFFFF))
-                & (TABLE_SIZE - 1)
+                & (iDictSize - 1)
 
-    TABLE_SIZE is 0x8000 (32768 entries). Collisions chain through
+    iDictSize is 0x8000 (32768 entries). Collisions chain through
     an auxiliary index array of the same size. The chain is
     traversed until a position before the search window is reached:
 
-        start_pos := 0                       if p < MAX_GAMMA_DIST
-        start_pos := p - MAX_GAMMA_DIST      otherwise
+        start_pos := 0                       if p < uDistMax
+        start_pos := p - uDistMax            otherwise
 
 5.1.1.  RLE Fast Path
 
@@ -357,30 +357,122 @@ Abstract
 
 6.  Container Format
 
-    The following container format is defined by the Lamarr C# reference
-    implementation (Packer.cs and StubLoader.cs). Other implementations
-    MAY use a different container, provided the compressed payload is a
-    conforming LZMAT-compatible bitstream per Sections 1 through 5.
+    The Lamarr reference implementations define two containers for
+    distributing a compressed payload alongside its stub. Both store a
+    conforming LZMAT-compatible bitstream per Sections 1 through 5;
+    other implementations MAY use a different container.
 
-    +-----------+-------------------------------+
-    | Offset    | Content                       |
-    +-----------+-------------------------------+
-    | 0         | Stub executable (S octets)    |
-    | S         | Magic: "Lamarr!!" (8 octets)  |
-    | S + 8     | Original size (u32 LE)        |
-    | S + 12    | Compressed size (u32 LE)      |
-    | S + 16    | Compressed payload (C octets) |
-    +-----------+-------------------------------+
+    6.1.  Tail Append (managed stub)
 
-    Magic octets:  0x4C 0x61 0x6D 0x61 0x72 0x72 0x21 0x21
+        Defined by Packer.cs and Stubloader.cs.
 
-    Loaders MUST search backwards from end-of-file for the magic and
-    validate:  sizes positive, compressed < original, C + (S + 16)
-    does not exceed the file length.
+        +-----------+-------------------------------+
+        | Offset    | Content                       |
+        +-----------+-------------------------------+
+        | 0         | Stub executable (S octets)    |
+        | S         | Magic: "Lamarr!!" (8 octets)  |
+        | S + 8     | Original size (u32 LE)        |
+        | S + 12    | Compressed size (u32 LE)      |
+        | S + 16    | Compressed payload (C octets) |
+        +-----------+-------------------------------+
 
-    The stub SHALL be compiled as a Windows GUI executable
-    (subsystem WINDOWS) to suppress console allocation on startup.
+        Magic octets:  0x4C 0x61 0x6D 0x61 0x72 0x72 0x21 0x21
 
+        Loaders MUST search backwards from end-of-file for the magic
+        and validate: sizes positive, compressed < original,
+        C + (S + 16) does not exceed the file length.
+
+        The stub SHALL be compiled as a Windows GUI executable
+        (subsystem WINDOWS) to suppress console allocation on startup.
+
+    6.2.  Native Pack (PE sections)
+
+        Defined by Lamarr/Native (LamarrNativePack + lamarr_stub.asm +
+        LamarrBoot). The payloads are embedded as PE sections of a stub
+        executable instead of being appended to the file tail, keeping
+        the .NET single-file bundle contiguous:
+
+            [PE headers] [.stub] [bundle marker] [.lamarr] [.lamapp]
+            [bundle data] [bundle header]
+
+        The 40-octet bundle marker sits between .stub and .lamarr: the
+        bundle header file offset (u64 LE) followed by the 32-octet
+        bundle signature. hostfxr locates the marker by scanning the
+        packed exe file and reads the bundle header at the stored offset.
+        The file ends with the bundle header; there is no trailing marker.
+
+        .stub   position-independent native loader (lamarr_stub.asm).
+                No imports: walks the PEB for kernel32/ntdll,
+                Lamarr-decompresses .lamarr into a buffer sized by the
+                packed exe's SizeOfImage (the packer sizes it to cover
+                the decompressed host image), applies relocations,
+                resolves imports (incl. forwarded exports), installs a
+                process-wide vectored exception handler that only
+                swallows faults raised outside the host image (used for
+                the exit-time heap corruption workaround; bounded),
+                registers a synthetic LDR module entry so
+                GetModuleHandle(NULL) and GetModuleFileNameW resolve to
+                the decompressed image and the packed exe path,
+                registers .pdata via RtlAddFunctionTable, initializes
+                TLS, and jumps to the host entry point.
+
+        .lamarr Lamarr-compressed host image (apphost; the
+                singlefilehost / self-contained layout is not yet
+                supported), normalized so raw offsets equal RVAs and
+                FileAlignment == SectionAlignment; the host's embedded
+                bundle marker is patched to the rebuilt bundle header
+                offset.
+
+        .lamapp Lamarr-compressed application payload (the main
+                managed DLL), consumed by the managed bootstrapper
+                LamarrBoot:
+
+                    +--------+----------------------------+
+                    | 0      | Original size (u32 LE)     |
+                    | 4      | Compressed size (u32 LE)   |
+                    | 8      | Compressed data (C octets) |
+                    +--------+----------------------------+
+
+                LamarrBoot reads its own exe file, decompresses the
+                payload, loads it into an AssemblyLoadContext and
+                invokes the real entry point.
+
+        bundle  A .NET single-file bundle whose main assembly entry is
+                the uncompressed LamarrBoot. The framework-dependent
+                coreclr cannot inflate compressed bundle entries
+                (non-CORECLR_EMBEDDED build), so bundle files MUST stay
+                uncompressed; the compressed main assembly lives in
+                .lamapp. The packer rebuilds the bundle header at the
+                end of the file and rewrites the deps.json and
+                runtimeconfig.json location fields (bundle version >= 2)
+                to the rebuilt offsets.
+
+    6.3.  Host Compatibility
+
+        The stub targets x64 Windows with the PEB/LDR layout shared by
+        Windows 7 SP1 through Windows 11; all APIs it resolves
+        (VirtualAlloc, VirtualProtect, TlsAlloc, TlsSetValue,
+        GetModuleHandleW, GetModuleFileNameW, LoadLibraryA,
+        GetProcAddress, AddVectoredExceptionHandler, RtlAddFunctionTable)
+        exist in that range.  Two limitations apply:
+
+        (a)  Forwarded exports are resolved one level deep.  The
+             kernel32 -> KERNELBASE forwarding chain used by
+             AddVectoredExceptionHandler and the api-ms-win-* api-set
+             layer are single-level in practice, so resolution succeeds;
+             deeper forwarding chains are not supported.
+
+        (b)  Hardware-enforced CET (shadow stack / indirect branch
+             tracking) is not handled by the stub.  The stub jumps
+             directly into the decompressed host entry point, so a
+             system enforcing CET on non-ENDBR64 targets will fault.
+             This is not a practical issue on current mainstream
+             Windows 7 SP1 through Windows 11 deployments, where CET is
+             opt-in rather than mandated for unpacked images.
+
+        The .NET host itself (apphost + coreclr) carries its own OS
+        support policy; the stub's native compatibility does not extend
+        the runtime's supported Windows versions.
 
 7.  Security Considerations
 

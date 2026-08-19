@@ -178,6 +178,10 @@
       dotnet publish -c Release -r win-x64 --no-self-contained -o ./publish
     or
       dotnet publish -c Release -r win-x64 --self-contained true -o ./publish
+   
+   IF YOU ARE CRAZY:
+      dotnet publish -c Release -r win-x64 --no-self-contained
+      -o ./publish -p:Packer=native
 
   Then grab the EXE from .\publish\ and do whatever you want with it
 
@@ -238,14 +242,43 @@
 
   CREDITS
     The underlying LZMAT compression algorithm was designed by
-    Vitaly Evseenko. The Lamarr source (Lamarr/, LamarrPacker/)
-    is a clean room reimplementation - no third party code, no
-    dependencies beyond .NET 8.0, released under WTFPL too :)))
+    Vitaly Evseenko. The Lamarr encoder / decoder source is a clean
+    room reimplementation - no third party code, no dependencies
+    beyond .NET 8.0, released under WTFPL too :))) 
 
 ==============================================================================
-  0B. CREDITS
+  0B. LAMARR NATIVE PACKER
 ==============================================================================
 
+  0A does its job with a managed stub. This one does it with ASSEMBLY,
+  because why not. Both are Lamarr - just two containers, one goal.
+  The Packer property picks which Lamarr you get (default: managed):
+
+    -p:Packer=managed      Lamarr IL stub + Lamarr compressed DLL  (~320 KiB)
+    -p:Packer=native       native asm stub + Lamarr compressed DLL (~240 KiB)
+    -p:Packer=none         plain .NET single file (no packing)     (~540 KiB)
+    -p:SelfContained=true  MS official self contained single file (~37.5 MiB)
+
+  HOW IT WORKS
+    The FDD single file is rebuilt into three PE sections: a position
+    independent asm loader (.stub) with no imports - it walks the PEB,
+    resolves kernel32/ntdll, Lamarr decompresses the apphost (.lamarr)
+    into memory, and jumps to its entry point; the main DLL rides along
+    as Lamarr compressed bytes in .lamapp. The bundle keeps only a tiny
+    uncompressed bootstrapper (LamarrBoot), because the FDD CORECLR
+    rejects any compressed bundle entry - so LamarrBoot decompresses
+    .lamapp and loads the real main DLL from memory
+
+    No temp files. No console flash. HELL YEAH (AGAIN)
+
+  EXTRA BUILD REQUIREMENTS
+    - MSVC x64 toolchain (ml64/link). Locator: Lamarr/Native/build_stub.ps1
+      (vswhere -> VCToolsInstallDir -> PATH). Without it, use Packer=managed
+      and pretend this section never existed
+
+==============================================================================
+  0C. CREDITS
+==============================================================================
 
   Written for the MCV community by
         John "k0u74ku" Doe
