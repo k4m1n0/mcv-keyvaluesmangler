@@ -257,21 +257,23 @@
   The Packer property picks which Lamarr you get (default: managed):
 
     -p:Packer=managed      Lamarr IL stub + Lamarr compressed DLL  (~320 KiB)
-    -p:Packer=native       native asm stub + Lamarr compressed DLL (~240 KiB)
+    -p:Packer=native       native asm stub + Lamarr compressed DLL (~180 KiB)
     -p:Packer=none         plain .NET single file (no packing)     (~540 KiB)
     -p:SelfContained=true  MS official self contained single file (~37.5 MiB)
 
   HOW IT WORKS
     The FDD single file is rebuilt into three PE sections: a position
-    independent asm loader (.stub) with no imports - it walks the PEB,
-    resolves kernel32/ntdll, Lamarr decompresses the apphost (.lamarr)
-    into memory, and jumps to its entry point; the main DLL rides along
-    as Lamarr compressed bytes in .lamapp. The bundle keeps only a tiny
-    uncompressed bootstrapper (LamarrBoot), because the FDD CORECLR
-    rejects any compressed bundle entry - so LamarrBoot decompresses
-    .lamapp and loads the real main DLL from memory
+    independent asm loader (.stub) with no imports - it walks the PEB
+    for kernel32/ntdll, resolves the dotnet root at runtime (DOTNET_ROOT
+    env, then HKLM registry, then default), scans <root>\host\fxr for
+    the best hostfxr (preferring the payload's runtime major, falling
+    back to highest), loads it, and calls hostfxr_main_bundle_startupinfo
+    directly with this exe as host path. The main DLL rides along as Lamarr
+    compressed bytes in .lamapp. The bundle keeps only a tiny uncompressed
+    LamarrBoot, because FDD CORECLR rejects any compressed bundle entry -
+    so LamarrBootdecompresses .lamapp and loads the real main DLL from memory
 
-    No temp files. No console flash. Under 256 KiB. HELL YEAH! (again)
+    No temp files. No console flash. Under 192 KiB. HELL YEAH! (again)
 
   EXTRA BUILD REQUIREMENTS
     - MSVC x64 toolchain (ml64/link). Locator: Lamarr/Native/build_stub.ps1

@@ -16,7 +16,6 @@ internal class PeWriter
     private uint uSectAlign, uFileAlign, uSizeOfHdrs;
     private long lBundleHeaderOffset;
     private int iBundleDataStart;
-    private int iBundleLen;
 
     private long lNewBundleHeaderOffset;
     private uint uStubRaw, uStubRawSize;
@@ -42,6 +41,7 @@ internal class PeWriter
     private string sMainName = "";
     private string sPayloadPath = "";
 
+    //8字节header_off + 32字节签名
     private static readonly byte[] rgSignature = new byte[]
     {
         0x8b,0x12,0x02,0xb9,0x6a,0x61,0x20,0x38,0x72,0x7b,0x93,0x02,0x14,0xd7,0xa0,0x32,
@@ -73,6 +73,7 @@ internal class PeWriter
         rgStubCode = new byte[uVs];
         Array.Copy(rgStub, (int)uRaw, rgStubCode, 0, (int)Math.Min(uVs, rgStub.Length - uRaw));
 
+        //push rbp; mov rbp,rsp
         int iFound = -1;
         for (int i = rgStubCode.Length - 4; i >= 0; i--)
         {
@@ -108,7 +109,6 @@ internal class PeWriter
         iBundleDataStart = (int)ParseBundleFirstEntryOffset(rgPayload, lBundleHeaderOffset);
         if (iBundleDataStart <= 0 || iBundleDataStart >= rgPayload.Length)
             throw new InvalidOperationException("Invalid bundle layout");
-        iBundleLen = rgPayload.Length - iBundleDataStart;
         sMainName = Path.GetFileNameWithoutExtension(sPath) + ".dll";
     }
 
@@ -138,8 +138,6 @@ internal class PeWriter
 
     private void ComputeLayout()
     {
-        //[head][stub][marker][lamapp][bundle data][bundle head]
-        //各段按FileAlignment对齐bundle 数据区起点决定新X'
         uStubRaw = AlignUp(uSizeOfHdrs, uFileAlign);
         uStubRawSize = AlignUp((uint)rgStubCode.Length, uFileAlign);
         iMarkerRaw = uStubRaw + uStubRawSize;
@@ -152,7 +150,7 @@ internal class PeWriter
 
     private long FindMarkerOffset(byte[] b)
     {
-        //marker可能远在1mb之外 不设上限
+        //不设搜索上限 marker位置随bundle大小变化
         for (int i = 0; i + 40 <= b.Length; i++)
             if (b[i + 8] == rgSignature[0] && MatchSig(b, i + 8))
                 return BitConverter.ToInt64(b, i);
@@ -180,7 +178,7 @@ internal class PeWriter
             ReadI64(b, ref p);
         }
         long first = 0;
-        for (int i = 0; i < n && i < 0x1000; i++)//0x1000防恶意头导致死循环
+        for (int i = 0; i < n && i < 0x1000; i++)//防坏头
         {
             long off = ReadI64(b, ref p);
             ReadI64(b, ref p); ReadI64(b, ref p);
@@ -194,7 +192,6 @@ internal class PeWriter
     #endregion
     #region bundle 重建
 
-    //bundle头部按未压缩大小读取文件数据 普通FDD的coreclr无解压能力
     private void RebuildBundle()
     {
         int p = (int)lBundleHeaderOffset;
@@ -234,7 +231,6 @@ internal class PeWriter
         if (iMainEntry < 0)
             throw new InvalidOperationException($"Bundle main assembly '{sMainName}' not found. Input: '{sPayloadPath}'");
 
-        //deps/rtc头按未压缩大小读 必须保持原始不压缩
         for (int i = 0; i < n && i < 0x1000; i++)
         {
             long origAbs = iBundleDataStart + rgRel[i];
@@ -259,7 +255,6 @@ internal class PeWriter
             Console.WriteLine($"  .lamapp: {rgDll.Length} -> {rgLamApp.Length} bytes (Lamarr)");
         }
 
-        //保持bundle文件不压缩 普通FDD coreclr对compressedSize>0直接失败
         using var ms = new MemoryStream();
         rgBundleOffsets = new long[n];
         rgBundleCsz = new long[n];
@@ -269,7 +264,7 @@ internal class PeWriter
             byte[] rgData;
             if (i == iMainEntry)
             {
-                rgData = rgBoot;//主条目替换为bootstrapper 原DLL已放入.lamapp段
+                rgData = rgBoot;//原DLL已经进.lamapp了 这里放boot
             }
             else
             {
@@ -279,7 +274,7 @@ internal class PeWriter
             }
             rgBundleOffsets[i] = ms.Position;
             ms.Write(rgData, 0, rgData.Length);
-            rgBundleCsz[i] = i == iMainEntry ? 0 : (rgCsz[i] > 0 ? rgData.Length : 0);
+            rgBundleCsz[i] = i == iMainEntry ? 0 : (rgCsz[i] > 0 ? rgData.Length : 0);//fdd的coreclr不会解压 csz直接置0
             rgBundleSz[i] = i == iMainEntry ? rgData.Length : rgSz[i];
         }
         rgBundleData = ms.ToArray();
@@ -306,21 +301,19 @@ internal class PeWriter
 
     private void PatchStubVars(string sOutPath)
     {
-        // Patch the stub's direct-hostfxr data block: app_path, pref-major and
-        // bundle header offset. dotnet_root/hostfxr are resolved at runtime by
-        // the stub (env/registry + fxr directory scan, preferring the payload's
-        // runtime major version).
-        string sAppPath = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(sOutPath))!, sMainName);
         int iPrefMajor = GetPayloadMajor();
 
-        ReplaceMarker(rgStubCode, "##APPPATH##", Encoding.Unicode.GetBytes(sAppPath), 512);
+        //app_path 不写死打包目录: stub 运行时用 GetModuleFileNameW 的 host_path
+        //目录 + 此处注入的主 DLL 文件名(##APPNAME##)构造, exe 可移到任意目录运行
+        ReplaceMarker(rgStubCode, "##APPNAME##", Encoding.Unicode.GetBytes(sMainName), 256);
         ReplaceMarker(rgStubCode, "##PREFMAJ##", BitConverter.GetBytes((uint)iPrefMajor), 8);
 
+        //0x1122334455667788
         int iOff = IndexOf(rgStubCode, new byte[] { 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11 });
         if (iOff < 0)
             throw new InvalidOperationException("gHeaderOff marker not found in stub");
         Array.Copy(BitConverter.GetBytes(lNewBundleHeaderOffset), 0, rgStubCode, iOff, 8);
-        Console.WriteLine($"  app_path: {sAppPath}");
+        Console.WriteLine($"  app_name: {sMainName}");
         Console.WriteLine($"  pref_major: {iPrefMajor}");
         Console.WriteLine($"  header_offset: 0x{lNewBundleHeaderOffset:X}");
     }
@@ -335,8 +328,7 @@ internal class PeWriter
         var m = System.Text.RegularExpressions.Regex.Match(sRtc, "\"tfm\"\\s*:\\s*\"net(\\d+)");
         if (m.Success && int.TryParse(m.Groups[1].Value, out int maj) && maj > 0)
             return maj;
-        // fallback: framework version field
-        var m2 = System.Text.RegularExpressions.Regex.Match(sRtc, "\"version\"\\s*:\\s*\"(\\d+)\\.(\\d+)");
+        var m2 = System.Text.RegularExpressions.Regex.Match(sRtc, "\"version\"\\s*:\\s*\"(\\d+)\\.(\\d+)");//tfm字段有时缺失
         return m2.Success && int.TryParse(m2.Groups[1].Value, out int v2) && v2 > 0 ? v2 : 0;
     }
 
@@ -371,7 +363,6 @@ internal class PeWriter
     {
         uint uNewHdrs = AlignUp(uSizeOfHdrs, uFileAlign);
 
-        //节RVA按SectionAlignment对齐 stub在运行时据此映射各段
         uint uStubRva = AlignUp(0x1000, uSectAlign);
         uint uLamAppRva = AlignUp(uStubRva + (uint)rgStubCode.Length, uSectAlign);
         uint uNewImg = AlignUp(uLamAppRva + (uint)rgLamApp.Length, uSectAlign);
@@ -379,10 +370,13 @@ internal class PeWriter
         byte[] rgHdrs = new byte[uNewHdrs];
         Array.Copy(rgPayload, 0, rgHdrs, 0, Math.Min(uSizeOfHdrs, rgHdrs.Length));
 
-        BitConverter.GetBytes((ushort)3).CopyTo(rgHdrs, iPeOff + 6);
+        BitConverter.GetBytes((ushort)2).CopyTo(rgHdrs, iPeOff + 6);
         BitConverter.GetBytes(uNewImg).CopyTo(rgHdrs, iOptOff + 56);
         BitConverter.GetBytes(uStubRva + uStubEntryOff).CopyTo(rgHdrs, iOptOff + 16);
-        Array.Clear(rgHdrs, iOptOff + 0x70, Math.Min(16 * 8, rgHdrs.Length - (iOptOff + 0x70)));//stub不依赖导入表和重定位表 清零后由入口代码自行解析
+        //stub无导入表/重定位表 入口自行解析
+        Array.Clear(rgHdrs, iOptOff + 0x70, Math.Min(16 * 8, rgHdrs.Length - (iOptOff + 0x70)));
+        BitConverter.GetBytes(uStubRawSize).CopyTo(rgHdrs, iOptOff + 4);
+        BitConverter.GetBytes(uLamAppRawSize).CopyTo(rgHdrs, iOptOff + 8);
 
         Array.Clear(rgHdrs, iSecOff, Math.Min(usSecCount * 40, rgHdrs.Length - iSecOff));
         WriteSection(rgHdrs, iSecOff, ".stub", uStubRva, (uint)rgStubCode.Length, uStubRawSize, uStubRaw);
@@ -414,7 +408,7 @@ internal class PeWriter
         BitConverter.GetBytes(uRawSize).CopyTo(rgHdrs, iOff + 16);
         BitConverter.GetBytes(uRva).CopyTo(rgHdrs, iOff + 12);
         BitConverter.GetBytes(uRaw).CopyTo(rgHdrs, iOff + 20);
-        uint uChar = sName == ".stub" ? 0xE0000020u : 0x40000040u;//stub: code|exec|read|write (VEH state) : data|read
+        uint uChar = sName == ".stub" ? 0xE0000020u : 0x40000040u;//R|W|X + CNT_CODE : R|X + CNT_INITIALIZED_DATA
         BitConverter.GetBytes(uChar).CopyTo(rgHdrs, iOff + 36);
     }
 

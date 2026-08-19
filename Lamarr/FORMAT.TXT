@@ -388,44 +388,37 @@ Abstract
     6.2.  Native Pack (PE sections)
 
         Defined by Lamarr/Native (LamarrNativePack + lamarr_stub.asm +
-        LamarrBoot). The payloads are embedded as PE sections of a stub
+        LamarrBoot). The payload is embedded as PE sections of a stub
         executable instead of being appended to the file tail, keeping
         the .NET single-file bundle contiguous:
 
-            [PE headers] [.stub] [bundle marker] [.lamarr] [.lamapp]
+            [PE headers] [.stub] [bundle marker] [.lamapp]
             [bundle data] [bundle header]
 
-        The 40-octet bundle marker sits between .stub and .lamarr: the
+        The 40-octet bundle marker sits between .stub and .lamapp: the
         bundle header file offset (u64 LE) followed by the 32-octet
         bundle signature. hostfxr locates the marker by scanning the
         packed exe file and reads the bundle header at the stored offset.
         The file ends with the bundle header; there is no trailing marker.
 
         .stub   position-independent native loader (lamarr_stub.asm).
-                No imports: walks the PEB for kernel32/ntdll,
-                Lamarr-decompresses .lamarr into a buffer sized by the
-                packed exe's SizeOfImage (the packer sizes it to cover
-                the decompressed host image), applies relocations,
-                resolves imports (incl. forwarded exports), installs a
-                process-wide vectored exception handler that only
-                swallows faults raised outside the host image (used for
-                the exit-time heap corruption workaround; bounded),
-                registers a synthetic LDR module entry so
-                GetModuleHandle(NULL) and GetModuleFileNameW resolve to
-                the decompressed image and the packed exe path,
-                registers .pdata via RtlAddFunctionTable, initializes
-                TLS, and jumps to the host entry point.
+                No imports: walks the PEB to locate kernel32 and parses
+                its export table directly for the small API set it
+                needs, then calls hostfxr_main_bundle_startupinfo with
+                no manual image mapping:
 
-        .lamarr Lamarr-compressed host image (apphost), normalized so
-                raw offsets equal RVAs and FileAlignment ==
-                SectionAlignment; the host's embedded bundle marker is
-                patched to the rebuilt bundle header offset.
-
-                The self-contained singlefilehost layout is not
-                supported (known defect: the bundle layout breaks on
-                the rebuilt singlefilehost).  SelfContained publishes
-                use the official Microsoft single file instead
-                (see README 0B).
+                resolve dotnet root at runtime (DOTNET_ROOT env -> HKLM
+                registry InstallLocation -> default Program Files);
+                scan <root>\host\fxr for the best hostfxr version
+                (preferring the payload's runtime major parsed from the
+                rebuilt runtimeconfig.json, falling back to the highest
+                installed); load hostfxr.dll (LoadLibraryA) and
+                GetProcAddress("hostfxr_main_bundle_startupinfo"), then
+                call it with host_path = this exe, dotnet_root, app_path
+                and the bundle header offset. hostfxr/hostpolicy then
+                run the bundle normally. The stub never maps or
+                decompresses a host image itself; there is no synthetic
+                LDR entry, no VEH, no TLS/CRT emulation.
 
         .lamapp Lamarr-compressed application payload (the main
                 managed DLL), consumed by the managed bootstrapper
@@ -454,25 +447,32 @@ Abstract
     6.3.  Host Compatibility
 
         The stub targets x64 Windows with the PEB/LDR layout shared by
-        Windows 7 SP1 through Windows 11; all APIs it resolves
-        (VirtualAlloc, VirtualProtect, TlsAlloc, TlsSetValue,
-        GetModuleHandleW, GetModuleFileNameW, LoadLibraryA,
-        GetProcAddress, AddVectoredExceptionHandler, RtlAddFunctionTable)
-        exist in that range.  Two limitations apply:
+        Windows 7 SP1 through Windows 11. It resolves only these APIs:
 
-        (a)  Forwarded exports are resolved one level deep.  The
-             kernel32 -> KERNELBASE forwarding chain used by
-             AddVectoredExceptionHandler and the api-ms-win-* api-set
-             layer are single-level in practice, so resolution succeeds;
-             deeper forwarding chains are not supported.
+            ExitProcess, LoadLibraryA, GetProcAddress,
+            GetModuleFileNameW, GetEnvironmentVariableW,
+            FindFirstFileW, FindNextFileW, FindClose,
+            RegOpenKeyExW, RegQueryValueExW
+
+        Two limitations apply:
+
+        (a)  All kernel32 exports above are direct exports, resolved by
+             walking the PEB module list to kernel32 and parsing its
+             export table (no kernel32 -> KERNELBASE -> api-set
+             forwarding chain is involved). RegOpenKeyExW /
+             RegQueryValueExW are loaded explicitly from advapi32.dll
+             via LoadLibraryA + GetProcAddress; hostfxr_main_bundle_
+             startupinfo likewise via GetProcAddress on hostfxr.dll.
+             Since the stub never maps or imports a host image, no
+             forwarded-export resolution is required.
 
         (b)  Hardware-enforced CET (shadow stack / indirect branch
-             tracking) is not handled by the stub.  The stub jumps
-             directly into the decompressed host entry point, so a
-             system enforcing CET on non-ENDBR64 targets will fault.
-             This is not a practical issue on current mainstream
-             Windows 7 SP1 through Windows 11 deployments, where CET is
-             opt-in rather than mandated for unpacked images.
+             tracking) is not handled by the stub. It calls directly
+             into hostfxr_main_bundle_startupinfo, so a system
+             enforcing CET on non-ENDBR64 targets will fault. This is
+             not a practical issue on current mainstream Windows 7 SP1
+             through Windows 11 deployments, where CET is opt-in rather
+             than mandated.
 
         The .NET host itself (apphost + coreclr) carries its own OS
         support policy; the stub's native compatibility does not extend

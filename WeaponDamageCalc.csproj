@@ -51,6 +51,7 @@
   </Target>
 
   <Target Name="NativeStubPack" AfterTargets="Publish" Condition="'$(Packer)' == 'native' And '$(Configuration)' != 'Debug'">
+    <Delete Files="$(PublishDir)WeaponDamageCalc.exe" />
     <Exec Command="dotnet build &quot;$(ProjectDir)Lamarr\Native\Native.csproj&quot; -c Release -v q" />
     <Exec Command="dotnet build &quot;$(ProjectDir)Lamarr\Native\Boot\Boot.csproj&quot; -c Release -v q" />
     <Exec Command="dotnet publish &quot;$(ProjectDir)WeaponDamageCalc.csproj&quot; -c $(Configuration) -r $(RuntimeIdentifier) --self-contained true -p:PublishSingleFile=true -p:Packer=none -o &quot;$(PublishDir)&quot;" Condition="'$(SelfContained)' == 'true'" />
