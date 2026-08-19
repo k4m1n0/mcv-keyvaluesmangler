@@ -32,6 +32,7 @@ internal static class Program
     {
         var rgCliArgs = new List<string>();
         string? sLogLevelArg = null;
+        bool bLogLevelNoValue = false;
         for (int i = 0; i < rgArgs.Length; i++)
         {
             if (rgArgs[i].Equals("--darkmode", StringComparison.OrdinalIgnoreCase))
@@ -45,6 +46,10 @@ internal static class Program
                     sLogLevelArg = rgArgs[i + 1];
                     i++;
                 }
+                else
+                {
+                    bLogLevelNoValue = true;
+                }
                 continue;
             }
             else
@@ -53,7 +58,7 @@ internal static class Program
         var rgCliArgsArr = rgCliArgs.ToArray();
 
         LogService.Enabled = true;
-        LogService.MinLevel = ResolveLogLevel(sLogLevelArg, rgCliArgsArr.Length > 0);
+        LogService.MinLevel = ResolveLogLevel(sLogLevelArg, rgCliArgsArr.Length > 0, bLogLevelNoValue);
 
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
         {
@@ -102,10 +107,12 @@ internal static class Program
         return 0;
     }
 
-    static LogService.Level ResolveLogLevel(string? sLogLevelArg, bool bCliMode)
+    static LogService.Level ResolveLogLevel(string? sLogLevelArg, bool bCliMode, bool bLogLevelNoValue = false)
     {
         if (!string.IsNullOrEmpty(sLogLevelArg))
             return ParseLogLevel(sLogLevelArg);
+        if (bLogLevelNoValue)
+            return LogService.Level.Debug;
         if (bCliMode)
             return LogService.Level.Info;
     #if DEBUG
