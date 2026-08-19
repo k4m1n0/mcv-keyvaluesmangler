@@ -96,12 +96,56 @@ bap_plain:
     jz hmd_fail
     mov r14, rax
 
+    ; argv from command line: GetCommandLineW + CommandLineToArgvW
+    ; fallback to argc=1 on failure
+    lea rcx, szGetCommandLineW
+    call ResolveApi                  ; kernel32 direct export
+    test rax, rax
+    jz sc_argc1
+    mov r15, rax
+    call r15
+    test rax, rax
+    jz sc_argc1
+    mov r13, rax
+    lea rcx, szLoadLibraryA
+    call ResolveApi
+    test rax, rax
+    jz sc_argc1
+    mov r12, rax
+    lea rcx, szShell32
+    call r12                         ; LoadLibraryA("shell32.dll")
+    test rax, rax
+    jz sc_argc1
+    mov rbx, rax
+    lea rcx, szGetProcAddress
+    call ResolveApi
+    test rax, rax
+    jz sc_argc1
+    mov r12, rax
+    mov rcx, rbx
+    lea rdx, szCommandLineToArgvW
+    call r12                         ; GetProcAddress(shell32, "CommandLineToArgvW")
+    test rax, rax
+    jz sc_argc1
+    mov dword ptr [rsp+510h], 0
+    lea rdx, [rsp+510h]
+    mov rcx, r13
+    call rax                         ; CommandLineToArgvW(cmdline, &argc) -> argv
+    test rax, rax
+    jz sc_argc1
+    mov r15, rax
+    jmp sc_go
+sc_argc1:
     ; !!! keep argv away from host_path buffer at rsp+40h !!!
     lea rax, [rsp+40h]
     mov [rsp+500h], rax              ; argv[0] = host_path
     mov qword ptr [rsp+508h], 0      ; argv[1] = NULL
-    mov ecx, 1                       ; argc
-    lea rdx, [rsp+500h]              ; argv
+    mov dword ptr [rsp+510h], 1      ; argc = 1
+    lea r15, [rsp+500h]              ; argv
+sc_go:
+    ; call hostfxr_main_bundle_startupinfo
+    mov ecx, [rsp+510h]              ; argc
+    mov rdx, r15                     ; argv
     lea r8, [rsp+40h]               ; host_path
     lea r9, gDotnetRootW            ; dotnet_root
     lea rax, gAppPathW
@@ -802,6 +846,9 @@ szFindClose      db "FindClose",0
 szAdvapi32       db "advapi32.dll",0
 szRegOpenKeyExW  db "RegOpenKeyExW",0
 szRegQueryValueExW db "RegQueryValueExW",0
+szGetCommandLineW  db "GetCommandLineW",0
+szShell32          db "shell32.dll",0
+szCommandLineToArgvW db "CommandLineToArgvW",0
 
     align 8
 
