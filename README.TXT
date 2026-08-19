@@ -269,12 +269,17 @@
     rejects any compressed bundle entry - so LamarrBoot decompresses
     .lamapp and loads the real main DLL from memory
 
-    No temp files. No console flash. HELL YEAH (AGAIN)
+    No temp files. No console flash. Under 256 KiB. HELL YEAH! (again)
 
   EXTRA BUILD REQUIREMENTS
     - MSVC x64 toolchain (ml64/link). Locator: Lamarr/Native/build_stub.ps1
       (vswhere -> VCToolsInstallDir -> PATH). Without it, use Packer=managed
       and pretend this section never existed
+
+  COULD I REUSE IT
+    To be honest it has not been properly tested yet. And if you are trying
+    to pack a native PE, use UPX or kkrunchy instead - those are way better
+    If you are packing a legacy .NET Framework app, go with mPress
 
 ==============================================================================
   0C. CREDITS

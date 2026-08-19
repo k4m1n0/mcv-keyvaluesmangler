@@ -43,7 +43,7 @@ lamarr_core PROC
     push r13
     push r14
     push r15
-    sub  rsp, 8              ; bit counter, not bl (rbx used by copy)
+    sub  rsp, 8              ; bit counter (rbx taken by copy)
     mov  r13, rcx
     add  r13, rsi
     mov  r14, rdx
@@ -56,7 +56,7 @@ tl: mov  rax, r13
     sub  rax, r12
     cmp  rsi, rax
     jae  done
-    ; tag in rbp, not al (al used by literal)
+    ; !! tag in rbp, not al (al used by literal)
     test r12b, 1
     jz   t0
     mov  al, [rsi]
@@ -175,7 +175,7 @@ cc: mov  rax, rbp         ; chunk length low bits in tag
     add  ecx, 4
     shl  ecx, 1
     mov  r9d, ecx
-    ; bounds: outPos + chunkBytes <= dstLen and rsi + chunkBytes <= srcEnd
+    ; !!! ensure chunk fits in dst and src !!!
     shl  r9, 2             ; r9 = chunk byte count
     mov  eax, r11d
     add  eax, r9d
@@ -253,7 +253,7 @@ StubEntry PROC FRAME
     sub  rsp, 40
     .allocstack 40
     .endprolog
-    ; x64 entry: rcx != module base
+    ; !! x64 entry: rcx != module base
     lea  rcx, szGetModuleHandleW
     call ResolveApi
     test rax, rax
@@ -285,7 +285,7 @@ fnd:
     add  r15, r12
     mov  ebx, [r14+8]
     lea  rax, [r13+18h+38h]
-    mov  r13d, [rax]            ; SizeOfImage covers decompressed apphost
+    mov  r13d, [rax]            ; SizeOfImage of decompressed apphost
     lea  rcx, szVirtualAlloc
     call ResolveApi
     test rax, rax
@@ -380,12 +380,16 @@ skr:
     call r15
     test rax, rax
     jz   fail
-    ; record apphost image bounds for the VEH filter
+    ; record apphost + packed exe image bounds for the VEH filter
     lea  rax, vehBase
-    mov  [rax], rdi
-    mov  [rax+8], r13d
-    ; VEH installed here (before RegisterModule/TlsInit) as a benign,
-    ; bounded workaround for exit-time cleanup faults
+    mov  [rax], rdi          ; vehBase   = apphost image base
+    mov  [rax+8], r13d       ; vehSize   = apphost image size
+    mov  [rax+10h], r12      ; vehExeBase = packed exe base
+    mov  ecx, [r12+3Ch]      ; e_lfanew
+    mov  ecx, [r12+rcx+18h+38h]  ; packed exe SizeOfImage
+    mov  [rax+18h], rcx      ; vehExeSize
+    ; !!! must install VEH BEFORE RegisterModule/TlsInit !!!
+    ; manual LDR entry faults in those stages get swallowed here
     lea  rcx, szAddVectoredExceptionHandler
     call ResolveApi
     test rax, rax
@@ -398,7 +402,7 @@ skr:
     test rax, rax
     jz   fail
     mov  rdi, [rsp+38h]
-    ; manual map: _tls_index uninitialized, UCRT reads garbage
+    ; !! manual map: _tls_index uninitialized, UCRT reads garbage
     mov  [rsp+38h], rdi
     call TlsInit
     test rax, rax
@@ -452,12 +456,9 @@ StubEntry ENDP
 
 
 
-; Only swallow access violations / heap-corruption raised OUTSIDE the
-; apphost image (the exit-time cleanup faults), and at most a bounded
-; number of times. Genuine faults inside the apphost (or unrelated
-; exceptions like breakpoints, stack overflow) fall through to the
-; normal handler and crash cleanly instead of spinning on a re-executed
-; faulting instruction
+; !!! only swallow faults OUTSIDE the apphost and packed exe images !!!
+; max 8 times. records last fault for debugging
+; faults inside the images = real bugs -> let them crash
 
 VectoredHandler PROC
     test rcx, rcx
@@ -468,7 +469,7 @@ VectoredHandler PROC
     mov  ecx, [rax]          ; ExceptionCode
     cmp  ecx, 0C0000005h     ; EXCEPTION_ACCESS_VIOLATION
     je   vh_chk
-    cmp  ecx, 0C0000374h     ; STATUS_HEAP_CORRUPTION (exit-time cleanup)
+    cmp  ecx, 0C0000374h     ; STATUS_HEAP_CORRUPTION
     jne  vh_search
 vh_chk:
     lea  r8, vehBase
@@ -476,34 +477,57 @@ vh_chk:
     test r9, r9
     jz   vh_search           ; bounds not recorded: never swallow
     mov  rdx, [rax+10h]      ; ExceptionAddress
-    cmp  rdx, r9
-    jb   vh_swallow          ; below image: outside -> swallow
-    mov  r10, [r8+8]         ; image size
+    mov  r10, [r8+8]         ; apphost size
     test r10, r10
     jz   vh_search
+    cmp  rdx, r9
+    jb   vh_exe              ; below apphost: check packed exe range
     add  r9, r10
     cmp  rdx, r9
-    jae  vh_swallow          ; above image end: outside -> swallow
-    ; inside the apphost image: real bug, let it crash
+    jb   vh_search           ; inside apphost: wtf let it crash
+vh_exe:
+    mov  r9, [r8+10h]        ; packed exe base (stub code range)
+    test r9, r9
+    jz   vh_swallow          ; not recorded: assume outside -> swallow
+    mov  r10, [r8+18h]       ; packed exe size
+    test r10, r10
+    jz   vh_swallow
+    cmp  rdx, r9
+    jb   vh_swallow          ; below packed exe: outside -> swallow
+    add  r9, r10
+    cmp  rdx, r9
+    jae  vh_swallow          ; above packed exe: outside -> swallow
+    ; inside packed exe (stub code): real bug, just crash
 vh_search:
     xor  eax, eax            ; EXCEPTION_CONTINUE_SEARCH
     ret
 vh_swallow:
-    mov  rax, [r8+10h]       ; swallow counter
+    mov  rax, [r8+20h]       ; swallow counter
     cmp  rax, 8
     jae  vh_search           ; too many: give up, crash normally
     inc  rax
-    mov  [r8+10h], rax
+    mov  [r8+20h], rax
+    mov  [r8+28h], rcx       ; vehLastCode = swallowed exception code
+    mov  [r8+30h], rdx       ; vehLastAddr = swallowed exception address
     or   rax, -1             ; EXCEPTION_CONTINUE_EXECUTION
     ret
 VectoredHandler ENDP
 
     align 8
 vehBase  dq 0                ; decompressed apphost image base
-vehSize  dq 0                ; image size (bytes)
+vehSize  dq 0                ; apphost image size (bytes)
+vehExeBase dq 0              ; packed exe base (stub code inside this range)
+vehExeSize dq 0              ; packed exe SizeOfImage (bytes)
 vehCount dq 0                ; swallows so far (bounded)
+vehLastCode dq 0             ; last swallowed exception code (observability)
+vehLastAddr dq 0             ; last swallowed exception address (observability)
 
 
+
+; !!! allocates 400h bytes, zeroes it, then fakes three !!!
+; LDR_DATA_TABLE_ENTRY list heads (InLoadOrder/InMemory/InInit)
+; and points all three at itself so the TLS callback runner
+; won't crash on the manual-mapped image.
 
 RegisterModule PROC
     push rbp
@@ -662,7 +686,7 @@ TlsInit PROC
     test r13d, r13d
     jz   tl_fail
     add  r13, r12
-    ; TLS dir VA fields fixed by .reloc
+    ; !! TLS dir VA fields fixed by .reloc
     lea  rcx, szTlsAlloc
     call ResolveApi
     test rax, rax
@@ -814,7 +838,9 @@ ra_wg:
 ResolveApiIn ENDP
 
 
-
+; !! shared by ResolveApi and ResolveApiIn
+; !! rdx = module base, rdi = API name
+; !! returns rax = function addr (0 if not found)
 ra_exp:
     mov  eax, [rdx+3Ch]
     lea  r8,  [rdx+rax]
@@ -938,6 +964,7 @@ rfok:
     pop  rsi
     pop  rbx
     ret
+; shared failure path
 rfail:
     xor  eax, eax
     pop  r12
@@ -963,6 +990,9 @@ szNtdll          db "ntdll",0
 
 
 
+; rcx = module base
+; rdx = LoadLibraryA
+; r8  = GetProcAddress
 ResolveImports PROC
     push rbp
     push rsi
