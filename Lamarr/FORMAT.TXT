@@ -416,12 +416,16 @@ Abstract
                 registers .pdata via RtlAddFunctionTable, initializes
                 TLS, and jumps to the host entry point.
 
-        .lamarr Lamarr-compressed host image (apphost; the
-                singlefilehost / self-contained layout is not yet
-                supported), normalized so raw offsets equal RVAs and
-                FileAlignment == SectionAlignment; the host's embedded
-                bundle marker is patched to the rebuilt bundle header
-                offset.
+        .lamarr Lamarr-compressed host image (apphost), normalized so
+                raw offsets equal RVAs and FileAlignment ==
+                SectionAlignment; the host's embedded bundle marker is
+                patched to the rebuilt bundle header offset.
+
+                The self-contained singlefilehost layout is not
+                supported (known defect: the bundle layout breaks on
+                the rebuilt singlefilehost).  SelfContained publishes
+                use the official Microsoft single file instead
+                (see README 0B).
 
         .lamapp Lamarr-compressed application payload (the main
                 managed DLL), consumed by the managed bootstrapper

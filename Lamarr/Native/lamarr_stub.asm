@@ -457,7 +457,7 @@ StubEntry ENDP
 ; number of times. Genuine faults inside the apphost (or unrelated
 ; exceptions like breakpoints, stack overflow) fall through to the
 ; normal handler and crash cleanly instead of spinning on a re-executed
-; faulting instruction.
+; faulting instruction
 
 VectoredHandler PROC
     test rcx, rcx
