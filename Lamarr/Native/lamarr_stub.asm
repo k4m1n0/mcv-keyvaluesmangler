@@ -460,7 +460,9 @@ StubEntry ENDP
 
 
 ; !!! only swallow faults OUTSIDE the apphost and packed exe images !!!
-; max 8 times. records last fault for debugging
+; same-address repeats (benign manual-LDR side effect) swallowed freely
+; (livelock guard only); distinct fault sites capped at 8. records last
+; fault in vehCount/vehLastCode/vehLastAddr for debugging
 ; faults inside the images = real bugs -> let them crash
 
 VectoredHandler PROC
@@ -505,11 +507,25 @@ vh_search:
     xor  eax, eax            ; EXCEPTION_CONTINUE_SEARCH
     ret
 vh_swallow:
-    mov  rax, [r8+20h]       ; swallow counter
+    ; same ExceptionAddress repeatedly = the known benign LDR side-effect
+    ; (e.g. ntdll!RtlpOpenImageFileOptionsKeyEx during IFEO queries): swallow
+    ; freely, guarded only against a true livelock (same-address stall).
+    mov  rax, [r8+30h]       ; vehLastAddr
+    cmp  rdx, rax
+    jne  vh_new              ; new fault site -> bounded below
+    mov  rax, [r8+38h]       ; vehRepeat: same-address swallows
+    cmp  rax, 1000h
+    jae  vh_search           ; suspicious livelock: give up, crash normally
+    inc  rax
+    mov  [r8+38h], rax
+    jmp  vh_log
+vh_new:
+    mov  rax, [r8+20h]       ; distinct fault sites so far
     cmp  rax, 8
-    jae  vh_search           ; too many: give up, crash normally
+    jae  vh_search           ; too many distinct faults: give up, crash
     inc  rax
     mov  [r8+20h], rax
+vh_log:
     mov  [r8+28h], rcx       ; vehLastCode = swallowed exception code
     mov  [r8+30h], rdx       ; vehLastAddr = swallowed exception address
     or   rax, -1             ; EXCEPTION_CONTINUE_EXECUTION
@@ -521,9 +537,10 @@ vehBase  dq 0                ; decompressed apphost image base
 vehSize  dq 0                ; apphost image size (bytes)
 vehExeBase dq 0              ; packed exe base (stub code inside this range)
 vehExeSize dq 0              ; packed exe SizeOfImage (bytes)
-vehCount dq 0                ; swallows so far (bounded)
+vehCount dq 0                ; distinct fault sites swallowed (bounded 8)
 vehLastCode dq 0             ; last swallowed exception code (observability)
 vehLastAddr dq 0             ; last swallowed exception address (observability)
+vehRepeat dq 0               ; same-address swallows (livelock guard)
 
 
 

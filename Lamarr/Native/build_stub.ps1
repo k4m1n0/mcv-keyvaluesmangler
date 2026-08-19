@@ -34,7 +34,8 @@ if (!(Test-Path $sLink)) { throw "link.exe not found next to ml64: $sLink" }
 
 Write-Host "[build-stub] ml64: $sMl64`n[build-stub] out : $OutDir"
 
-$sObj, $sDll = Join-Path $OutDir 'lamarr_stub.obj', (Join-Path $OutDir 'lamarr_stub.dll')
+$sObj = Join-Path $OutDir 'lamarr_stub.obj'
+$sDll = Join-Path $OutDir 'lamarr_stub.dll'
 
 & $sMl64 /nologo /c ("/Fo" + $sObj) $sAsm
 if ($LASTEXITCODE -ne 0) { throw "ml64 failed ($LASTEXITCODE)" }
