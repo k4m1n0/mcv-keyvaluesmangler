@@ -253,25 +253,25 @@
 ==============================================================================
 
   0A does its job with a managed stub. This one does it with ASSEMBLY,
-  because why not. Both are Lamarr - just two containers, one goal.
-  The Packer property picks which Lamarr you get (default: managed):
+  because why not. Both are Lamarr - just two containers, one goal
 
+  The Packer property picks which Lamarr you get (default: managed):
     -p:Packer=managed      Lamarr IL stub + Lamarr compressed DLL  (~320 KiB)
     -p:Packer=native       native asm stub + Lamarr compressed DLL (~180 KiB)
     -p:Packer=none         plain .NET single file (no packing)     (~540 KiB)
     -p:SelfContained=true  MS official self contained single file (~37.5 MiB)
 
   HOW IT WORKS
-    The FDD single file is rebuilt into three PE sections: a position
-    independent asm loader (.stub) with no imports - it walks the PEB
+    The FDD single file is rebuilt into three PE sections. .stub is a
+    position independent asm loader with no imports: it walks the PEB
     for kernel32/ntdll, resolves the dotnet root at runtime (DOTNET_ROOT
-    env, then HKLM registry, then default), scans <root>\host\fxr for
-    the best hostfxr (preferring the payload's runtime major, falling
-    back to highest), loads it, and calls hostfxr_main_bundle_startupinfo
-    directly with this exe as host path. The main DLL rides along as Lamarr
-    compressed bytes in .lamapp. The bundle keeps only a tiny uncompressed
-    LamarrBoot, because FDD CORECLR rejects any compressed bundle entry -
-    so LamarrBootdecompresses .lamapp and loads the real main DLL from memory
+    env -> HKLM registry -> default), scans <root>\host\fxr for the best
+    hostfxr (preferring the payload's runtime major, else highest), and
+    calls hostfxr_main_bundle_startupinfo with this exe as host path.
+    The main DLL rides in .lamapp as Lamarr compressed bytes. The bundle
+    keeps only a tiny uncompressed LamarrBoot, because FDD coreclr rejects
+    compressed bundle entries; LamarrBoot decompresses .lamapp and loads
+    the real main DLL from memory
 
     No temp files. No console flash. Under 192 KiB. HELL YEAH! (again)
 
@@ -284,6 +284,8 @@
     To be honest it has not been properly tested yet. And if you are trying
     to pack a native PE, use UPX or kkrunchy instead - those are way better
     If you are packing a legacy .NET Framework app, go with mPress
+    Also: Packer=native is FDD only, SelfContained builds need the apphost
+    the stub deliberately does not map
 
 ==============================================================================
   0C. CREDITS
