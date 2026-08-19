@@ -185,7 +185,7 @@ cc: mov  rax, rbp         ; chunk length low bits in tag
     sub  rax, rsi
     cmp  rax, r9
     jb   eo
-    rep  movs dword ptr [rdi], dword ptr [rsi]
+    rep  movsd
     add  r11d, r9d
     jmp  nt
 ls: mov  r9d, eax
@@ -421,8 +421,11 @@ skr:
     add  r10, rdi
     xor  edx, edx
     mov  eax, r11d
-    mov  ecx, 12
-    div  ecx
+    mov  ecx, eax
+    mov  eax, 0AAAAAAABh
+    mul  ecx
+    shr  edx, 2
+    mov  eax, edx
     mov  rcx, r10
     mov  edx, eax
     mov  r8,  rdi
@@ -720,6 +723,11 @@ TlsInit PROC
     mov  rdi, r15
     mov  ecx, [r13+8]
     sub  ecx, [r13]
+    mov  eax, ecx
+    shr  ecx, 2
+    rep  movsd
+    mov  ecx, eax
+    and  ecx, 3
     rep  movsb
     lea  rcx, szTlsSetValue
     call ResolveApi
