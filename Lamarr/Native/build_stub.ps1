@@ -13,8 +13,8 @@ $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.e
 if (Test-Path $vswhere) {
     $sVs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>$null
     if ($sVs) {
-        $sMl64 = Get-ChildItem (Join-Path $sVs 'VC\Tools\MSVC\*\bin\Hostx64\x64\ml64.exe') -ErrorAction SilentlyContinue |
-            Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
+        $sMl64 = Get-ChildItem (Join-Path $sVs 'VC\Tools\MSVC\*\bin\Hostx64\x64\ml64.exe') -EA SilentlyContinue |
+            Sort-Object FullName -Desc | Select-Object -First 1 -Exp FullName #降序取最新
     }
 }
 if (!$sMl64 -and $env:VCToolsInstallDir) {
@@ -22,7 +22,7 @@ if (!$sMl64 -and $env:VCToolsInstallDir) {
     if (Test-Path $c) { $sMl64 = $c }
 }
 if (!$sMl64) {
-    $c = Get-Command ml64 -ErrorAction SilentlyContinue
+    $c = Get-Command ml64 -EA SilentlyContinue
     if ($c) { $sMl64 = $c.Source }
 }
 if (!$sMl64) {
