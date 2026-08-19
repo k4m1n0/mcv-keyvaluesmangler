@@ -131,7 +131,7 @@ internal static class Program
         LogService.Enabled = true;
         LogService.MinLevel = lvlLog;
         AllocConsole();
-        LogService.Info($"CLI started: {string.Join(" ", rgArgs)} (log level: {lvlLog})");
+        LogService.Info($"CLI started: {MaskPw(rgArgs)} (log level: {lvlLog})");
         int iCode = Task.Run(() => RunCli(rgArgs)).GetAwaiter().GetResult();
         Console.Out.Flush();
         if (!Console.IsOutputRedirected && !Console.IsInputRedirected
@@ -260,6 +260,25 @@ Examples:
         if (iIdx < 0 || iIdx + 1 >= rgArgs.Length) return null;
         string sVal = rgArgs[iIdx + 1];
         return sVal.StartsWith("--") ? null : sVal;//value不能是--开头的另一个参数
+    }
+
+    static string MaskPw(string[] rgArgs)
+    {
+        var rgMasked = new List<string>();
+        for (int i = 0; i < rgArgs.Length; i++)
+        {
+            if (rgArgs[i].Equals("--pw", StringComparison.OrdinalIgnoreCase) && i + 1 < rgArgs.Length)
+            {
+                rgMasked.Add(rgArgs[i]);
+                rgMasked.Add("***");
+                i++;
+            }
+            else
+            {
+                rgMasked.Add(rgArgs[i]);
+            }
+        }
+        return string.Join(" ", rgMasked);
     }
 
     static void Verbose(string sMsg, bool bVerbose)
