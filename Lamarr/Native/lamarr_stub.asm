@@ -602,9 +602,6 @@ WideToAnsi ENDP
 
 
 
-; !!! fake LDR_DATA_TABLE_ENTRY list heads so TLS callbacks
-; do not crash on manual-mapped image. all three point to self.
-
 ResolveApi PROC
     push rbx
     push rsi
