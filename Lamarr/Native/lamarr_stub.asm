@@ -384,8 +384,8 @@ skr:
     lea  rax, vehBase
     mov  [rax], rdi
     mov  [rax+8], r13d
-    ; VEH installed here (before RegisterModule/TlsInit) so faults in
-    ; those stages are covered too; ~50% heap corruption on exit without it
+    ; VEH installed here (before RegisterModule/TlsInit) as a benign,
+    ; bounded workaround for exit-time cleanup faults
     lea  rcx, szAddVectoredExceptionHandler
     call ResolveApi
     test rax, rax
