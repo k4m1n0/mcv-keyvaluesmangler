@@ -303,8 +303,6 @@ internal class PeWriter
     {
         int iPrefMajor = GetPayloadMajor();
 
-        //app_path 不写死打包目录: stub 运行时用 GetModuleFileNameW 的 host_path
-        //目录 + 此处注入的主 DLL 文件名(##APPNAME##)构造, exe 可移到任意目录运行
         ReplaceMarker(rgStubCode, "##APPNAME##", Encoding.Unicode.GetBytes(sMainName), 256);
         ReplaceMarker(rgStubCode, "##PREFMAJ##", BitConverter.GetBytes((uint)iPrefMajor), 8);
 
