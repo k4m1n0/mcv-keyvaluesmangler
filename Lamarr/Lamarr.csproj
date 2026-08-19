@@ -21,4 +21,10 @@
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Compile Remove="Packer/**" />
+    <Compile Remove="Native/**" />
+    <EmbeddedResource Remove="Packer/**" />
+    <EmbeddedResource Remove="Native/**" />
+  </ItemGroup>
 </Project>

@@ -9,24 +9,24 @@ namespace Lamarr
         #region 常量字段
 
         //hash表条目数 平衡碰撞率与内存占用
-        private const int DICT_SIZE = 0x8000;
-        private const int IDX_SIZE  = 0x8000;
-        private const int DICT_MSK  = DICT_SIZE - 1;
-        private const int IDX_MSK   = IDX_SIZE - 1;
-        private const int RS_HASH_BITS = 9;//hash混入因子 经验值
+        private const int iDictSize = 0x8000;
+        private const int iIdxSize  = 0x8000;
+        private const int iDictMsk = iDictSize - 1;
+        private const int iIdxMsk = iIdxSize - 1;
+        private const int iHashBits = 9;//hash混入因子 经验值
 
-        private const uint DEFAULT_CNT   = 0x12;
-        private const uint _1BYTE_CNT    = 0xFF + DEFAULT_CNT;
-        private const uint _2BYTE_CNT    = 0xFFFF + _1BYTE_CNT;
-        private const uint MAX_2BYTE_CNT = _2BYTE_CNT - 1;
+        private const uint uCntDefault = 0x12;
+        private const uint uCnt1Byte = 0xFF + uCntDefault;
+        private const uint uCnt2Byte = 0xFFFF + uCnt1Byte;
+        private const uint uCntMax2Byte = uCnt2Byte - 1;
 
-        private const uint SHORT_DIST0 = 0x80;
-        private const uint SHORT_DIST1 = 0x800 | SHORT_DIST0;
-        private const uint LONG_DIST0  = 0x40;
-        private const uint LONG_DIST1  = 0x400 | LONG_DIST0;
-        private const uint LONG_DIST2  = 0x4000 | LONG_DIST1;
-        private const uint MAX_GAMMA_DIST = (0x40000 | LONG_DIST2) - 1;
-        private const int MAX_CHAIN_LEN = 4096;
+        private const uint uDistShort0 = 0x80;
+        private const uint uDistShort1 = 0x800 | uDistShort0;
+        private const uint uDistLong0 = 0x40;
+        private const uint uDistLong1 = 0x400 | uDistLong0;
+        private const uint uDistLong2 = 0x4000 | uDistLong1;
+        private const uint uDistMax = (0x40000 | uDistLong2) - 1;
+        private const int iMaxChainLen = 4096;
 
         private byte[] rgIn = null!, rgOut = null!;
         private uint cbIn, cbOutCap;
@@ -37,7 +37,7 @@ namespace Lamarr
         private int iTagNib;
 
         private uint uInPtr, uProcessedData;
-        private uint   uGammaDist;
+        private uint uCurDist;
         private int iTagPos, iUCTagPos, iUCNib, iCpyTag;
         private uint cbUCData;
         private byte bBitMsk, bThisTag;
@@ -68,12 +68,12 @@ namespace Lamarr
             this.rgIn = rgIn; this.rgOut = rgOut; this.cbIn = cbIn;
             cbOutCap = pcbOut;
 
-            rgPtr = new int[DICT_SIZE];
-            rgIdx = new int[IDX_SIZE];
+            rgPtr = new int[iDictSize];
+            rgIdx = new int[iIdxSize];
             Array.Fill(rgPtr, -1);
             Array.Fill(rgIdx, -1);
 
-            uGammaDist = 0;
+            uCurDist = 0;
             bBitMsk = 0x80; bThisTag = 0;
             iCurNib = 0; iTagNib = 0;
 
@@ -210,19 +210,19 @@ namespace Lamarr
         //短距离用1bit分两档 长距离用2bit分四档 第四档20bit编码要求match>=4字节 不够写成literal
         private void EncodeDistance(ref uint uCurMatchCnt)
         {
-            if (uInPtr > SHORT_DIST1)
+            if (uInPtr > uDistShort1)
             {
-                uint uStoreDist = uGammaDist << 2;
-                if (uGammaDist < LONG_DIST0)
+                uint uStoreDist = uCurDist << 2;
+                if (uCurDist < uDistLong0)
                     WriteU8(rgOut, ref iOutPos, ref iCurNib, uStoreDist);
-                else if (uGammaDist < LONG_DIST1)
+                else if (uCurDist < uDistLong1)
                 {
-                    uStoreDist -= LONG_DIST0 << 2; uStoreDist |= 1;
+                    uStoreDist -= uDistLong0 << 2; uStoreDist |= 1;
                     WriteLE12(rgOut, ref iOutPos, ref iCurNib, uStoreDist);
                 }
-                else if (uGammaDist < LONG_DIST2)
+                else if (uCurDist < uDistLong2)
                 {
-                    uStoreDist -= LONG_DIST1 << 2; uStoreDist |= 2;
+                    uStoreDist -= uDistLong1 << 2; uStoreDist |= 2;
                     WriteLE16(rgOut, ref iOutPos, ref iCurNib, uStoreDist);
                 }
                 else
@@ -234,16 +234,16 @@ namespace Lamarr
                         uCurMatchCnt = 1;//已作为literal消费1字节 不设match位
                         return;
                     }
-                    uStoreDist -= LONG_DIST2 << 2; uStoreDist |= 3;
+                    uStoreDist -= uDistLong2 << 2; uStoreDist |= 3;
                     WriteLE20(rgOut, ref iOutPos, ref iCurNib, uStoreDist);
                 }
             }
             else
             {
-                uint uStoreDist = uGammaDist << 1;
-                if (uGammaDist >= SHORT_DIST0)
+                uint uStoreDist = uCurDist << 1;
+                if (uCurDist >= uDistShort0)
                 {
-                    uStoreDist -= SHORT_DIST0 << 1; uStoreDist |= 1;
+                    uStoreDist -= uDistShort0 << 1; uStoreDist |= 1;
                     WriteLE12(rgOut, ref iOutPos, ref iCurNib, uStoreDist);
                 }
                 else
@@ -255,10 +255,10 @@ namespace Lamarr
         //变长编码 越长的匹配用越多bit
         private void EncodeLength(uint uCurMatchCnt)
         {
-            if (uCurMatchCnt < DEFAULT_CNT)
+            if (uCurMatchCnt < uCntDefault)
                 WriteU4(rgOut, ref iOutPos, ref iCurNib, uCurMatchCnt - 3);
-            else if (uCurMatchCnt < _1BYTE_CNT)
-                WriteLE12(rgOut, ref iOutPos, ref iCurNib, ((uCurMatchCnt - DEFAULT_CNT) << 4) | 0xF);
+            else if (uCurMatchCnt < uCnt1Byte)
+                WriteLE12(rgOut, ref iOutPos, ref iCurNib, ((uCurMatchCnt - uCntDefault) << 4) | 0xF);
             else
             {
                 WriteLE12(rgOut, ref iOutPos, ref iCurNib, 0xFFF);
@@ -276,7 +276,7 @@ namespace Lamarr
 
             if (uRemaining < 5)
             {
-                uGammaDist = 0;
+                uCurDist = 0;
                 return 1;
             }
 
@@ -287,24 +287,24 @@ namespace Lamarr
             {
                 uint uRem = cbIn - 4 - uCurPtr;
                 uint uCur = uCurPtr + 4;
-                uGammaDist = 0;
-                if (uRem > MAX_2BYTE_CNT - 4) uRem = MAX_2BYTE_CNT - 4;
+                uCurDist = 0;
+                if (uRem > uCntMax2Byte - 4) uRem = uCntMax2Byte - 4;
                 while (uRem-- > 0 && pIn[uCur] == pIn[uCur - 1]) uCur++;
                 return uCur - uCurPtr;
             }
 
             int iDictPtr = rgPtr[uHash];
-            int iStartPos = (uCurPtr < MAX_GAMMA_DIST) ? 0 : (int)(uCurPtr - MAX_GAMMA_DIST);
+            int iStartPos = (uCurPtr < uDistMax) ? 0 : (int)(uCurPtr - uDistMax);
 
             if (iDictPtr < iStartPos)
             {
-                uGammaDist = 0;
+                uCurDist = 0;
                 return 1;
             }
 
             if (uCurPtr + 2 >= cbIn)
             {
-                uGammaDist = 0;
+                uCurDist = 0;
                 return 1;
             }
 
@@ -314,13 +314,13 @@ namespace Lamarr
             uint uBestDist = 0;
 
             int iChain = 0;
-            while (iDictPtr < (int)uCurPtr && ++iChain <= MAX_CHAIN_LEN)
+            while (iDictPtr < (int)uCurPtr && ++iChain <= iMaxChainLen)
             {
                 int iCurIdx = iDictPtr;
                 if ((ushort)(pIn[iDictPtr + iPITmp] | (pIn[iDictPtr + iPITmp + 1] << 8)) == uCmpVal)
                 {
                     uint uRem = uRemaining;
-                    if (uRem > MAX_2BYTE_CNT) uRem = MAX_2BYTE_CNT;
+                    if (uRem > uCntMax2Byte) uRem = uCntMax2Byte;
 
                     uint uFound = 0;
                     while (uRem-- > 0 && pIn[iDictPtr + uFound] == pIn[uCurPtr + uFound])
@@ -334,14 +334,14 @@ namespace Lamarr
                             uCmpVal = (ushort)(pIn[uCurPtr + uFound - 1] | (pIn[uCurPtr + uFound] << 8));
                             iPITmp = (int)uFound - 1;
                         }
-                        if (uBestCnt >= MAX_2BYTE_CNT) break;
+                        if (uBestCnt >= uCntMax2Byte) break;
                     }
                 }
-                iDictPtr = rgIdx[iCurIdx & IDX_MSK];
+                iDictPtr = rgIdx[iCurIdx & iIdxMsk];
                 if (iDictPtr < iStartPos) break;
             }
 
-            uGammaDist = uBestDist;
+            uCurDist = uBestDist;
             return uBestCnt;
         }
 
@@ -382,7 +382,7 @@ namespace Lamarr
             if (uCurMatchCnt == 1)
             {
                 uint uHash = Hash(uInPtr);
-                rgIdx[uInPtr & IDX_MSK] = rgPtr[uHash];
+                rgIdx[uInPtr & iIdxMsk] = rgPtr[uHash];
                 rgPtr[uHash] = (int)uInPtr++;
             }
             else
@@ -392,7 +392,7 @@ namespace Lamarr
                 while (uLimit-- > 0)
                 {
                     uint uHash = Hash(uInPtr);
-                    rgIdx[uInPtr & IDX_MSK] = rgPtr[uHash];
+                    rgIdx[uInPtr & iIdxMsk] = rgPtr[uHash];
                     rgPtr[uHash] = (int)uInPtr++;
                 }
                 uInPtr = uEnd;
@@ -483,7 +483,7 @@ namespace Lamarr
             if (uPos + 3 >= cbIn) return 0;
             uint u16 = (uint)(rgIn[uPos] | (rgIn[uPos + 1] << 8));
             uint u32 = (uint)(rgIn[uPos] | (rgIn[uPos + 1] << 8) | (rgIn[uPos + 2] << 16) | (rgIn[uPos + 3] << 24));
-            return (u16 + ((u32 >> RS_HASH_BITS) & 0xFFFF)) & DICT_MSK;
+            return (u16 + ((u32 >> iHashBits) & 0xFFFF)) & iDictMsk;
         }
 
         //距离/长度择优 uCurPos>0x880后优先短距离匹配省bit
