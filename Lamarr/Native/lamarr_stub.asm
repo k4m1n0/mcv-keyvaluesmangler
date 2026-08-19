@@ -619,6 +619,7 @@ rm_pn:
 rm_pd:
     mov  eax, r12d
     add  eax, eax
+    add  eax, 2          ; FullDllName.Length: bytes + NUL terminator
     mov  [r15+48h], ax
     mov  word ptr [r15+4Ah], 208h
     lea  rax, [r15+100h]
@@ -628,8 +629,9 @@ rm_pd:
     mov  eax, r12d
     sub  eax, edx
     sub  eax, 1
-    mov  [r15+58h], ax
     add  eax, eax
+    add  eax, 2          ; BaseDllName.Length: bytes + NUL terminator
+    mov  [r15+58h], ax
     mov  [r15+5Ah], ax
     lea  rax, [r15+100h+rdx*2+2]
     mov  [r15+60h], rax
@@ -637,6 +639,7 @@ rm_pd:
 rm_uf:
     mov  eax, r12d
     add  eax, eax
+    add  eax, 2          ; BaseDllName.Length: bytes + NUL terminator
     mov  [r15+58h], ax
     mov  word ptr [r15+5Ah], 208h
     lea  rax, [r15+100h]
