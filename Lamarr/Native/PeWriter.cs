@@ -308,7 +308,7 @@ internal class PeWriter
         ReplaceMarker(rgStubCode, "##APPNAME##", Encoding.Unicode.GetBytes(sMainName), 256);
         ReplaceMarker(rgStubCode, "##PREFMAJ##", BitConverter.GetBytes((uint)iPrefMajor), 8);
 
-        //0x1122334455667788
+        //01122334455667788h
         int iOff = IndexOf(rgStubCode, new byte[] { 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11 });
         if (iOff < 0)
             throw new InvalidOperationException("gHeaderOff marker not found in stub");
