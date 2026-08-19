@@ -1,4 +1,5 @@
 using Lamarr;
+using System.Text;
 
 namespace Lamarr.NativePack;
 
@@ -17,13 +18,9 @@ internal class PeWriter
     private int iBundleDataStart;
     private int iBundleLen;
 
-    private byte[] rgApphostNorm = null!;
-    private byte[] rgCompressed = null!;
-    private uint uCompressedSize;
     private long lNewBundleHeaderOffset;
     private uint uStubRaw, uStubRawSize;
     private long iMarkerRaw;
-    private uint uLzRaw;
     private long lBundleStart;
 
     private byte[] rgBundleData = null!;
@@ -76,18 +73,19 @@ internal class PeWriter
         rgStubCode = new byte[uVs];
         Array.Copy(rgStub, (int)uRaw, rgStubCode, 0, (int)Math.Min(uVs, rgStub.Length - uRaw));
 
-        uStubEntryOff = 0;
+        int iFound = -1;
         for (int i = rgStubCode.Length - 4; i >= 0; i--)
         {
             if (rgStubCode[i] == 0x55 && rgStubCode[i + 1] == 0x48 &&
                 rgStubCode[i + 2] == 0x8B && rgStubCode[i + 3] == 0xEC)
             {
-                uStubEntryOff = (uint)i;
+                iFound = i;
                 break;
             }
         }
-        if (uStubEntryOff == 0)
+        if (iFound < 0)
             throw new InvalidOperationException("StubEntry not found in stub DLL");
+        uStubEntryOff = (uint)iFound;
     }
 
     public void LoadPayload(string sPath)
@@ -127,47 +125,25 @@ internal class PeWriter
     {
         if (rgBoot == null)
             throw new InvalidOperationException("Bootstrapper not loaded (--boot required)");
-        rgApphostNorm = NormalizeApphost();
-        uint uLen = (uint)rgApphostNorm.Length;
 
         RebuildBundle();
 
-        //marker偏移影响压缩结果 需先占位估算再定布局
-        byte[] rgEst = (byte[])rgApphostNorm.Clone();
-        PatchMarker(rgEst, 0);
-        uint uCap = LamarrEncoder.GetMaxEncodedSize(uLen);
-        byte[] rgBuf = new byte[uCap];
-        uint uEst = uCap;
-        if (LamarrEncoder.Encode(rgBuf, ref uEst, rgEst, uLen) != 0)
-            throw new InvalidOperationException("Compression failed (estimate)");
-
-        //预留128字节吸收两次压缩之间的尺寸波动
-        ComputeLayout(uEst + 128);
+        ComputeLayout();
         ApplyBundleOffsets();
-
-        PatchMarker(rgApphostNorm, lNewBundleHeaderOffset);
-        rgCompressed = new byte[uCap];
-        uint uOut = uCap;
-        if (LamarrEncoder.Encode(rgCompressed, ref uOut, rgApphostNorm, uLen) != 0)
-            throw new InvalidOperationException("Compression failed");
-        uCompressedSize = uOut;
-        if (uCompressedSize > uEst + 128)
-            throw new InvalidOperationException("Compression size grew beyond slack");
+        PatchStubVars(sOutPath);
 
         WriteFile(sOutPath);
         Console.WriteLine($"  Done: {sOutPath} ({new FileInfo(sOutPath).Length} bytes)");
     }
 
-    private void ComputeLayout(uint uCompSizeForLayout)
+    private void ComputeLayout()
     {
-        //[head][stub][marker][lamarr][lamapp][bundle data][bundle head]
+        //[head][stub][marker][lamapp][bundle data][bundle head]
         //各段按FileAlignment对齐bundle 数据区起点决定新X'
         uStubRaw = AlignUp(uSizeOfHdrs, uFileAlign);
         uStubRawSize = AlignUp((uint)rgStubCode.Length, uFileAlign);
         iMarkerRaw = uStubRaw + uStubRawSize;
-        uLzRaw = AlignUp((uint)(iMarkerRaw + 40), uFileAlign);
-        uint uLzRawPadded = AlignUp(uCompSizeForLayout, uFileAlign);
-        uLamAppRaw = AlignUp(uLzRaw + uLzRawPadded, uFileAlign);
+        uLamAppRaw = AlignUp((uint)(iMarkerRaw + 40), uFileAlign);
         uLamAppRawSize = AlignUp((uint)rgLamApp.Length, uFileAlign);
         uint uBundleRaw = AlignUp(uLamAppRaw + uLamAppRawSize + 16, uFileAlign);
         lBundleStart = uBundleRaw;
@@ -328,59 +304,64 @@ internal class PeWriter
         }
     }
 
-    #endregion
-    #region apphost 规范化
-
-    private byte[] NormalizeApphost()
+    private void PatchStubVars(string sOutPath)
     {
-        //raw == RVA 且stub解压后直接映射执行 无需处理节偏移
-        uint uNewHdrs = AlignUp(uSizeOfHdrs, uSectAlign);
-        uint firstRva = BitConverter.ToUInt32(rgPayload, iSecOff + 12);
-        if (uNewHdrs > firstRva) uNewHdrs = firstRva;
+        // Patch the stub's direct-hostfxr data block: app_path, pref-major and
+        // bundle header offset. dotnet_root/hostfxr are resolved at runtime by
+        // the stub (env/registry + fxr directory scan, preferring the payload's
+        // runtime major version).
+        string sAppPath = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(sOutPath))!, sMainName);
+        int iPrefMajor = GetPayloadMajor();
 
-        uint uNewSizeOfImage = BitConverter.ToUInt32(rgPayload, iOptOff + 56);
-        for (int i = 0; i < usSecCount; i++)
-        {
-            int o = iSecOff + i * 40;
-            uint rva = BitConverter.ToUInt32(rgPayload, o + 12);
-            uint vs = BitConverter.ToUInt32(rgPayload, o + 8);
-            uint end = AlignUp(rva + vs, uSectAlign);
-            if (end > uNewSizeOfImage) uNewSizeOfImage = end;
-        }
+        ReplaceMarker(rgStubCode, "##APPPATH##", Encoding.Unicode.GetBytes(sAppPath), 512);
+        ReplaceMarker(rgStubCode, "##PREFMAJ##", BitConverter.GetBytes((uint)iPrefMajor), 8);
 
-        byte[] norm = new byte[uNewSizeOfImage];
-        Array.Copy(rgPayload, 0, norm, 0, Math.Min(uSizeOfHdrs, norm.Length));
-
-        for (int i = 0; i < usSecCount; i++)
-        {
-            int o = iSecOff + i * 40;
-            uint rva = BitConverter.ToUInt32(rgPayload, o + 12);
-            uint vs = BitConverter.ToUInt32(rgPayload, o + 8);
-            uint raw = BitConverter.ToUInt32(rgPayload, o + 20);
-            uint rawSize = BitConverter.ToUInt32(rgPayload, o + 16);
-            uint copy = Math.Min(vs, rawSize);
-            if (raw + copy <= rgPayload.Length && rva + copy <= norm.Length)
-                Array.Copy(rgPayload, (int)raw, norm, (int)rva, (int)copy);
-            BitConverter.GetBytes(rva).CopyTo(norm, o + 20);
-            BitConverter.GetBytes(AlignUp(vs, uSectAlign)).CopyTo(norm, o + 16);
-        }
-
-        BitConverter.GetBytes(uNewSizeOfImage).CopyTo(norm, iOptOff + 56);
-        BitConverter.GetBytes(uNewHdrs).CopyTo(norm, iOptOff + 60);
-        //FileAlignment = SectionAlignment 映射时无需额外对齐处理
-        BitConverter.GetBytes(uSectAlign).CopyTo(norm, iOptOff + 36);
-        return norm;
+        int iOff = IndexOf(rgStubCode, new byte[] { 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11 });
+        if (iOff < 0)
+            throw new InvalidOperationException("gHeaderOff marker not found in stub");
+        Array.Copy(BitConverter.GetBytes(lNewBundleHeaderOffset), 0, rgStubCode, iOff, 8);
+        Console.WriteLine($"  app_path: {sAppPath}");
+        Console.WriteLine($"  pref_major: {iPrefMajor}");
+        Console.WriteLine($"  header_offset: 0x{lNewBundleHeaderOffset:X}");
     }
 
-    private void PatchMarker(byte[] b, long offset)
+    private int GetPayloadMajor()
     {
-        for (int i = 0; i + 40 <= b.Length; i++)
-            if (b[i + 8] == rgSignature[0] && MatchSig(b, i + 8))
-            {
-                BitConverter.GetBytes(offset).CopyTo(b, i);
-                return;
-            }
-        throw new InvalidOperationException("Marker not found in apphost");
+        if (rgIdxRtc < 0) return 0;
+        int off = (int)rgBundleOffsets[rgIdxRtc];
+        int len = (int)rgBundleSz[rgIdxRtc];
+        if (off < 0 || len <= 0 || off + len > rgBundleData.Length) return 0;
+        string sRtc = Encoding.UTF8.GetString(rgBundleData, off, len);
+        var m = System.Text.RegularExpressions.Regex.Match(sRtc, "\"tfm\"\\s*:\\s*\"net(\\d+)");
+        if (m.Success && int.TryParse(m.Groups[1].Value, out int maj) && maj > 0)
+            return maj;
+        // fallback: framework version field
+        var m2 = System.Text.RegularExpressions.Regex.Match(sRtc, "\"version\"\\s*:\\s*\"(\\d+)\\.(\\d+)");
+        return m2.Success && int.TryParse(m2.Groups[1].Value, out int v2) && v2 > 0 ? v2 : 0;
+    }
+
+    private static void ReplaceMarker(byte[] b, string sMarker, byte[] rgValue, int iSpace)
+    {
+        byte[] rgPat = Encoding.ASCII.GetBytes(sMarker);
+        int i = IndexOf(b, rgPat);
+        if (i < 0)
+            throw new InvalidOperationException($"Stub marker '{sMarker}' not found");
+        if (rgValue.Length > iSpace)
+            throw new InvalidOperationException($"Stub value for '{sMarker}' too long ({rgValue.Length} > {iSpace})");
+        Array.Clear(b, i, iSpace);
+        Array.Copy(rgValue, 0, b, i, rgValue.Length);
+    }
+
+    private static int IndexOf(byte[] b, byte[] rgPat)
+    {
+        for (int i = 0; i + rgPat.Length <= b.Length; i++)
+        {
+            bool ok = true;
+            for (int j = 0; j < rgPat.Length; j++)
+                if (b[i + j] != rgPat[j]) { ok = false; break; }
+            if (ok) return i;
+        }
+        return -1;
     }
 
     #endregion
@@ -389,15 +370,11 @@ internal class PeWriter
     private void WriteFile(string sOutPath)
     {
         uint uNewHdrs = AlignUp(uSizeOfHdrs, uFileAlign);
-        uint uLzRawSize = AlignUp(uCompressedSize, uFileAlign);
-        if (lBundleStart < uLzRaw + uLzRawSize)
-            throw new InvalidOperationException("Bundle overlaps .lamarr (layout bug)");
 
         //节RVA按SectionAlignment对齐 stub在运行时据此映射各段
         uint uStubRva = AlignUp(0x1000, uSectAlign);
-        uint uLzRva = AlignUp(uStubRva + (uint)rgStubCode.Length, uSectAlign);
-        uint uLamAppRva = AlignUp(uLzRva + uCompressedSize, uSectAlign);
-        uint uNewImg = AlignUp(Math.Max(uLamAppRva + (uint)rgLamApp.Length, (uint)rgApphostNorm.Length), uSectAlign);//SizeOfImage需覆盖解压后的apphost镜像 stub按它分配内存
+        uint uLamAppRva = AlignUp(uStubRva + (uint)rgStubCode.Length, uSectAlign);
+        uint uNewImg = AlignUp(uLamAppRva + (uint)rgLamApp.Length, uSectAlign);
 
         byte[] rgHdrs = new byte[uNewHdrs];
         Array.Copy(rgPayload, 0, rgHdrs, 0, Math.Min(uSizeOfHdrs, rgHdrs.Length));
@@ -409,8 +386,7 @@ internal class PeWriter
 
         Array.Clear(rgHdrs, iSecOff, Math.Min(usSecCount * 40, rgHdrs.Length - iSecOff));
         WriteSection(rgHdrs, iSecOff, ".stub", uStubRva, (uint)rgStubCode.Length, uStubRawSize, uStubRaw);
-        WriteSection(rgHdrs, iSecOff + 40, ".lamarr", uLzRva, uCompressedSize, uLzRawSize, uLzRaw);
-        WriteSection(rgHdrs, iSecOff + 80, ".lamapp", uLamAppRva, (uint)rgLamApp.Length, uLamAppRawSize, uLamAppRaw);
+        WriteSection(rgHdrs, iSecOff + 40, ".lamapp", uLamAppRva, (uint)rgLamApp.Length, uLamAppRawSize, uLamAppRaw);
 
         using var fs = new FileStream(sOutPath, FileMode.Create);
         fs.Write(rgHdrs, 0, rgHdrs.Length);
@@ -421,9 +397,7 @@ internal class PeWriter
         BitConverter.GetBytes(lNewBundleHeaderOffset).CopyTo(rgMarker, 0);
         Array.Copy(rgSignature, 0, rgMarker, 8, 32);
         fs.Write(rgMarker, 0, 40);
-        Pad(fs, (int)(uLzRaw - (iMarkerRaw + 40)));
-        fs.Write(rgCompressed, 0, (int)uCompressedSize);
-        Pad(fs, (int)(uLzRawSize - uCompressedSize));
+        Pad(fs, (int)(uLamAppRaw - (iMarkerRaw + 40)));
         fs.Write(rgLamApp, 0, rgLamApp.Length);
         Pad(fs, (int)(uLamAppRawSize - rgLamApp.Length));
         Pad(fs, (int)(lBundleStart - (uLamAppRaw + uLamAppRawSize)));

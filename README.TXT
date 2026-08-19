@@ -57,6 +57,8 @@
     - Pentium 4 630 (SSE3) with SVGA graphics
     - 1.44 MiB floppy or 40 MiB (self contained) Clik! drive available
     - A keyboard. A mouse. Fingers optional but recommended
+    - No enforcement Control flow Enforcement Technology (Pushing hardware
+      anti ROP / JOP in the 2020s, who is it perverting, undergrads?)
 
   RECOMMENDED:
     - Windows 10 x64 1607 (20H1 or later for dark mode title bar via DWM)

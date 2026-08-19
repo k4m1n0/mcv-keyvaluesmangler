@@ -9,225 +9,9 @@ L_2B   equ 0FFFFh + L_1B
 
 .code
 
-NibRead MACRO
-    LOCAL nb,nd
-    test r12b, 1
-    jz   nb
-    mov  al, [rsi]
-    shr  al, 4
-    mov  ah, [rsi+1]
-    shl  ah, 4
-    or   al, ah
-    inc  rsi
-    jmp  nd
-nb: lodsb
-nd:
-ENDM
-
-Read20 MACRO
-    LOCAL rl
-    mov  eax, dword ptr [rsi]
-    test r12b, 1
-    jz   rl
-    shr  eax, 4
-rl: and  eax, 0FFFFFh
-    inc  rsi
-ENDM
 
 
 
-lamarr_core PROC
-    push rbx
-    push rbp
-    push r12
-    push r13
-    push r14
-    push r15
-    sub  rsp, 8              ; bit counter (rbx taken by copy)
-    mov  r13, rcx
-    add  r13, rsi
-    mov  r14, rdx
-    mov  r15, rdi
-    xor  r12d, r12d
-    lodsb
-    stosb
-    mov  r11d, 1
-tl: mov  rax, r13
-    sub  rax, r12
-    cmp  rsi, rax
-    jae  done
-    ; !! tag in rbp, not al (al used by literal)
-    test r12b, 1
-    jz   t0
-    mov  al, [rsi]
-    shr  al, 4
-    mov  ah, [rsi+1]
-    shl  ah, 4
-    or   al, ah
-    inc  rsi
-    jmp  t1
-t0: lodsb
-t1: shl  rax, 56         ; shl rbp,1 yields CF in bit7->0 order
-    mov  rbp, rax
-    mov  byte ptr [rsp], 8
-bitlp:
-    mov  rax, r13
-    sub  rax, r12
-    cmp  rsi, rax
-    jae  done
-    cmp  r11d, r14d
-    jae  done
-    shl  rbp, 1
-    jc   m
-    NibRead
-    stosb
-    inc  r11d
-    jmp  nb
-m:  Read20
-    cmp  r11d, 0881h
-    jae  ld
-    mov  ecx, eax
-    shr  ecx, 1
-    test al, 1
-    jz   s0
-    add  rsi, r12
-    xor  r12b, 1
-    and  ecx, 07FFh
-    add  ecx, 081h
-    jmp  gd
-s0: and  ecx, 07Fh
-    inc  ecx
-    jmp  gd
-ld: mov  ecx, eax
-    shr  ecx, 2
-    mov  edx, eax
-    and  edx, 3
-    cmp  edx, 0
-    je   l00
-    cmp  edx, 1
-    je   l01
-    cmp  edx, 2
-    je   l10
-    add  rsi, r12
-    inc  rsi
-    xor  r12b, 1
-    and  ecx, 03FFFFh
-    add  ecx, 04441h
-    jmp  gd
-l10:
-    inc  rsi
-    and  ecx, 03FFFh
-    add  ecx, 0441h
-    jmp  gd
-l01:
-    add  rsi, r12
-    xor  r12b, 1
-    and  ecx, 03FFh
-    add  ecx, 041h
-    jmp  gd
-l00:
-    and  ecx, 03Fh
-    inc  ecx
-gd: mov  r10d, ecx
-    mov  dx, [rsi]
-    test r12b, 1
-    jz   ua
-    shr  edx, 4
-ua: and  edx, 0FFFh
-    mov  r9d, edx
-    add  rsi, r12
-    xor  r12b, 1
-    mov  eax, r9d
-    and  eax, 0Fh
-    cmp  eax, 0Fh
-    jne  ls
-    inc  rsi
-    cmp  r9d, 0FFFh
-    jne  lm
-    test r12b, 1
-    jz   un
-    mov  eax, dword ptr [rsi]
-    shr  eax, 4
-    and  eax, 0FFFFh
-    jmp  ud
-un: movzx eax, word ptr [rsi]
-ud: add  eax, L_1B
-    add  rsi, 2
-    mov  r9d, eax
-    cmp  r9d, L_2B
-    jne  lc
-    test r12b, 1
-    jz   cn0
-    movzx ecx, byte ptr [rsi-4]
-    and  ecx, 0FCh
-    shl  ecx, 5
-    inc  rsi
-    xor  r12d, r12d
-    jmp  cc
-cn0:
-    movzx ecx, word ptr [rsi-5]
-    and  ecx, 0FC0h
-    shl  ecx, 1
-cc: mov  rax, rbp         ; chunk length low bits in tag
-    shr  rax, 57          ; rbp already shifted once
-    and  al, 07Fh
-    add  ecx, eax
-    add  ecx, 4
-    shl  ecx, 1
-    mov  r9d, ecx
-    ; !!! ensure chunk fits in dst and src !!!
-    shl  r9, 2             ; r9 = chunk byte count
-    mov  eax, r11d
-    add  eax, r9d
-    cmp  eax, r14d
-    ja   eo
-    mov  rax, r13
-    sub  rax, rsi
-    cmp  rax, r9
-    jb   eo
-    rep  movsd
-    add  r11d, r9d
-    jmp  nt
-ls: mov  r9d, eax
-    add  r9d, 3
-    jmp  lc
-lm: shr  r9d, 4
-    add  r9d, 012h
-lc: cmp  r11d, r10d
-    jb   ed
-    mov  eax, r11d
-    add  eax, r9d
-    cmp  eax, r14d
-    ja   eo
-    mov  ecx, r9d
-    lea  rbx, [r15+r11]
-    sub  rbx, r10
-copylp:
-    mov  al, [rbx]
-    stosb
-    inc  rbx
-    dec  ecx
-    jnz  copylp
-    add  r11d, r9d
-nb: dec  byte ptr [rsp]
-    jnz  bitlp
-nt: jmp  tl
-ed: mov  eax, 104h
-    jmp  ex
-eo: mov  eax, 111h
-    jmp  ex
-done:
-    mov  rdx, r11
-    xor  eax, eax
-ex: add  rsp, 8
-    pop  r15
-    pop  r14
-    pop  r13
-    pop  r12
-    pop  rbp
-    pop  rbx
-    ret
-lamarr_core ENDP
 
 
 
@@ -253,294 +37,514 @@ StubEntry PROC FRAME
     sub  rsp, 40
     .allocstack 40
     .endprolog
-    ; !! x64 entry: rcx != module base
-    lea  rcx, szGetModuleHandleW
-    call ResolveApi
-    test rax, rax
-    jz   fail
-    xor  ecx, ecx
-    call rax
-    test rax, rax
-    jz   fail
-    mov  r12, rax
-    mov  eax, [r12+3Ch]
-    lea  r13, [r12+rax]
-    cmp  word ptr [r13], 4550h
-    jne  fail
-    movzx ecx, word ptr [r13+14h]
-    lea  r14, [r13+18h+rcx]
-    movzx ebx, word ptr [r13+6]
-sl: cmp  ebx, 0
-    je   fail
-    cmp  dword ptr [r14], 'mal.'
-    jne  nxs
-    cmp  dword ptr [r14+4], 00727261h
-    je   fnd
-nxs:
-    add  r14, 40
-    dec  ebx
-    jmp  sl
-fnd:
-    mov  r15d, [r14+12]
-    add  r15, r12
-    mov  ebx, [r14+8]
-    lea  rax, [r13+18h+38h]
-    mov  r13d, [rax]            ; SizeOfImage of decompressed apphost
-    lea  rcx, szVirtualAlloc
-    call ResolveApi
-    test rax, rax
-    jz   fail
-    xor  ecx, ecx
-    mov  edx, r13d
-    mov  r8d, M_COM or M_RES
-    mov  r9d, P_RW
-    mov  [rsp+32], rcx
-    call rax
-    test rax, rax
-    jz   fail
-    mov  rdi, rax
-    mov  rsi, r15
-    mov  ecx, ebx
-    push rdi
-    mov  edx, r13d
-    call lamarr_core
-    test eax, eax
-    pop  rdi
-    jnz  fail
-    mov  eax, [rdi+3Ch]
-    mov  r14, [rdi+rax+18h+18h]
-    mov  rax, rdi
-    sub  rax, r14
-    mov  r15, rax
-    jz   impres
-    mov  eax, [rdi+3Ch]
-    lea  rcx, [rdi+rax+18h]
-    movzx edx, word ptr [rcx-18h+14h]
-    lea  rsi, [rcx+rdx]
-    movzx ecx, word ptr [rcx-18h+6]
-sr: cmp  dword ptr [rsi], 'ler.'
-    jne  nr
-    cmp  dword ptr [rsi+4], 'co'
-    je   fr
-nr: add  rsi, 40
-    dec  ecx
-    jnz  sr
-    jmp  impres
-fr: mov  ecx, [rsi+8]
-    mov  esi, [rsi+12]
-    add  rsi, rdi
-rk: cmp  ecx, 8
-    jb   impres
-    mov  r8d, [rsi]
-    mov  r9d, [rsi+4]
-    sub  r9d, 8
-    shr  r9d, 1
-    add  rsi, 8
-    sub  ecx, r9d
-    sub  ecx, r9d
-    sub  ecx, 8
-rl: movzx r10d, word ptr [rsi]  ; zero-extend: mov r10w leaves bits 12-31 stale
-    mov  r11d, r10d
-    shr  r11d, 12
-    and  r10d, 0FFFh
-    cmp  r11d, 0Ah
-    jne  rn
-    add  r10d, r8d
-    add  [rdi+r10], r15
-rn: add  rsi, 2
-    dec  r9d
-    jnz  rl
-    jmp  rk
-impres:
-    lea  rcx, szLoadLibraryA
-    call ResolveApi
-    test rax, rax
-    jz   fail
-    mov  rbx, rax
-    lea  rcx, szGetProcAddress
-    call ResolveApi
-    test rax, rax
-    jz   fail
-    mov  r14, rax
-    lea  rcx, szVirtualProtect
-    call ResolveApi
-    test rax, rax
-    jz   fail
-    mov  r15, rax
-    mov  rcx, rdi
-    mov  rdx, rbx
-    mov  r8,  r14
-    call ResolveImports
-skr:
-    mov  [rsp+32], rsi
-    lea  r9, [rsp+32]
-    mov  r8d, P_EXRW
-    mov  edx, r13d
-    mov  rcx, rdi
-    call r15
-    test rax, rax
-    jz   fail
-    ; record apphost + packed exe image bounds for the VEH filter
-    lea  rax, vehBase
-    mov  [rax], rdi          ; vehBase   = apphost image base
-    mov  [rax+8], r13d       ; vehSize   = apphost image size
-    mov  [rax+10h], r12      ; vehExeBase = packed exe base
-    mov  ecx, [r12+3Ch]      ; e_lfanew
-    mov  ecx, [r12+rcx+18h+38h]  ; packed exe SizeOfImage
-    mov  [rax+18h], rcx      ; vehExeSize
-    ; !!! must install VEH BEFORE RegisterModule/TlsInit !!!
-    ; manual LDR entry faults in those stages get swallowed here
-    lea  rcx, szAddVectoredExceptionHandler
-    call ResolveApi
-    test rax, rax
-    jz   fail
-    xor  ecx, ecx
-    lea  rdx, VectoredHandler
-    call rax
-    mov  [rsp+38h], rdi
-    call RegisterModule
-    test rax, rax
-    jz   fail
-    mov  rdi, [rsp+38h]
-    ; !! manual map: _tls_index uninitialized, UCRT reads garbage
-    mov  [rsp+38h], rdi
-    call TlsInit
-    test rax, rax
-    jz   fail
-    mov  rdi, [rsp+38h]
-    ; register .pdata for exception unwind
-    lea  rcx, szRtlAddFunctionTable
-    lea  rdx, szNtdll
-    call ResolveApiIn
-    test rax, rax
-    jz   fail
-    mov  rbx, rax
-    mov  eax, [rdi+3Ch]
-    mov  r10d, [rdi+rax+18h+70h+18h]
-    mov  r11d, [rdi+rax+18h+70h+18h+4]
-    add  r10, rdi
-    xor  edx, edx
-    mov  eax, r11d
-    mov  ecx, eax
-    mov  eax, 0AAAAAAABh
-    mul  ecx
-    shr  edx, 2
-    mov  eax, edx
-    mov  rcx, r10
-    mov  edx, eax
-    mov  r8,  rdi
-    call rbx
-    mov  eax, [rdi+3Ch]
-    lea  rcx, [rdi+rax+18h+10h]
-    mov  eax, [rcx]
-    add  rax, rdi
-    sub  rsp, 8             ; align: entry expects rsp%16=8 (call convention)
-    jmp  rax
-fail:
-    lea  rcx, szExitProcess
-    call ResolveApi
-    test rax, rax
-    jz   fexit
-    mov  ecx, 1
-    call rax
-fexit:
-    mov  eax, 1
-    add  rsp, 40
-    pop  rsi
-    pop  rdi
-    pop  r15
-    pop  r14
-    pop  r13
-    pop  r12
-    pop  rbx
-    pop  rbp
-    ret
+    ; Direct-hostfxr entry: runtime-resolve dotnet root + hostfxr,
+    ; then call hostfxr_main_bundle_startupinfo. No manual apphost mapping.
+    jmp  hostfxr_main_direct
 StubEntry ENDP
 
 
 
-; !!! only swallow faults OUTSIDE the apphost and packed exe images !!!
-; same-address repeats (benign manual-LDR side effect) swallowed freely
-; (livelock guard only); distinct fault sites capped at 8. records last
-; fault in vehCount/vehLastCode/vehLastAddr for debugging
-; faults inside the images = real bugs -> let them crash
-
-VectoredHandler PROC
-    test rcx, rcx
-    jz   vh_search
-    mov  rax, [rcx]          ; rax = PEXCEPTION_RECORD
+; Direct-hostfxr: call hostfxr_main_bundle_startupinfo directly, skipping
+; the manually-mapped apphost image entirely.
+;   host_path       = GetModuleFileNameW(NULL)         (this exe = bundle)
+;   dotnet_root     = runtime-resolved (env/registry) -> gDotnetRootW
+;   app_path        = gAppPathW      (patched by packer)
+;   header_offset   = gHeaderOff     (patched by packer)
+hostfxr_main_direct PROC
+    sub  rsp, 800h
+    ; --- host_path: GetModuleFileNameW(NULL, [rsp+40h], 512) ---
+    lea  rcx, szGetModuleFileNameW
+    call ResolveApi
     test rax, rax
-    jz   vh_search
-    mov  ecx, [rax]          ; ExceptionCode
-    cmp  ecx, 0C0000005h     ; EXCEPTION_ACCESS_VIOLATION
-    je   vh_chk
-    cmp  ecx, 0C0000374h     ; STATUS_HEAP_CORRUPTION
-    jne  vh_search
-vh_chk:
-    lea  r8, vehBase
-    mov  r9, [r8]            ; apphost base
-    test r9, r9
-    jz   vh_search           ; bounds not recorded: never swallow
-    mov  rdx, [rax+10h]      ; ExceptionAddress
-    mov  r10, [r8+8]         ; apphost size
-    test r10, r10
-    jz   vh_search
-    cmp  rdx, r9
-    jb   vh_exe              ; below apphost: check packed exe range
-    add  r9, r10
-    cmp  rdx, r9
-    jb   vh_search           ; inside apphost: wtf let it crash
-vh_exe:
-    mov  r9, [r8+10h]        ; packed exe base (stub code range)
-    test r9, r9
-    jz   vh_swallow          ; not recorded: assume outside -> swallow
-    mov  r10, [r8+18h]       ; packed exe size
-    test r10, r10
-    jz   vh_swallow
-    cmp  rdx, r9
-    jb   vh_swallow          ; below packed exe: outside -> swallow
-    add  r9, r10
-    cmp  rdx, r9
-    jae  vh_swallow          ; above packed exe: outside -> swallow
-    ; inside packed exe (stub code): real bug, just crash
-vh_search:
-    xor  eax, eax            ; EXCEPTION_CONTINUE_SEARCH
-    ret
-vh_swallow:
-    ; same ExceptionAddress repeatedly = the known benign LDR side-effect
-    ; (e.g. ntdll!RtlpOpenImageFileOptionsKeyEx during IFEO queries): swallow
-    ; freely, guarded only against a true livelock (same-address stall).
-    mov  rax, [r8+30h]       ; vehLastAddr
-    cmp  rdx, rax
-    jne  vh_new              ; new fault site -> bounded below
-    mov  rax, [r8+38h]       ; vehRepeat: same-address swallows
-    cmp  rax, 1000h
-    jae  vh_search           ; suspicious livelock: give up, crash normally
-    inc  rax
-    mov  [r8+38h], rax
-    jmp  vh_log
-vh_new:
-    mov  rax, [r8+20h]       ; distinct fault sites so far
-    cmp  rax, 8
-    jae  vh_search           ; too many distinct faults: give up, crash
-    inc  rax
-    mov  [r8+20h], rax
-vh_log:
-    mov  [r8+28h], rcx       ; vehLastCode = swallowed exception code
-    mov  [r8+30h], rdx       ; vehLastAddr = swallowed exception address
-    or   rax, -1             ; EXCEPTION_CONTINUE_EXECUTION
-    ret
-VectoredHandler ENDP
+    jz   hmd_fail
+    mov  r12, rax
+    lea  rdx, [rsp+40h]
+    mov  r8d, 512
+    xor  ecx, ecx
+    call r12
+    test rax, rax
+    jz   hmd_fail
+    ; --- resolve dotnet root + best hostfxr at runtime ---
+    call ResolveDotnetRoot
+    call EnumFxrBestMatch
+    ; --- LoadLibraryA(gHostfxrA) ---
+    lea  rcx, szLoadLibraryA
+    call ResolveApi
+    test rax, rax
+    jz   hmd_fail
+    mov  r12, rax
+    lea  rcx, gHostfxrA
+    call r12
+    test rax, rax
+    jz   hmd_fail
+    mov  r13, rax                     ; r13 = hostfxr base
+    ; --- GetProcAddress(hostfxr, "hostfxr_main_bundle_startupinfo") ---
+    lea  rcx, szGetProcAddress
+    call ResolveApi
+    test rax, rax
+    jz   hmd_fail
+    mov  r12, rax
+    mov  rcx, r13
+    lea  rdx, szHostfxrMainBundle
+    call r12
+    test rax, rax
+    jz   hmd_fail
+    mov  r14, rax                     ; r14 = hostfxr_main_bundle_startupinfo
+    ; --- call(argc=1, argv=[host_path], host_path, dotnet_root, app_path, header_offset) ---
+    ; NOTE: argv block must live OUTSIDE the host_path buffer at [rsp+40h]
+    ; (WDC's full path can exceed 190 bytes; overlapping would truncate it).
+    lea  rax, [rsp+40h]               ; argv[0] = host_path (wide)
+    mov  [rsp+500h], rax
+    mov  qword ptr [rsp+508h], 0      ; argv[1] = NULL
+    mov  ecx, 1                       ; argc = 1
+    lea  rdx, [rsp+500h]              ; argv
+    lea  r8,  [rsp+40h]               ; host_path
+    lea  r9,  gDotnetRootW            ; dotnet_root
+    lea  rax, gAppPathW
+    mov  [rsp+20h], rax               ; app_path
+    mov  rax, qword ptr [gHeaderOff]
+    mov  [rsp+28h], rax               ; bundle_header_offset
+    call r14
+    mov  r12d, eax                    ; exit code
+    lea  rcx, szExitProcess
+    call ResolveApi
+    test rax, rax
+    jz   hmd_dead
+    mov  ecx, r12d
+    call rax
+hmd_fail:
+    lea  rcx, szExitProcess
+    call ResolveApi
+    test rax, rax
+    jz   hmd_dead
+    mov  ecx, 3
+    call rax
+hmd_dead:
+    jmp  $
+hostfxr_main_direct ENDP
 
-    align 8
-vehBase  dq 0                ; decompressed apphost image base
-vehSize  dq 0                ; apphost image size (bytes)
-vehExeBase dq 0              ; packed exe base (stub code inside this range)
-vehExeSize dq 0              ; packed exe SizeOfImage (bytes)
-vehCount dq 0                ; distinct fault sites swallowed (bounded 8)
-vehLastCode dq 0             ; last swallowed exception code (observability)
-vehLastAddr dq 0             ; last swallowed exception address (observability)
-vehRepeat dq 0               ; same-address swallows (livelock guard)
+
+
+; ---------------------------------------------------------------------------
+; Runtime hostfxr resolution.
+;   ResolveDotnetRoot: DOTNET_ROOT env -> registry -> default. -> gDotnetRootW
+;   EnumFxrBestMatch:  scan <root>\host\fxr, prefer major==gPrefMajor.
+;                      -> gHostfxrPathW (wide) + gHostfxrA (ANSI)
+; ---------------------------------------------------------------------------
+
+ResolveDotnetRoot PROC
+    push rbx
+    push r12
+    sub  rsp, 28h
+    ; --- 1. DOTNET_ROOT env var ---
+    lea  rcx, szGetEnvironmentVariableW
+    call ResolveApi
+    test rax, rax
+    jz   rdr_reg
+    mov  rbx, rax
+    lea  rcx, szEnvDotnetRootW
+    lea  rdx, gDotnetRootW
+    mov  r8d, 260
+    call rbx
+    test rax, rax
+    jnz  rdr_done
+rdr_reg:
+    ; --- 2. registry ---
+    lea  rcx, szLoadLibraryA
+    call ResolveApi
+    test rax, rax
+    jz   rdr_default
+    mov  rbx, rax
+    lea  rcx, szAdvapi32
+    call rbx                    ; LoadLibraryA("advapi32.dll")
+    test rax, rax
+    jz   rdr_default
+    lea  rcx, szRegOpenKeyExW
+    lea  rdx, szAdvapi32
+    call ResolveApiIn
+    test rax, rax
+    jz   rdr_default
+    mov  rbx, rax
+    mov  rcx, 80000002h         ; HKEY_LOCAL_MACHINE
+    lea  rdx, szRegSubKeyW
+    xor  r8d, r8d               ; ulOptions = 0
+    mov  r9d, 20019h            ; KEY_READ
+    lea  rax, [rsp+20h]
+    mov  [rsp+20h], rax         ; phkResult
+    call rbx
+    test eax, eax
+    jnz  rdr_default
+    mov  r12, [rsp+20h]         ; hKey
+    lea  rcx, szRegQueryValueExW
+    lea  rdx, szAdvapi32
+    call ResolveApiIn
+    test rax, rax
+    jz   rdr_default
+    mov  rbx, rax
+    mov  rcx, r12               ; hKey
+    lea  rdx, szRegValueW       ; "InstallLocation"
+    xor  r8d, r8d               ; lpReserved
+    xor  r9d, r9d               ; lpType
+    lea  rax, gDotnetRootW
+    mov  [rsp+20h], rax         ; lpData
+    lea  rax, [rsp+30h]
+    mov  [rsp+28h], rax         ; lpcbData ptr
+    mov  dword ptr [rsp+30h], 1024   ; initial size
+    call rbx
+    test eax, eax
+    jnz  rdr_default
+    jmp  rdr_done
+rdr_default:
+    lea  rsi, szDefaultRootW
+    lea  rdi, gDotnetRootW
+    call StrCpyW
+rdr_done:
+    add  rsp, 28h
+    pop  r12
+    pop  rbx
+    ret
+ResolveDotnetRoot ENDP
+
+
+
+EnumFxrBestMatch PROC
+    push rbx
+    push rbp
+    push r12
+    push r13
+    push r14
+    push r15
+    sub  rsp, 28h
+    ; reset bests
+    mov  dword ptr [gFall], 0
+    mov  dword ptr [gFall+4], 0
+    mov  dword ptr [gFall+8], 0
+    mov  dword ptr [gBest], 0
+    mov  dword ptr [gBest+4], 0
+    mov  dword ptr [gBest+8], 0
+    ; gFxrDirW = root + "\host"
+    lea  rsi, gDotnetRootW
+    lea  rdi, gFxrDirW
+    call StrCpyW
+    lea  rsi, szHostDirW
+    lea  rdi, gFxrDirW
+    call StrCatW
+    ; gFxrSearchW = gFxrDirW + "\fxr\*"
+    lea  rsi, gFxrDirW
+    lea  rdi, gFxrSearchW
+    call StrCpyW
+    lea  rsi, szFxrNameW
+    lea  rdi, gFxrSearchW
+    call StrCatW
+    lea  rsi, szBackslashW
+    lea  rdi, gFxrSearchW
+    call StrCatW
+    lea  rsi, szStarW
+    lea  rdi, gFxrSearchW
+    call StrCatW
+    ; FindFirstFileW(gFxrSearchW, &gFindData)
+    lea  rcx, szFindFirstFileW
+    call ResolveApi
+    test rax, rax
+    jz   efb_fail
+    mov  rbx, rax
+    lea  rcx, gFxrSearchW
+    lea  rdx, gFindData
+    call rbx
+    cmp  rax, -1
+    je   efb_fail
+    mov  r12, rax                ; hFind
+efb_loop:
+    mov  eax, dword ptr [gFindData]
+    test eax, 10h                ; FILE_ATTRIBUTE_DIRECTORY
+    jz   efb_next
+    lea  rsi, gFindData+2Ch      ; cFileName
+    lea  rdi, szDotW
+    call StrEqW
+    test eax, eax
+    jnz  efb_next
+    lea  rsi, gFindData+2Ch
+    lea  rdi, szDotDotW
+    call StrEqW
+    test eax, eax
+    jnz  efb_next
+    lea  rcx, gFindData+2Ch
+    call ParseVerW               ; eax=major edx=minor r8d=patch
+    mov  r13d, eax
+    mov  r14d, edx
+    mov  r15d, r8d
+    ; fallback: highest overall
+    lea  rbx, gFall
+    lea  rsi, gFindData+2Ch
+    call UpdateBest
+    ; matched: major == gPrefMajor
+    mov  eax, dword ptr [gPrefMajor]
+    test eax, eax
+    jz   efb_next
+    cmp  r13d, eax
+    jne  efb_next
+    lea  rbx, gBest
+    lea  rsi, gFindData+2Ch
+    call UpdateBest
+efb_next:
+    lea  rcx, szFindNextFileW
+    call ResolveApi
+    test rax, rax
+    jz   efb_close
+    mov  rbx, rax
+    mov  rcx, r12
+    lea  rdx, gFindData
+    call rbx
+    test rax, rax
+    jnz  efb_loop
+efb_close:
+    lea  rcx, szFindClose
+    call ResolveApi
+    test rax, rax
+    jz   efb_build
+    mov  rcx, r12
+    call rax
+efb_build:
+    ; gHostfxrPathW = root + "\host" + "\fxr" + "\" + name + "\hostfxr.dll"
+    lea  rsi, gDotnetRootW
+    lea  rdi, gHostfxrPathW
+    call StrCpyW
+    lea  rsi, szHostDirW
+    lea  rdi, gHostfxrPathW
+    call StrCatW
+    lea  rsi, szFxrNameW
+    lea  rdi, gHostfxrPathW
+    call StrCatW
+    lea  rsi, szBackslashW
+    lea  rdi, gHostfxrPathW
+    call StrCatW
+    mov  eax, dword ptr [gBest]
+    test eax, eax
+    jnz  efb_use_best
+    lea  rsi, gFall+0Ch
+    jmp  efb_use
+efb_use_best:
+    lea  rsi, gBest+0Ch
+efb_use:
+    lea  rdi, gHostfxrPathW
+    call StrCatW
+    lea  rsi, szHostfxrDllW
+    lea  rdi, gHostfxrPathW
+    call StrCatW
+    lea  rsi, gHostfxrPathW
+    lea  rdi, gHostfxrA
+    call WideToAnsi
+efb_done:
+    add  rsp, 28h
+    pop  r15
+    pop  r14
+    pop  r13
+    pop  r12
+    pop  rbp
+    pop  rbx
+    ret
+efb_fail:
+    lea  rsi, gDotnetRootW
+    lea  rdi, gHostfxrPathW
+    call StrCpyW
+    lea  rsi, szHostfxrDllW
+    lea  rdi, gHostfxrPathW
+    call StrCatW
+    lea  rsi, gHostfxrPathW
+    lea  rdi, gHostfxrA
+    call WideToAnsi
+    add  rsp, 28h
+    pop  r15
+    pop  r14
+    pop  r13
+    pop  r12
+    pop  rbp
+    pop  rbx
+    ret
+EnumFxrBestMatch ENDP
+
+
+
+; rbx = storage (maj,min,pat + name at +0Ch)
+; r13 = major, r14 = minor, r15 = patch, rsi = name (wide)
+; Updates storage if (r13,r14,r15) is a strictly better version.
+UpdateBest PROC
+    push rsi
+    push rdi
+    push rbx
+    mov  rax, rbx
+    mov  rcx, rsi
+    mov  ebx, [rax]
+    cmp  r13d, ebx
+    jg   ub_new
+    jl   ub_none
+    mov  ebx, [rax+4]
+    cmp  r14d, ebx
+    jg   ub_new
+    jl   ub_none
+    mov  ebx, [rax+8]
+    cmp  r15d, ebx
+    jle  ub_none
+ub_new:
+    mov  [rax], r13d
+    mov  [rax+4], r14d
+    mov  [rax+8], r15d
+    lea  rdi, [rax+0Ch]
+    mov  rsi, rcx
+    call StrCpyW
+ub_none:
+    pop  rbx
+    pop  rdi
+    pop  rsi
+    ret
+UpdateBest ENDP
+
+
+
+; rsi = wide src, rdi = wide dst (copies until NUL)
+StrCpyW PROC
+    push rsi
+    push rdi
+scw_l:
+    mov  ax, [rsi]
+    mov  [rdi], ax
+    test ax, ax
+    jz   scw_d
+    add  rsi, 2
+    add  rdi, 2
+    jmp  scw_l
+scw_d:
+    pop  rdi
+    pop  rsi
+    ret
+StrCpyW ENDP
+
+
+
+; rsi = wide src appended to end of rdi (wide)
+StrCatW PROC
+    push rsi
+    push rdi
+scat_l:
+    cmp  word ptr [rdi], 0
+    je   scat_f
+    add  rdi, 2
+    jmp  scat_l
+scat_f:
+    call StrCpyW
+    pop  rdi
+    pop  rsi
+    ret
+StrCatW ENDP
+
+
+
+; rsi vs rdi (wide). eax = 1 if equal, 0 otherwise.
+StrEqW PROC
+    push rsi
+    push rdi
+seq_l:
+    mov  ax, [rsi]
+    mov  dx, [rdi]
+    cmp  ax, dx
+    jne  seq_no
+    test ax, ax
+    jz   seq_yes
+    add  rsi, 2
+    add  rdi, 2
+    jmp  seq_l
+seq_yes:
+    mov  eax, 1
+    jmp  seq_d
+seq_no:
+    xor  eax, eax
+seq_d:
+    pop  rdi
+    pop  rsi
+    ret
+StrEqW ENDP
+
+
+
+; rcx = wide version string ("10.0.1")
+; eax = major, edx = minor, r8d = patch
+ParseVerW PROC
+    push rbx
+    push rsi
+    mov  rsi, rcx
+    call ParseNumW
+    mov  ebx, eax
+    xor  edx, edx
+    xor  r8d, r8d
+    cmp  word ptr [rsi], '.'
+    jne  pv_d
+    add  rsi, 2
+    call ParseNumW
+    mov  edx, eax
+    cmp  word ptr [rsi], '.'
+    jne  pv_d
+    add  rsi, 2
+    call ParseNumW
+    mov  r8d, eax
+pv_d:
+    mov  eax, ebx
+    pop  rsi
+    pop  rbx
+    ret
+ParseVerW ENDP
+
+
+
+; rsi = wide decimal digits. eax = value, rsi advanced past digits.
+ParseNumW PROC
+    push rbx
+    xor  eax, eax
+    mov  ebx, 10
+pn_l:
+    movzx ecx, word ptr [rsi]
+    sub  ecx, '0'
+    cmp  ecx, 9
+    ja   pn_d
+    imul eax, ebx
+    add  eax, ecx
+    add  rsi, 2
+    jmp  pn_l
+pn_d:
+    pop  rbx
+    ret
+ParseNumW ENDP
+
+
+
+; rsi = wide src, rdi = ANSI dst (LoadLibraryA-friendly)
+WideToAnsi PROC
+    push rsi
+    push rdi
+wta_l:
+    movzx eax, word ptr [rsi]
+    test eax, eax
+    jz   wta_d
+    mov  [rdi], al
+    add  rsi, 2
+    inc  rdi
+    jmp  wta_l
+wta_d:
+    mov  byte ptr [rdi], 0
+    pop  rdi
+    pop  rsi
+    ret
+WideToAnsi ENDP
+
+
+
+; Wait for the Loader Lock to become idle. Called after each stub step
+; that touches the PEB module list / loader state (RegisterModule,
+; TlsInit, RtlAddFunctionTable). The loader's async notification thread
+; walks the list while holding the lock; LockCount<0 means idle. Yield
+; (Sleep 0) so the holder can run; bounded retries as a deadlock backstop.
+; Requires 3 consecutive idle samples (loader activity is bursty; a single
+; idle read may be just a gap between two lock acquisitions).
+; Preserves rdi (apphost base) and all other registers used by caller.
 
 
 
@@ -549,228 +553,9 @@ vehRepeat dq 0               ; same-address swallows (livelock guard)
 ; and points all three at itself so the TLS callback runner
 ; won't crash on the manual-mapped image.
 
-RegisterModule PROC
-    push rbp
-    push rbx
-    push r12
-    push r13
-    push r14
-    push r15
-    sub  rsp, 28h
-
-    mov  rbp, rdi
-    mov  r14d, r13d
-
-    lea  rcx, szVirtualAlloc
-    call ResolveApi
-    test rax, rax
-    jz   rm_fail
-    xor  ecx, ecx
-    mov  edx, 400h
-    mov  r8d, M_COM or M_RES
-    mov  r9d, P_RW
-    mov  [rsp+32], rcx
-    call rax
-    test rax, rax
-    jz   rm_fail
-    mov  r15, rax
-    mov  rdi, rax
-    xor  eax, eax
-    mov  ecx, 80h
-    rep  stosq
-
-    mov  [r15+30h], rbp
-    mov  [r15+40h], r14d
-    mov  eax, [rbp+3Ch]
-    lea  rcx, [rbp+rax+18h+10h]
-    mov  eax, [rcx]
-    add  rax, rbp
-    mov  [r15+38h], rax
-    mov  eax, [rbp+3Ch]
-    mov  eax, [rbp+rax+8]
-    mov  [r15+80h], eax
-
-    lea  rcx, szGetModuleFileNameW
-    call ResolveApi
-    test rax, rax
-    jz   rm_fail
-    mov  rbx, rax
-    xor  ecx, ecx
-    lea  rdx, [r15+100h]
-    mov  r8d, 260
-    call rbx
-    test rax, rax
-    jz   rm_fail
-    mov  r12d, eax
-    lea  rsi, [r15+100h]
-    xor  edx, edx
-    dec  edx
-    xor  ecx, ecx
-rm_ps:
-    cmp  ecx, r12d
-    jae  rm_pd
-    movzx r8d, word ptr [rsi+rcx*2]
-    cmp  r8d, 5Ch
-    jne  rm_pn
-    mov  edx, ecx
-rm_pn:
-    inc  ecx
-    jmp  rm_ps
-rm_pd:
-    mov  eax, r12d
-    add  eax, eax
-    add  eax, 2          ; FullDllName.Length: bytes + NUL terminator
-    mov  [r15+48h], ax
-    mov  word ptr [r15+4Ah], 208h
-    lea  rax, [r15+100h]
-    mov  [r15+50h], rax
-    test edx, edx
-    js   rm_uf
-    mov  eax, r12d
-    sub  eax, edx
-    sub  eax, 1
-    add  eax, eax
-    add  eax, 2          ; BaseDllName.Length: bytes + NUL terminator
-    mov  [r15+58h], ax
-    mov  [r15+5Ah], ax
-    lea  rax, [r15+100h+rdx*2+2]
-    mov  [r15+60h], rax
-    jmp  rm_ls
-rm_uf:
-    mov  eax, r12d
-    add  eax, eax
-    add  eax, 2          ; BaseDllName.Length: bytes + NUL terminator
-    mov  [r15+58h], ax
-    mov  word ptr [r15+5Ah], 208h
-    lea  rax, [r15+100h]
-    mov  [r15+60h], rax
-rm_ls:
-    mov  rax, gs:[60h]
-    mov  rax, [rax+18h]
-    mov  r13, rax
-    mov  rax, [r13+10h]
-    mov  [r15+00h], rax
-    lea  rcx, [r13+10h]
-    mov  [r15+08h], rcx
-    mov  [rax+08h], r15
-    mov  [r13+10h], r15
-    mov  rax, [r13+20h]
-    mov  [r15+10h], rax
-    lea  rcx, [r13+20h]
-    mov  [r15+18h], rcx
-    lea  rdx, [r15+10h]
-    mov  [rax+08h], rdx
-    mov  [r13+20h], rdx
-    mov  rax, [r13+30h]
-    mov  [r15+20h], rax
-    lea  rcx, [r13+30h]
-    mov  [r15+28h], rcx
-    lea  rdx, [r15+20h]
-    mov  [rax+08h], rdx
-    mov  [r13+30h], rdx
-    ; self-loop: TLS callback runner dereferences these
-    lea  rax, [r15+98h]
-    mov  [r15+98h], rax
-    mov  [r15+0A0h], rax
-    lea  rax, [r15+0A8h]
-    mov  [r15+0A8h], rax
-    mov  [r15+0B0h], rax
-    lea  rax, [r15+0B8h]
-    mov  [r15+0B8h], rax
-    mov  [r15+0C0h], rax
-
-    mov  eax, 1
-    jmp  rm_dn
-rm_fail:
-    xor  eax, eax
-rm_dn:
-    add  rsp, 28h
-    pop  r15
-    pop  r14
-    pop  r13
-    pop  r12
-    pop  rbx
-    pop  rbp
-    ret
-RegisterModule ENDP
 
 
 
-TlsInit PROC
-    push rbx
-    push r12
-    push r13
-    push r14
-    push r15
-    sub  rsp, 30h
-    mov  r12, rdi
-    mov  eax, [r12+3Ch]
-    mov  r13d, [r12+rax+18h+70h+48h]
-    test r13d, r13d
-    jz   tl_fail
-    add  r13, r12
-    ; !! TLS dir VA fields fixed by .reloc
-    lea  rcx, szTlsAlloc
-    call ResolveApi
-    test rax, rax
-    jz   tl_fail
-    mov  [rsp+28h], rax
-    mov  rax, [rsp+28h]
-    call rax
-    test eax, eax
-    jz   tl_fail
-    mov  r14d, eax
-    mov  rax, [r13+10h]
-    mov  [rax], r14d
-    mov  eax, [r13+8]
-    sub  eax, [r13]
-    add  eax, [r13+20h]
-    mov  [rsp+20h], eax
-    lea  rcx, szVirtualAlloc
-    call ResolveApi
-    test rax, rax
-    jz   tl_fail
-    mov  edx, [rsp+20h]
-    xor  ecx, ecx
-    mov  r8d, M_COM or M_RES
-    mov  r9d, P_RW
-    mov  [rsp+32], rcx
-    call rax
-    test rax, rax
-    jz   tl_fail
-    mov  r15, rax
-    mov  rsi, [r13]
-    mov  rdi, r15
-    mov  ecx, [r13+8]
-    sub  ecx, [r13]
-    mov  eax, ecx
-    shr  ecx, 2
-    rep  movsd
-    mov  ecx, eax
-    and  ecx, 3
-    rep  movsb
-    lea  rcx, szTlsSetValue
-    call ResolveApi
-    test rax, rax
-    jz   tl_fail
-    mov  ecx, r14d
-    mov  rdx, r15
-    call rax
-    test rax, rax
-    jz   tl_fail
-    mov  eax, 1
-    jmp  tl_dn
-tl_fail:
-    xor  eax, eax
-tl_dn:
-    add  rsp, 30h
-    pop  r15
-    pop  r14
-    pop  r13
-    pop  r12
-    pop  rbx
-    ret
-TlsInit ENDP
 
 
 
@@ -1003,96 +788,58 @@ rfail:
 
 
 
-szVirtualAlloc   db "VirtualAlloc",0
-szTlsAlloc       db "TlsAlloc",0
-szTlsSetValue    db "TlsSetValue",0
-szVirtualProtect db "VirtualProtect",0
 szExitProcess    db "ExitProcess",0
 szLoadLibraryA   db "LoadLibraryA",0
 szGetProcAddress db "GetProcAddress",0
-szGetModuleHandleW db "GetModuleHandleW",0
 szGetModuleFileNameW db "GetModuleFileNameW",0
-szRtlAddFunctionTable db "RtlAddFunctionTable",0
-szAddVectoredExceptionHandler db "AddVectoredExceptionHandler",0
-szNtdll          db "ntdll",0
+szHostfxrMainBundle db "hostfxr_main_bundle_startupinfo",0
+szGetEnvironmentVariableW db "GetEnvironmentVariableW",0
+szFindFirstFileW db "FindFirstFileW",0
+szFindNextFileW  db "FindNextFileW",0
+szFindClose      db "FindClose",0
+szAdvapi32       db "advapi32.dll",0
+szRegOpenKeyExW  db "RegOpenKeyExW",0
+szRegQueryValueExW db "RegQueryValueExW",0
+
+    align 8
+; wide string constants (UTF-16LE)
+szEnvDotnetRootW dw 'D','O','T','N','E','T','_','R','O','O','T',0
+szRegSubKeyW     dw 'S','O','F','T','W','A','R','E','\','d','o','t','n','e','t','\','S','e','t','u','p','\','I','n','s','t','a','l','l','e','d','V','e','r','s','i','o','n','s','\','x','6','4',0
+szRegValueW      dw 'I','n','s','t','a','l','l','L','o','c','a','t','i','o','n',0
+szHostDirW       dw '\','h','o','s','t',0
+szFxrNameW       dw '\','f','x','r',0
+szHostfxrDllW    dw '\','h','o','s','t','f','x','r','.','d','l','l',0
+szStarW          dw '*',0
+szDotW           dw '.',0
+szDotDotW        dw '.','.',0
+szBackslashW     dw '\',0
+szDefaultRootW   dw 'C',':','\','P','r','o','g','r','a','m',' ','F','i','l','e','s','\','d','o','t','n','e','t',0
+
+    align 8
+; --- runtime-resolved data (stub fills at startup) ---
+gDotnetRootW   db 520 dup(0)      ; dotnet root (wide)
+gHostfxrPathW  db 520 dup(0)      ; full hostfxr.dll path (wide)
+gHostfxrA      db 520 dup(0)      ; full hostfxr.dll path (ANSI, LoadLibraryA)
+gFxrDirW       db 520 dup(0)      ; <root>\host
+gFxrSearchW    db 520 dup(0)      ; <root>\host\fxr\*
+gFindData      db 640 dup(0)      ; WIN32_FIND_DATAW
+gFall          db 12 dup(0), 520 dup(0)   ; fallback best: maj,min,pat + name (wide)
+gBest          db 12 dup(0), 520 dup(0)   ; pref-matched best: maj,min,pat + name (wide)
+
+    align 8
+gAppPathW   db "##APPPATH##",0           ; wide app.dll path (packer patches)
+            db 500 dup(0)
+    align 8
+gPrefMajor  db "##PREFMAJ##",0           ; payload runtime major version (packer patches)
+    align 8
+gHeaderOff  dq 01122334455667788h        ; bundle header offset (packer patches)
+
+    align 8
 
 
 
 ; rcx = module base
 ; rdx = LoadLibraryA
 ; r8  = GetProcAddress
-ResolveImports PROC
-    push rbp
-    push rsi
-    push rdi
-    push rbx
-    push r12
-    push r13
-    push r14
-    push r15
-    sub  rsp, 28h             ; home space below pushed regs
-    mov  rdi, rcx
-    mov  r12, rdx
-    mov  r13, r8
-    mov  eax, [rdi+3Ch]
-    lea  rax, [rdi+rax]
-    mov  eax, [rax+90h]
-    test eax, eax
-    jz   rdun
-    add  rax, rdi
-    mov  rsi, rax
-rdp:
-    mov  eax, [rsi+0Ch]
-    test eax, eax
-    jz   rdun
-    mov  ecx, [rsi]
-    mov  edx, [rsi+10h]
-    test ecx, ecx
-    jnz  rlu
-    mov  ecx, edx
-rlu:
-    lea  r14, [rdi+rcx]
-    lea  r15, [rdi+rdx]
-    lea  rcx, [rdi+rax]
-    call r12
-    test rax, rax
-    jz   rsk
-    mov  rbx, rax
-rfl:
-    mov  rax, [r14]
-    test rax, rax
-    jz   rsk
-    mov  rcx, rbx
-    test rax, rax
-    js   ordl
-    lea  rdx, [rdi+rax+2]
-    jmp  rgp
-ordl:
-    and  eax, 0FFFFh
-    mov  rdx, rax
-rgp:
-    call r13
-    test rax, rax
-    jz   rnx
-    mov  [r15], rax
-rnx:
-    add  r14, 8
-    add  r15, 8
-    jmp  rfl
-rsk:
-    add  rsi, 20
-    jmp  rdp
-rdun:
-    add  rsp, 28h
-    pop  r15
-    pop  r14
-    pop  r13
-    pop  r12
-    pop  rbx
-    pop  rdi
-    pop  rsi
-    pop  rbp
-    ret
-ResolveImports ENDP
 
 END
