@@ -27,7 +27,7 @@ internal static class Program
                 return Fail("bad .lamapp payload header");
 
             byte[] rgLz = new byte[cbComp];
-            Array.Copy(rgLamApp, 8, rgLz, 0, (int)cbComp);
+            Array.Copy(rgLamApp, 8 + 8, rgLz, 0, (int)cbComp);
 
             byte[] rgDll = new byte[cbOrig];
             uint pcbOut = cbOrig;

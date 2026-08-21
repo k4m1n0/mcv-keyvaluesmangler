@@ -248,10 +248,12 @@ internal class PeWriter
             uint pcb = cbCap;
             if (LamarrEncoder.Encode(rgComp, ref pcb, rgDll, (uint)rgDll.Length) != 0)
                 throw new InvalidOperationException("Lamarr encode failed (main DLL)");
-            rgLamApp = new byte[8 + pcb];
+            byte[] rgMarkerPad = { 0x42, 0x53, 0x90, 0x00, 0x4A, 0x42, 0x06, 0x00 };
+            rgLamApp = new byte[8 + rgMarkerPad.Length + pcb];
             BitConverter.GetBytes((uint)rgDll.Length).CopyTo(rgLamApp, 0);
             BitConverter.GetBytes(pcb).CopyTo(rgLamApp, 4);
-            Array.Copy(rgComp, 0, rgLamApp, 8, (int)pcb);
+            Array.Copy(rgMarkerPad, 0, rgLamApp, 8, rgMarkerPad.Length);
+            Array.Copy(rgComp, 0, rgLamApp, 8 + rgMarkerPad.Length, (int)pcb);
             Console.WriteLine($"  .lamapp: {rgDll.Length} -> {rgLamApp.Length} bytes (Lamarr)");
         }
 
@@ -389,9 +391,7 @@ internal class PeWriter
         BitConverter.GetBytes(lNewBundleHeaderOffset).CopyTo(rgMarker, 0);
         Array.Copy(rgSignature, 0, rgMarker, 8, 32);
         fs.Write(rgMarker, 0, 40);
-        byte[] rgMarkerPad = { 0x42, 0x53, 0x90, 0x00, 0x4A, 0x42 };
-        fs.Write(rgMarkerPad, 0, rgMarkerPad.Length);
-        Pad(fs, (int)(uLamAppRaw - (iMarkerRaw + 40 + rgMarkerPad.Length)));
+        Pad(fs, (int)(uLamAppRaw - (iMarkerRaw + 40)));
         fs.Write(rgLamApp, 0, rgLamApp.Length);
         Pad(fs, (int)(uLamAppRawSize - rgLamApp.Length));
         Pad(fs, (int)(lBundleStart - (uLamAppRaw + uLamAppRawSize)));
