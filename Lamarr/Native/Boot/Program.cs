@@ -23,7 +23,7 @@ internal static class Program
 
             uint cbOrig = BitConverter.ToUInt32(rgLamApp, 0);
             uint cbComp = BitConverter.ToUInt32(rgLamApp, 4);
-            if (cbOrig == 0 || cbComp == 0 || cbOrig > 0x10000000 || cbComp >= cbOrig || 8UL + cbComp > (ulong)rgLamApp.Length)
+            if (cbOrig == 0 || cbComp == 0 || cbOrig > 0x10000000 || cbComp >= cbOrig || 16UL + cbComp > (ulong)rgLamApp.Length)
                 return Fail("bad .lamapp payload header");
 
             byte[] rgLz = new byte[cbComp];

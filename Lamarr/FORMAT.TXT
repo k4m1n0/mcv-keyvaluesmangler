@@ -427,8 +427,13 @@ Abstract
                     +--------+----------------------------+
                     | 0      | Original size (u32 LE)     |
                     | 4      | Compressed size (u32 LE)   |
-                    | 8      | Compressed data (C octets) |
+                    | 8      | Marker pad (8 octets)      |
+                    | 16     | Compressed data (C octets) |
                     +--------+----------------------------+
+
+                The marker pad is a short inert byte sequence;
+                LamarrBoot skips it and reads compressed data from
+                offset 16.
 
                 LamarrBoot reads its own exe file, decompresses the
                 payload, loads it into an AssemblyLoadContext and
