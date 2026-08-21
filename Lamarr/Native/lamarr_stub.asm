@@ -28,7 +28,7 @@ StubEntry ENDP
 
 
 
-; call hostfxr_main_bundle_startupinfo directly
+; !! call hostfxr_main_bundle_startupinfo directly
 ; host_path = GetModuleFileNameW(NULL)
 ; dotnet_root = gDotnetRootW
 ; app_path = gAppPathW, header_offset = gHeaderOff
@@ -46,7 +46,7 @@ hostfxr_main_direct PROC
     test rax, rax
     jz hmd_fail
 
-    ; build app_path = <host dir>\<app name> at runtime (exe may be relocated)
+    ; !! build app_path = <host dir>\<app name> at runtime (exe may be relocated)
     lea rdi, gAppPathW
     lea rsi, [rsp+40h]                  ; host_path from GetModuleFileNameW
     call StrCpyW                        ; gAppPathW = host_path
@@ -82,7 +82,7 @@ bap_plain:
     call r12
     test rax, rax
     jz hmd_fail
-    mov r13, rax                        ; r12 = hostfxr
+    mov r13, rax                        ; r13 = hostfxr
 
     lea rcx, szGetProcAddress           ; get hostfxr_main_bundle
     call ResolveApi
@@ -169,12 +169,12 @@ hmd_fail:
     mov ecx, 3
     call rax
 hmd_dead:
-    ud2                                 ; app_path
+    ud2                                 ; :D
 hostfxr_main_direct ENDP
 
 
 
-; resolve dotnet root + hostfxr path
+; !! resolve dotnet root + hostfxr path
 ; root: env -> registry -> default
 ; fxr:  scan <root>\host\fxr, prefer gPrefMajor match
 
@@ -213,7 +213,7 @@ rdr_reg:
     mov rcx, 80000002h                  ; HKLM
     lea rdx, szRegSubKeyW
     xor r8d, r8d                        ; ulOptions
-    mov r9d, 20019h                     ; KEY_READ
+    mov r9d, 20019h                     ; KEY_READ | KEY_WOW64_64KEY
     lea rax, [rsp+20h]
     mov [rsp+20h], rax                  ; phkResult
     call rbx
@@ -400,7 +400,7 @@ efb_done:
     ret
 
 efb_fail:
-    ; cannot find fxr dir, try <root>\hostfxr.dll
+    ; !! cannot find fxr dir, try <root>\hostfxr.dll
     ; if that fails too, whatever, just crash
     lea rsi, gDotnetRootW
     lea rdi, gHostfxrPathW
@@ -744,7 +744,7 @@ mok:
     add rcx, rdx
     mov eax, [rcx+rax*4]                ; func RVA
 
-    ; forwarder: function RVA in export dir = "DLL.Func" string
+    ; !! forwarder: function RVA in export dir = "DLL.Func" string
     mov r9d, [rdx+3Ch]
     lea r9, [rdx+r9+18h+70h]            ; export dir range
     mov r10d, [r9]
