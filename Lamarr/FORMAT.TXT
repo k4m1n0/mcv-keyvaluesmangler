@@ -572,5 +572,4 @@ Appendix B.  Implementation Notes
     the remainder and truncates the decompressed output, producing a
     stream the stub loader rejects as a corrupt payload.
 
-
                         End of Specification
