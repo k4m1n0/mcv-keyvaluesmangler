@@ -452,19 +452,21 @@ Abstract
             ExitProcess, LoadLibraryA, GetProcAddress,
             GetModuleFileNameW, GetEnvironmentVariableW,
             FindFirstFileW, FindNextFileW, FindClose,
-            RegOpenKeyExW, RegQueryValueExW
+            RegOpenKeyExW, RegQueryValueExW,
+            GetCommandLineW, CommandLineToArgvW
 
         Two limitations apply:
 
-        (a)  All kernel32 exports above are direct exports, resolved by
-             walking the PEB module list to kernel32 and parsing its
-             export table (no kernel32 -> KERNELBASE -> api-set
-             forwarding chain is involved). RegOpenKeyExW /
-             RegQueryValueExW are loaded explicitly from advapi32.dll
-             via LoadLibraryA + GetProcAddress; hostfxr_main_bundle_
-             startupinfo likewise via GetProcAddress on hostfxr.dll.
-             Since the stub never maps or imports a host image, no
-             forwarded-export resolution is required.
+        (a)  All kernel32 exports above are resolved by walking the
+             PEB module list to kernel32 and parsing its export table
+             directly. The walker resolves forwarders inline (chasing
+             "DLL.Func" strings to the target module), so kernel32 ->
+             KERNELBASE / api-set chains are handled by the stub itself,
+             not the OS loader. RegOpenKeyExW / RegQueryValueExW are
+             loaded explicitly from advapi32.dll; CommandLineToArgvW
+             from shell32.dll; hostfxr_main_bundle_startupinfo via
+             GetProcAddress on hostfxr.dll. The stub never invokes
+             OS loader import resolution.
 
         (b)  Hardware-enforced CET (shadow stack / indirect branch
              tracking) is not handled by the stub. It calls directly
