@@ -22,6 +22,94 @@ StubEntry PROC FRAME
     sub rsp, 40
     .allocstack 40
     .endprolog
+    ; ?? it is not meant to stop anyone from reverse engineering
+    ; but a honeypot like this is fun
+    lea rax, StubEntry
+    movzx ecx, byte ptr [rax]
+    movzx edx, byte ptr [rax+1]
+    movzx r8d, byte ptr [rax+2]
+    xor ecx, 55h                        ; push rbp
+    xor edx, 48h                        ; REX.W prefix
+    xor r8d, 8Bh                        ; mov rbp,rsp
+    or ecx, edx
+    or ecx, r8d
+    test ecx, ecx
+    jz se_default
+    ; debugger detected - "malicious" revenge path
+    mov ecx, 1
+    cmp ecx, 6
+    ja se_default
+    lea rcx, se_table
+    movsxd rdx, dword ptr [rcx+rdx*4]
+    add rdx, rcx
+    jmp rdx
+se_table:
+    dd se_c0 - se_table
+    dd se_c1 - se_table
+    dd se_c2 - se_table
+    dd se_c3 - se_table
+    dd se_c4 - se_table
+    dd se_c5 - se_table
+    dd se_c6 - se_table
+se_c0:
+    lea rcx, szHostfxrMainBundle
+    call ResolveApi
+    test rax, rax
+    jz se_default
+    mov rbx, rax
+    lea rcx, gHostfxrPathW
+    mov rdx, rax
+    jmp se_break
+se_c1:
+    mov ecx, 999
+    mov edx, 80131500h                  ; COR_E_EXCEPTION
+    jmp se_break
+se_c2:
+    lea rcx, szLoadLibraryA
+    call ResolveApi
+    test rax, rax
+    jz se_default
+    lea rcx, szShell32
+    call rax
+    lea rcx, gDotnetRootW
+    lea rdx, gHostfxrPathW
+    jmp se_break
+se_c3:
+    lea rcx, szExitProcess
+    call ResolveApi
+    test rax, rax
+    jz se_default
+    xor ecx, ecx
+    mov edx, 80008083h                  ; HOST_E_ABANDONED
+    call rax
+    jmp se_break
+se_c4:
+    lea rcx, szGetCommandLineW
+    call ResolveApi
+    test rax, rax
+    jz se_default
+    lea rcx, szGetCommandLineW
+    lea rdx, gAppPathW
+    jmp se_break
+se_c5:
+    lea rcx, szGetEnvironmentVariableW
+    call ResolveApi
+    test rax, rax
+    jz se_default
+    lea rcx, szEnvDotnetRootW
+    lea rdx, gDotnetRootW
+    jmp se_break
+se_c6:
+    xor ecx, ecx
+    mov rax, qword ptr [rcx]
+    lea rcx, gHeaderOff
+    jmp se_break
+se_break:
+    nop
+    nop
+    nop
+    db 0E8h, 00h, 00h, 00h, 00h
+se_default:
     ; jump straight to hostfxr_main, skip apphost mapping
     jmp hostfxr_main_direct
 StubEntry ENDP
@@ -34,6 +122,19 @@ StubEntry ENDP
 ; app_path = gAppPathW, header_offset = gHeaderOff
 hostfxr_main_direct PROC
     sub rsp, 800h
+    ; ?? always passes
+    call ValidateHostConfiguration
+    test eax, eax
+    jnz hmd_valid
+    jmp hmd_fail
+hmd_valid:
+    call CheckModuleIntegrity
+    test eax, eax
+    jnz hmd_integrity_ok
+    jmp hmd_fail
+hmd_integrity_ok:
+    ; ?? computes hashes but uses none
+    call FakeHashResolve
     lea rcx, szGetModuleFileNameW       ; GetModuleFileNameW(NULL)
     call ResolveApi
     test rax, rax
@@ -173,11 +274,54 @@ hmd_dead:
 hostfxr_main_direct ENDP
 
 
+; ?? looks like it checks something important
+ValidateHostConfiguration PROC
+    mov rax, qword ptr [gHeaderOff]
+    test rax, rax
+    jz vhc_fail
+    ; read gAppNameW - always has "##APPNAME##" patched in
+    lea rax, gAppNameW
+    movzx ecx, word ptr [rax]
+    test ecx, ecx
+    jz vhc_fail
+    lea rdx, gAppPathW
+    xor r8d, r8d
+vhc_loop:
+    movzx ecx, word ptr [rdx+r8*2]
+    test ecx, ecx
+    jz vhc_ok
+    inc r8
+    cmp r8, 260
+    jb vhc_loop
+vhc_ok:
+    mov eax, 1
+    ret
+vhc_fail:
+    xor eax, eax
+    ret
+ValidateHostConfiguration ENDP
+
+; ?? reads PE headers but ignores result
+CheckModuleIntegrity PROC
+    mov rax, qword ptr [gHeaderOff]
+    test rax, rax
+    jz cmi_fail
+    lea rax, StubEntry
+    movzx eax, byte ptr [rax]
+    test eax, eax
+    jz cmi_fail
+    mov eax, 1
+    ret
+cmi_fail:
+    xor eax, eax
+    ret
+CheckModuleIntegrity ENDP
+
+
 
 ; !! resolve dotnet root + hostfxr path
 ; root: env -> registry -> default
 ; fxr:  scan <root>\host\fxr, prefer gPrefMajor match
-
 ResolveDotnetRoot PROC
     push rbx
     push r12
@@ -262,6 +406,21 @@ EnumFxrBestMatch PROC
     push r15
     sub rsp, 28h
 
+    ; ?? padding is zeros so key does not matter, lmao
+    lea r8, gPadBuf
+    mov r9d, 256
+    xor r10d, r10d
+    mov r11d, 5A3C7E19h
+efb_xor_loop:
+    cmp r10d, r9d
+    jae efb_xor_done
+    movzx eax, byte ptr [r8+r10]
+    xor al, r11b
+    mov byte ptr [r8+r10], al
+    ror r11d, 8
+    inc r10
+    jmp efb_xor_loop
+efb_xor_done:
     mov dword ptr [gFall], 0            ; reset bests
     mov dword ptr [gFall+4], 0
     mov dword ptr [gFall+8], 0
@@ -602,6 +761,87 @@ WideToAnsi ENDP
 
 
 
+; ?? looks like shellcode, actually does nothing
+FakeHashResolve PROC
+    push rbx
+    push rsi
+    push rdi
+    push r12
+    push r13
+    sub rsp, 28h
+    mov rax, gs:[60h]
+    mov rax, [rax+18h]
+    lea rbx, [rax+10h]
+    mov rax, [rbx]
+fhr_mod_loop:
+    cmp rax, rbx
+    je fhr_done
+    mov r8, [rax+30h]
+    test r8, r8
+    jz fhr_done
+    mov r13d, [r8+3Ch]
+    add r13, r8
+    mov ecx, [r13]
+    cmp ecx, 4550h
+    jne fhr_next
+    mov r13d, [r13+88h]
+    test r13d, r13d
+    jz fhr_next
+    add r13, r8
+    mov r12d, [r13+20h]
+    add r12, r8
+    mov r9d, [r13+18h]
+    cmp r9d, 10000
+    jbe fhr_name_start
+    mov r9d, 10000
+fhr_name_start:
+    xor r10d, r10d
+fhr_name_loop:
+    cmp r10d, r9d
+    jae fhr_next
+    mov r13d, [r12]
+    cmp r10d, 4
+    jae fhr_no_deref
+    add r13, r8
+    xor r11d, r11d
+fhr_char_loop:
+    movzx ecx, byte ptr [r13]
+    test ecx, ecx
+    jz fhr_char_done
+    add r11d, ecx
+    ror r11d, 13                        ; :rofl:
+    inc r13
+    jmp fhr_char_loop
+fhr_char_done:
+    jmp fhr_next_name
+fhr_no_deref:
+    xor r11d, r11d
+    add r11d, r13d
+    ror r11d, 13
+fhr_next_name:
+    ; hash computed, but just throw it away
+    ; ?? pretend to look for hostfxr_main_bundle_startupinfo hash
+    cmp r11d, 6A3C5E19h
+    jne fhr_no_match
+    lea rcx, szHostfxrMainBundle
+fhr_no_match:
+    add r12, 4
+    inc r10d
+    jmp fhr_name_loop
+fhr_next:
+    mov rax, [rax]
+    jmp fhr_mod_loop
+fhr_done:
+    mov eax, 1
+    add rsp, 28h
+    pop r13
+    pop r12
+    pop rdi
+    pop rsi
+    pop rbx
+    ret
+FakeHashResolve ENDP
+
 ResolveApi PROC
     push rbx
     push rsi
@@ -873,6 +1113,7 @@ gFxrSearchW   db 520 dup(0)            ; <root>\host\fxr\*
 gFindData     db 640 dup(0)            ; WIN32_FIND_DATAW
 gFall         db 12 dup(0), 520 dup(0) ; fallback: maj,min,pat + name
 gBest         db 12 dup(0), 520 dup(0) ; pref-matched: maj,min,pat + name
+gPadBuf       db 256 dup(0)            ; ?? fake decryption padding
 
     align 8
 

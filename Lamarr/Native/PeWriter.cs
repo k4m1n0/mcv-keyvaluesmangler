@@ -389,7 +389,9 @@ internal class PeWriter
         BitConverter.GetBytes(lNewBundleHeaderOffset).CopyTo(rgMarker, 0);
         Array.Copy(rgSignature, 0, rgMarker, 8, 32);
         fs.Write(rgMarker, 0, 40);
-        Pad(fs, (int)(uLamAppRaw - (iMarkerRaw + 40)));
+        byte[] rgMarkerPad = { 0x42, 0x53, 0x90, 0x00, 0x4A, 0x42 };
+        fs.Write(rgMarkerPad, 0, rgMarkerPad.Length);
+        Pad(fs, (int)(uLamAppRaw - (iMarkerRaw + 40 + rgMarkerPad.Length)));
         fs.Write(rgLamApp, 0, rgLamApp.Length);
         Pad(fs, (int)(uLamAppRawSize - rgLamApp.Length));
         Pad(fs, (int)(lBundleStart - (uLamAppRaw + uLamAppRawSize)));
