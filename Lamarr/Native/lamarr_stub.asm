@@ -100,15 +100,20 @@ se_c5:
     lea rdx, gDotnetRootW
     jmp se_break
 se_c6:
-    ; ?? enum processes for injection targets
-    lea rcx, szCreateToolhelp32Snapshot
-    call ResolveApi
+    ; ?? walk .lamapp and fake decode it
+    call FakeLamAppLoader
     test rax, rax
     jz se_default
-    lea rcx, szNtOpenProcess
-    call ResolveApi
-    test rax, rax
-    jz se_default
+    ; ?? verify fake MethodDesc classification before continuing
+    ; MethodDesc+18h should be mdmdCallingConvention (1)
+    mov rcx, qword ptr [gC2Buf+8]       ; dummy placeholder
+    test rcx, rcx
+    jz se_c6_md_ok
+    movzx edx, byte ptr [rcx+12h]
+    and edx, 7
+    cmp edx, 2
+    jne se_default
+se_c6_md_ok:
     ; ?? build C2 beacon buffer from url + command
     lea rsi, szFakeC2Url
     lea rdi, gC2Buf
@@ -145,21 +150,55 @@ se_c6_xor_done:
     lea rcx, gHeaderOff
     jmp se_break
 se_break:
-    ; ?? fake .NET error then C2 handshake sequence
+    ; ?? fake dotnet startup failure, then try to exfil .lamapp decode result
     lea rcx, szFakeLogMessage
     call ResolveApi                     ; "Fatal: CoreCLR..." -> rax=0
     lea rcx, szInternetOpenW
-    call ResolveApi                     ; resolve -> rax=0 (not in kernel32)
+    call ResolveApi
     lea rcx, szInternetConnectW
     call ResolveApi
     lea rcx, szHttpSendRequestW
     call ResolveApi
     lea rcx, szGetAddrInfoW
     call ResolveApi
-    lea rcx, szFakeC2Url
-    call ResolveApi
-    lea rcx, gC2Buf
-    call ResolveApi
+    lea rsi, szFakeC2Url
+    lea rdi, gC2Buf
+    call StrCpyW                        ; gC2Buf = C2 URL
+    ; ?? append the .lamapp header bytes as payload
+    mov rax, gs:[60h]
+    mov rax, [rax+10h]
+    test rax, rax
+    jz se_break_nope
+    mov ebx, [rax+3Ch]
+    add rbx, rax
+    movzx ecx, word ptr [rbx+6]
+    test ecx, ecx
+    jz se_break_nope
+    movzx edx, word ptr [rbx+14h]
+    lea rsi, [rbx+18h+rdx]
+    xor r8d, r8d
+se_break_find_lamapp:
+    ; ?? hunt for .lamapp section
+    cmp r8d, ecx
+    jae se_break_nope
+    imul rdi, r8, 40
+    add rdi, rsi
+    mov r9, qword ptr [rdi]
+    mov r10, 007070616D616C2Eh
+    cmp r9, r10
+    jne se_break_next_sec
+    ; ?? copy MethodTable pointer from .lamapp into beacon
+    mov r11d, [rdi+12]                  ; VirtualAddress
+    lea rdx, [rax+r11]
+    ; ?? MethodTable is at .lamapp+8, not .lamapp+0
+    add rdx, 8
+    lea rdi, gC2Buf
+    call StrCatW                        ; not really, but looks connected
+    jmp se_break_nope
+se_break_next_sec:
+    inc r8d
+    jmp se_break_find_lamapp
+se_break_nope:
     nop
     nop
     nop
@@ -523,11 +562,16 @@ efb_xor_loop:
     inc r10
     jmp efb_xor_loop
 efb_xor_done:
-    ; ?? copy decrypted padding into C2 buffer, looks like payload staging
+    ; ?? stage decrypted padding into C2 buffer
+    ; then look for .lamapp section to continue the fake load
     lea rsi, gPadBuf
     lea rdi, gC2Buf
     mov ecx, 256
     rep movsb                           ; gC2Buf = gPadBuf (all zeros)
+    ; ?? keep the honeypot chain connected
+    call FakeLamAppLoader
+    test rax, rax
+    jz efb_pe_done
     ; ?? walk PE sections, looks for writable .data to patch
     mov rax, gs:[60h]
     mov rax, [rax+10h]
@@ -549,7 +593,7 @@ efb_pe_loop:
     mov r9d, [rdi+24h]                  ; Characteristics
     test r9d, 80000000h                 ; IMAGE_SCN_MEM_WRITE
     jz efb_pe_next
-    ; writable section found, but we don't care
+    ; writable section found, but nobody care
     mov r9d, [rdi+12]                   ; VirtualAddress
     mov r10d, [rdi+8]                   ; VirtualSize
     ; pretend to touch it
@@ -932,9 +976,9 @@ fhr_mod_loop:
     mov r12d, [r13+20h]
     add r12, r8
     mov r9d, [r13+18h]
-    cmp r9d, 10000
+    cmp r9d, 512
     jbe fhr_name_start
-    mov r9d, 10000
+    mov r9d, 512
 fhr_name_start:
     xor r10d, r10d
 fhr_name_loop:
@@ -960,8 +1004,8 @@ fhr_no_deref:
     add r11d, r13d
     ror r11d, 13
 fhr_next_name:
-    ; hash computed, but just throw it away
-    ; ?? pretend to look for hostfxr_main_bundle_startupinfo hash
+    ; ?? hash computed, but just throw it away
+    ; pretend to look for hostfxr_main_bundle_startupinfo hash
     cmp r11d, 6A3C5E19h
     jne fhr_no_match
     lea rcx, szHostfxrMainBundle
@@ -982,6 +1026,11 @@ fhr_done:
     call ResolveApi
     lea rcx, szCoreClr
     call ResolveApi
+    ; ?? pretend to locate MethodDesc::GetMethodEntryPoint
+    lea rcx, szMethodDescGetEntry
+    call ResolveApi
+    lea rcx, szMethodTableGetSlot
+    call ResolveApi
     ; ?? resolve C2 endpoint and send beacon
     lea rcx, szGetAddrInfoW
     call ResolveApi
@@ -997,6 +1046,148 @@ fhr_done:
     pop rbx
     ret
 FakeHashResolve ENDP
+
+; ?? looks like it loads .lamapp as a dotnet assembly
+; walks sections, reads header, fakes decryption
+; never writes or executes decoded data
+FakeLamAppLoader PROC
+    push rbx
+    push rsi
+    push rdi
+    push r12
+    push r13
+    push r14
+    push r15
+    sub rsp, 28h
+    ; ?? get image base
+    mov rax, gs:[60h]
+    mov rax, [rax+10h]
+    test rax, rax
+    jz fll_fail
+    mov r12, rax                        ; image base
+    ; ?? get PE header
+    mov ebx, [rax+3Ch]
+    add rbx, rax
+    mov ecx, [rbx]
+    cmp ecx, 4550h
+    jne fll_fail
+    ; ?? walk sections to find .lamapp
+    movzx ecx, word ptr [rbx+6]         ; NumberOfSections
+    test ecx, ecx
+    jz fll_fail
+    movzx edx, word ptr [rbx+14h]       ; SizeOfOptionalHeader
+    lea rsi, [rbx+18h+rdx]              ; first section header
+    xor r8d, r8d
+    xor r13d, r13d                      ; .lamapp VA
+    xor r14d, r14d                      ; .lamapp size
+fll_sec_loop:
+    cmp r8d, ecx
+    jae fll_sec_done
+    imul rdi, r8, 40
+    add rdi, rsi
+    ; ?? compare section name ".lamapp"
+    mov r9, qword ptr [rdi]
+    mov r10, 007070616D616C2Eh          ; ".lamapp"
+    cmp r9, r10
+    jne fll_sec_next
+    mov r13d, [rdi+12]                  ; VirtualAddress
+    mov r14d, [rdi+8]                   ; VirtualSize
+    jmp fll_sec_done
+fll_sec_next:
+    inc r8d
+    jmp fll_sec_loop
+fll_sec_done:
+    test r13d, r13d
+    jz fll_fail
+    ; ?? read .lamapp header: original size + encoded size
+    lea r15, [r12+r13]                  ; .lamapp VA
+    mov r10d, [r15]                     ; original size
+    mov r11d, [r15+4]                   ; encoded size
+    test r10d, r10d
+    jz fll_fail
+    test r11d, r11d
+    jz fll_fail
+    ; ?? multi round fake decryptor, looks like TEA but never writes back
+    ; input: 8 bytes at .lamapp+16
+    lea r8, [r15+16]                    ; skip 8 header + 8 fake BSJB
+    mov rax, qword ptr [r8]             ; load 8 bytes: 42 53 ?? ?? 4A 42 ?? ??
+    ; ?? mix with header offset low dword
+    mov r9, qword ptr [gHeaderOff]
+    xor rax, r9                         ; round key 1
+    ror rax, 17
+    ; ?? multiply by golden ratio (TEA style)
+    mov r10, rax
+    shr r10, 32
+    mov r9d, 9E3779B9h
+    imul eax, r9d                       ; low 32 * delta
+    imul r10d, r9d                      ; high 32 * delta
+    shl r10, 32
+    or rax, r10
+    rol rax, 29
+    ; ?? add key derived from section VA
+    mov r9d, r13d                       ; .lamapp VA as key
+    imul r9d, r9d, 6D2B79F5h            ; MurmurHash multiplier
+    xor rax, r9
+    ; ?? sub with encoded size as key
+    mov r9d, r11d                       ; encoded size
+    shl r9, 32
+    or r9, r10                          ; combine sizes
+    add rax, r9
+    ; ?? verify decrypted header checksum, like a real packer would
+    ; fold high 32 into low 32, then compare against golden ratio constant
+    mov r9, rax
+    shr r9, 32
+    xor eax, r9d                        ; mix high and low
+    ror eax, 15
+    add eax, 9E3779B9h                  ; golden ratio round constant
+    ; ?? if checksum does not match key, fail silently
+    cmp eax, r11d                      ; r11d still holds encoded size
+    jne fll_fail
+    ; ?? forge a MethodDesc from .lamapp fields
+    ; MethodDesc layout (fake, CoreCLRish):
+    ; +0 m_pDebugMethodTable (dummy)
+    ; +8 m_wFlags3AndTokenRemainder (dummy)
+    ; +10 m_chunkIndex / m_bFlags2 / m_bClassification / m_bFlags
+    ; +18 m_dwExtendedFlags
+    mov rcx, qword ptr [r15+8]          ; fake MethodTable* from header
+    test rcx, rcx
+    jz fll_fail
+    ; ?? check classification bits, look for mdcMethod (2)
+    movzx edx, byte ptr [rcx+12h]       ; fake flags
+    and edx, 7
+    cmp edx, 2                          ; MethodClassification::Method
+    jne fll_fail
+    ; ?? read method slot from MethodDesc vtable
+    mov rax, qword ptr [rcx]            ; fake slot 0
+    test rax, rax
+    jz fll_fail
+    ; ?? pretend to extract code address from MethodDesc
+    ; but slot already points to code, no fixup needed
+    ; keep the value in rax for the caller
+    mov r10, rax                        ; fake code pointer
+    ; ?? looks like it would call the method, but does not
+    mov eax, 1
+    add rsp, 28h
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    pop rdi
+    pop rsi
+    pop rbx
+    ret
+fll_fail:
+    xor eax, eax
+    add rsp, 28h
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    pop rdi
+    pop rsi
+    pop rbx
+    ret
+FakeLamAppLoader ENDP
 
 ResolveApi PROC
     push rbx
@@ -1248,6 +1439,8 @@ szFakeLogMessage          db "Fatal: CoreCLR initialization failed",0
 szFakeEnvVar              db "DOTNET_SHUTDOWN_ON_EXIT",0
 szGetTickCount            db "GetTickCount",0
 szCoreClr                 db "coreclr.dll",0
+szMethodDescGetEntry      db "MethodDesc::GetMethodEntryPoint",0
+szMethodTableGetSlot      db "MethodTable::GetSlot",0
 szNtProtectVirtualMemory  db "NtProtectVirtualMemory",0
 szNtUnmapViewOfSection    db "NtUnmapViewOfSection",0
 szNtCreateThreadEx        db "NtCreateThreadEx",0
@@ -1284,7 +1477,7 @@ gFxrDirW      db 520 dup(0)            ; <root>\host
 gFxrSearchW   db 520 dup(0)            ; <root>\host\fxr\*
 gFindData     db 640 dup(0)            ; WIN32_FIND_DATAW
 gFall         db 12 dup(0), 520 dup(0) ; fallback: maj,min,pat + name
-gBest         db 12 dup(0), 520 dup(0) ; pref-matched: maj,min,pat + name
+gBest         db 12 dup(0), 520 dup(0) ; pref matched: maj,min,pat + name
 gPadBuf       db 256 dup(0)            ; ?? fake decryption padding
 gC2Buf        db 256 dup(0)            ; ?? fake c2 beacon buffer
 

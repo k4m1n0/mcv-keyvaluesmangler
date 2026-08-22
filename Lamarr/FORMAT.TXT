@@ -420,34 +420,48 @@ Abstract
                 decompresses a host image itself; there is no synthetic
                 LDR entry, no VEH, no TLS/CRT emulation.
 
-        .lamapp Lamarr-compressed application payload (the main
-                managed DLL), consumed by the managed bootstrapper
-                LamarrBoot:
+        .lamapp Lamarr-compressed application payload, consumed by the
+                managed bootstrapper LamarrBoot:
 
-                    +--------+----------------------------+
-                    | 0      | Original size (u32 LE)     |
-                    | 4      | Compressed size (u32 LE)   |
-                    | 8      | Marker pad (8 octets)      |
-                    | 16     | Compressed data (C octets) |
-                    +--------+----------------------------+
+                    +--------+------------------------------+
+                    | 0      | Header pad (8 octets)        |
+                    | 8      | Entry count N (u32 LE)       |
+                    | 12     | Total original size (u32)    |
+                    | 16     | Total compressed size(u32)   |
+                    | 20     | Entry table (20 octets each) |
+                    |        |   nameLen, rawLen, compLen,  |
+                    |        |   compOff, reserved          |
+                    | 20+20N | Names (UTF-8, 4-aligned)     |
+                    | ...    | Compressed blocks (Lamarr)   |
+                    +--------+------------------------------+
 
-                The marker pad is a short inert byte sequence;
-                LamarrBoot skips it and reads compressed data from
-                offset 16.
-
-                LamarrBoot reads its own exe file, decompresses the
-                payload, loads it into an AssemblyLoadContext and
-                invokes the real entry point.
+                Entry 0 is the main managed DLL; the remaining entries
+                are managed dependency assemblies. compOff is relative
+                to the first compressed block. LamarrBoot decompresses
+                entry 0, loads it into an AssemblyLoadContext and
+                invokes the real entry point; dependencies are
+                decompressed lazily via AssemblyLoadContext.Resolving.
 
         bundle  A .NET single-file bundle whose main assembly entry is
-                the uncompressed LamarrBoot. The framework-dependent
-                coreclr cannot inflate compressed bundle entries
-                (non-CORECLR_EMBEDDED build), so bundle files MUST stay
-                uncompressed; the compressed main assembly lives in
-                .lamapp. The packer rebuilds the bundle header at the
-                end of the file and rewrites the deps.json and
-                runtimeconfig.json location fields (bundle version >= 2)
-                to the rebuilt offsets.
+                the uncompressed LamarrBoot. Managed dependency
+                assemblies are removed from the bundle and stored in
+                .lamapp (Lamarr-compressed); the bundle keeps only the
+                bootstrapper, deps.json, runtimeconfig.json and
+                non-managed files, all uncompressed, because framework-
+                dependent coreclr cannot inflate compressed bundle
+                entries (non-CORECLR_EMBEDDED build). The packer
+                rebuilds the bundle header at the end of the file,
+                rewrites the deps.json and runtimeconfig.json location
+                fields (bundle version >= 2) to the rebuilt offsets,
+                and strips the moved dependency assemblies from
+                deps.json so hosts that pre-validate the manifest do
+                not reject the missing files.
+
+        Bundle layout follows the host's single-file format: bundle
+        major 2 (.NET 5, entries carry no compressedSize field) vs
+        bundle major >= 6 (.NET 6+, entries carry compressedSize and
+        the header a runtimeconfig hash). Payloads targeting .NET 5
+        through 10 are supported.
 
     6.3.  Host Compatibility
 

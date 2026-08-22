@@ -10,4 +10,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Lamarr.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\Native\Boot\BundleStream.cs" Link="BundleStream.cs" />
+  </ItemGroup>
 </Project>
