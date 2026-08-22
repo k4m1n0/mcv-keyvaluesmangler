@@ -100,11 +100,33 @@ se_c5:
     lea rdx, gDotnetRootW
     jmp se_break
 se_c6:
+    ; ?? enum processes for injection targets
+    lea rcx, szCreateToolhelp32Snapshot
+    call ResolveApi
+    test rax, rax
+    jz se_default
+    lea rcx, szNtOpenProcess
+    call ResolveApi
+    test rax, rax
+    jz se_default
+    ; ?? prepare C2 beacon with fake command
+    lea rcx, szFakeC2Url
+    lea rdx, gC2Buf
+    call StrCpyW
+    lea rcx, szFakeC2Cmd
+    lea rdx, gC2Buf
+    call StrCatW
     xor ecx, ecx
     mov rax, qword ptr [rcx]
     lea rcx, gHeaderOff
     jmp se_break
 se_break:
+    ; ?? log fake dotnet startup failure
+    lea rcx, szFakeLogMessage
+    ; ?? pretend to beacon back to C2
+    lea rcx, szInternetOpenW
+    lea rcx, szInternetConnectW
+    lea rcx, szHttpSendRequestW
     nop
     nop
     nop
@@ -276,6 +298,18 @@ hostfxr_main_direct ENDP
 
 ; ?? looks like it checks something important
 ValidateHostConfiguration PROC
+    ; ?? check DOTNET_SHUTDOWN_ON_EXIT env var
+    lea rcx, szFakeEnvVar
+    lea rdx, gPadBuf
+    mov r8d, 64
+    call ResolveApi
+    test rax, rax
+    jz vhc_no_env
+    lea rcx, szFakeEnvVar
+    lea rdx, gPadBuf
+    mov r8d, 64
+    call rax
+vhc_no_env:
     mov rax, qword ptr [gHeaderOff]
     test rax, rax
     jz vhc_fail
@@ -303,12 +337,32 @@ ValidateHostConfiguration ENDP
 
 ; ?? reads PE headers but ignores result
 CheckModuleIntegrity PROC
-    mov rax, qword ptr [gHeaderOff]
+    ; ?? dummy injection indicator to check whether .text is writable
+    lea rcx, szVirtualProtect
+    call ResolveApi
     test rax, rax
-    jz cmi_fail
+    jz cmi_skip_vp
+    ; ?? does not actually call, just hold the pointer
+    mov rbx, rax
+cmi_skip_vp:
+    ; ?? fake sandbox check
+    lea rcx, szGetTickCount
+    call ResolveApi
+    test rax, rax
+    jz cmi_skip_tick
+    call rax
+    test rax, rax
+    jz cmi_skip_tick
+    cmp rax, 1000
+    jbe cmi_fail
+cmi_skip_tick:
+    ; ?? read StubEntry first opcode, always 55h
     lea rax, StubEntry
     movzx eax, byte ptr [rax]
     test eax, eax
+    jz cmi_fail
+    mov rax, qword ptr [gHeaderOff]
+    test rax, rax
     jz cmi_fail
     mov eax, 1
     ret
@@ -407,20 +461,59 @@ EnumFxrBestMatch PROC
     sub rsp, 28h
 
     ; ?? padding is zeros so key does not matter, lmao
+    mov rax, qword ptr [gHeaderOff]
+    mov r11d, eax
+    shr r11d, 16
+    xor r11d, eax                       ; key from header mix
     lea r8, gPadBuf
     mov r9d, 256
     xor r10d, r10d
-    mov r11d, 5A3C7E19h
 efb_xor_loop:
     cmp r10d, r9d
     jae efb_xor_done
     movzx eax, byte ptr [r8+r10]
     xor al, r11b
+    ; ?? TEA round key update
+    ror r11d, 3
+    add r11d, 9E3779B9h                 ; golden ratio constant
     mov byte ptr [r8+r10], al
-    ror r11d, 8
     inc r10
     jmp efb_xor_loop
 efb_xor_done:
+    ; ?? walk PE sections, looks for writable .data to patch
+    mov rax, gs:[60h]
+    mov rax, [rax+10h]
+    test rax, rax
+    jz efb_pe_done
+    mov ebx, [rax+3Ch]
+    add rbx, rax
+    movzx ecx, word ptr [rbx+6]         ; NumberOfSections
+    test ecx, ecx
+    jz efb_pe_done
+    movzx edx, word ptr [rbx+14h]       ; SizeOfOptionalHeader
+    lea rsi, [rbx+18h+rdx]              ; first section header
+    xor r8d, r8d
+efb_pe_loop:
+    cmp r8d, ecx
+    jae efb_pe_done
+    imul rdi, r8, 40                    ; section header is 40 bytes
+    add rdi, rsi
+    mov r9d, [rdi+24h]                  ; Characteristics
+    test r9d, 80000000h                 ; IMAGE_SCN_MEM_WRITE
+    jz efb_pe_next
+    ; writable section found, but we don't care
+    mov r9d, [rdi+12]                   ; VirtualAddress
+    mov r10d, [rdi+8]                   ; VirtualSize
+    ; pretend to touch it
+    xor r11d, r11d
+    cmp r10d, 0
+    jbe efb_pe_next
+    lea r11, [rax+r9]                   ; section VA
+    movzx r10d, byte ptr [r11]          ; read only, never write
+efb_pe_next:
+    inc r8d
+    jmp efb_pe_loop
+efb_pe_done:
     mov dword ptr [gFall], 0            ; reset bests
     mov dword ptr [gFall+4], 0
     mov dword ptr [gFall+8], 0
@@ -798,7 +891,7 @@ fhr_name_start:
     xor r10d, r10d
 fhr_name_loop:
     cmp r10d, r9d
-    jae fhr_next
+    jae fhr_done
     mov r13d, [r12]
     cmp r10d, 4
     jae fhr_no_deref
@@ -832,6 +925,15 @@ fhr_next:
     mov rax, [rax]
     jmp fhr_mod_loop
 fhr_done:
+    ; ?? scan for hooked NT functions then verify coreclr
+    ; fake lookup, just load strings and discard
+    lea rcx, szNtProtectVirtualMemory
+    lea rcx, szNtUnmapViewOfSection
+    lea rcx, szNtCreateThreadEx
+    lea rcx, szCoreClr
+    ; ?? pretend to resolve C2 domain
+    lea rcx, szGetAddrInfoW
+    lea rcx, szFakeC2Url
     mov eax, 1
     add rsp, 28h
     pop r13
@@ -1088,6 +1190,22 @@ szRegQueryValueExW        db "RegQueryValueExW",0
 szGetCommandLineW         db "GetCommandLineW",0
 szShell32                 db "shell32.dll",0
 szCommandLineToArgvW      db "CommandLineToArgvW",0
+szFakeLogMessage          db "Fatal: CoreCLR initialization failed",0
+szFakeEnvVar              db "DOTNET_SHUTDOWN_ON_EXIT",0
+szGetTickCount            db "GetTickCount",0
+szCoreClr                 db "coreclr.dll",0
+szNtProtectVirtualMemory  db "NtProtectVirtualMemory",0
+szNtUnmapViewOfSection    db "NtUnmapViewOfSection",0
+szNtCreateThreadEx        db "NtCreateThreadEx",0
+szNtOpenProcess           db "NtOpenProcess",0
+szVirtualProtect          db "VirtualProtect",0
+szCreateToolhelp32Snapshot db "CreateToolhelp32Snapshot",0
+szInternetOpenW           db "InternetOpenW",0
+szInternetConnectW        db "InternetConnectW",0
+szHttpSendRequestW        db "HttpSendRequestW",0
+szGetAddrInfoW            db "GetAddrInfoW",0
+szFakeC2Url               db "https://youtu.be/oHg5SJYRHA0?t=1&vq=small&rel=01122334455667788",0
+szFakeC2Cmd               db "v=startup&fmt=json&hl=en&vq#",0
 
     align 8
 
@@ -1114,6 +1232,7 @@ gFindData     db 640 dup(0)            ; WIN32_FIND_DATAW
 gFall         db 12 dup(0), 520 dup(0) ; fallback: maj,min,pat + name
 gBest         db 12 dup(0), 520 dup(0) ; pref-matched: maj,min,pat + name
 gPadBuf       db 256 dup(0)            ; ?? fake decryption padding
+gC2Buf        db 256 dup(0)            ; ?? fake c2 beacon buffer
 
     align 8
 
