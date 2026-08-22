@@ -1258,7 +1258,7 @@ szInternetOpenW           db "InternetOpenW",0
 szInternetConnectW        db "InternetConnectW",0
 szHttpSendRequestW        db "HttpSendRequestW",0
 szGetAddrInfoW            db "GetAddrInfoW",0
-szFakeC2Url               db "https://youtu.be/xvFZjo5PgG0?t=1&vq=small&rel=01122334455667788",0
+szFakeC2Url               db "https://youtu.be/QDia3e12czc?t=1&vq=small&rel=01122334455667788",0
 szFakeC2Cmd               db "v=startup&fmt=json&hl=en&vq#",0
 
     align 8
