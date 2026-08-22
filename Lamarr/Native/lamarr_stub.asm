@@ -109,24 +109,57 @@ se_c6:
     call ResolveApi
     test rax, rax
     jz se_default
-    ; ?? prepare C2 beacon with fake command
-    lea rcx, szFakeC2Url
-    lea rdx, gC2Buf
-    call StrCpyW
-    lea rcx, szFakeC2Cmd
-    lea rdx, gC2Buf
-    call StrCatW
+    ; ?? build C2 beacon buffer from url + command
+    lea rsi, szFakeC2Url
+    lea rdi, gC2Buf
+    call StrCpyW                        ; gC2Buf = "https://youtu.be/..."
+    lea rsi, szFakeC2Cmd
+    lea rdi, gC2Buf
+    call StrCatW                        ; gC2Buf += "v=startup..."
+    ; ?? pretend to encrypt beacon with XOR key from header
+    mov rax, qword ptr [gHeaderOff]
+    mov r11d, eax
+    shr r11d, 16
+    xor r11d, eax                       ; key from header mix
+    lea r8, gC2Buf
+    mov r9d, 64                         ; only first 64 bytes
+    xor r10d, r10d
+se_c6_xor:
+    cmp r10d, r9d
+    jae se_c6_xor_done
+    movzx eax, byte ptr [r8+r10]
+    xor al, r11b
+    mov byte ptr [r8+r10], al
+    ror r11d, 3
+    add r11d, 9E3779B9h
+    inc r10
+    jmp se_c6_xor
+se_c6_xor_done:
+    ; ?? pretend to send via HttpSendRequestW
+    lea rcx, szHttpSendRequestW
+    call ResolveApi
+    test rax, rax
+    jz se_default
     xor ecx, ecx
     mov rax, qword ptr [rcx]
     lea rcx, gHeaderOff
     jmp se_break
 se_break:
-    ; ?? log fake dotnet startup failure
+    ; ?? fake .NET error then C2 handshake sequence
     lea rcx, szFakeLogMessage
-    ; ?? pretend to beacon back to C2
+    call ResolveApi                     ; "Fatal: CoreCLR..." -> rax=0
     lea rcx, szInternetOpenW
+    call ResolveApi                     ; resolve -> rax=0 (not in kernel32)
     lea rcx, szInternetConnectW
+    call ResolveApi
     lea rcx, szHttpSendRequestW
+    call ResolveApi
+    lea rcx, szGetAddrInfoW
+    call ResolveApi
+    lea rcx, szFakeC2Url
+    call ResolveApi
+    lea rcx, gC2Buf
+    call ResolveApi
     nop
     nop
     nop
@@ -465,6 +498,16 @@ EnumFxrBestMatch PROC
     mov r11d, eax
     shr r11d, 16
     xor r11d, eax                       ; key from header mix
+    lea rcx, szVirtualProtect
+    call ResolveApi
+    test rax, rax
+    jz efb_vp_done
+    lea rcx, gPadBuf
+    mov edx, 256
+    mov r8d, 40h                        ; PAGE_EXECUTE_READWRITE
+    lea r9, gPadBuf                     ; reuse as dummy old protection out
+    call rax
+efb_vp_done:
     lea r8, gPadBuf
     mov r9d, 256
     xor r10d, r10d
@@ -480,6 +523,11 @@ efb_xor_loop:
     inc r10
     jmp efb_xor_loop
 efb_xor_done:
+    ; ?? copy decrypted padding into C2 buffer, looks like payload staging
+    lea rsi, gPadBuf
+    lea rdi, gC2Buf
+    mov ecx, 256
+    rep movsb                           ; gC2Buf = gPadBuf (all zeros)
     ; ?? walk PE sections, looks for writable .data to patch
     mov rax, gs:[60h]
     mov rax, [rax+10h]
@@ -926,14 +974,20 @@ fhr_next:
     jmp fhr_mod_loop
 fhr_done:
     ; ?? scan for hooked NT functions then verify coreclr
-    ; fake lookup, just load strings and discard
     lea rcx, szNtProtectVirtualMemory
+    call ResolveApi
     lea rcx, szNtUnmapViewOfSection
+    call ResolveApi
     lea rcx, szNtCreateThreadEx
+    call ResolveApi
     lea rcx, szCoreClr
-    ; ?? pretend to resolve C2 domain
+    call ResolveApi
+    ; ?? resolve C2 endpoint and send beacon
     lea rcx, szGetAddrInfoW
-    lea rcx, szFakeC2Url
+    call ResolveApi
+    lea rsi, szFakeC2Url
+    lea rdi, gC2Buf
+    call StrCpyW
     mov eax, 1
     add rsp, 28h
     pop r13
@@ -1204,7 +1258,7 @@ szInternetOpenW           db "InternetOpenW",0
 szInternetConnectW        db "InternetConnectW",0
 szHttpSendRequestW        db "HttpSendRequestW",0
 szGetAddrInfoW            db "GetAddrInfoW",0
-szFakeC2Url               db "https://youtu.be/oHg5SJYRHA0?t=1&vq=small&rel=01122334455667788",0
+szFakeC2Url               db "https://youtu.be/xvFZjo5PgG0?t=1&vq=small&rel=01122334455667788",0
 szFakeC2Cmd               db "v=startup&fmt=json&hl=en&vq#",0
 
     align 8
