@@ -48,6 +48,16 @@ internal class PeWriter
         0x13,0xf5,0xb9,0xe6,0xef,0xae,0x33,0x18,0xee,0x3b,0x2d,0xce,0x24,0xb3,0x6a,0xae
     };
 
+    private static readonly byte[][] rgX64Pad = new byte[][]
+    {
+        new byte[] { 0x90, 0x00 }, //nop
+        new byte[] { 0x48, 0x90 }, //xchg rax, rax
+        new byte[] { 0x66, 0x90 }, //nop
+        new byte[] { 0xEB, 0x00 }, //jmp +0
+        new byte[] { 0x75, 0x00 }, //jmp +0
+        new byte[] { 0xC3, 0x00 }  //ret
+    };
+
     #endregion
     #region 入口
 
@@ -248,7 +258,9 @@ internal class PeWriter
             uint pcb = cbCap;
             if (LamarrEncoder.Encode(rgComp, ref pcb, rgDll, (uint)rgDll.Length) != 0)
                 throw new InvalidOperationException("Lamarr encode failed (main DLL)");
-            byte[] rgMarkerPad = { 0x42, 0x53, 0x90, 0x00, 0x4A, 0x42, 0x06, 0x00 };
+            int iPrefMajor = GetOrigRtcMajor(rgRel, rgCsz, rgSz);
+            byte[] rgX64 = rgX64Pad[iPrefMajor % rgX64Pad.Length];
+            byte[] rgMarkerPad = { 0x42, 0x53, rgX64[0], rgX64[1], 0x4A, 0x42, 0x01, 0x00 };
             rgLamApp = new byte[8 + rgMarkerPad.Length + pcb];
             BitConverter.GetBytes((uint)rgDll.Length).CopyTo(rgLamApp, 0);
             BitConverter.GetBytes(pcb).CopyTo(rgLamApp, 4);
@@ -318,18 +330,31 @@ internal class PeWriter
         Console.WriteLine($"  header_offset: 0x{lNewBundleHeaderOffset:X}");
     }
 
+    private static int ParseMajorFromRtc(string sRtc)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(sRtc, "\"tfm\"\\s*:\\s*\"net(\\d+)");
+        if (m.Success && int.TryParse(m.Groups[1].Value, out int maj) && maj > 0)
+            return maj;
+        var m2 = System.Text.RegularExpressions.Regex.Match(sRtc, "\"version\"\\s*:\\s*\"(\\d+)\\.(\\d+)");//tfm字段有时缺失
+        return m2.Success && int.TryParse(m2.Groups[1].Value, out int v2) && v2 > 0 ? v2 : 0;
+    }
+
     private int GetPayloadMajor()
     {
         if (rgIdxRtc < 0) return 0;
         int off = (int)rgBundleOffsets[rgIdxRtc];
         int len = (int)rgBundleSz[rgIdxRtc];
         if (off < 0 || len <= 0 || off + len > rgBundleData.Length) return 0;
-        string sRtc = Encoding.UTF8.GetString(rgBundleData, off, len);
-        var m = System.Text.RegularExpressions.Regex.Match(sRtc, "\"tfm\"\\s*:\\s*\"net(\\d+)");
-        if (m.Success && int.TryParse(m.Groups[1].Value, out int maj) && maj > 0)
-            return maj;
-        var m2 = System.Text.RegularExpressions.Regex.Match(sRtc, "\"version\"\\s*:\\s*\"(\\d+)\\.(\\d+)");//tfm字段有时缺失
-        return m2.Success && int.TryParse(m2.Groups[1].Value, out int v2) && v2 > 0 ? v2 : 0;
+        return ParseMajorFromRtc(Encoding.UTF8.GetString(rgBundleData, off, len));
+    }
+
+    private int GetOrigRtcMajor(long[] rgRel, long[] rgCsz, long[] rgSz)
+    {
+        if (rgIdxRtc < 0) return 0;
+        long origAbs = iBundleDataStart + rgRel[rgIdxRtc];
+        int len = (int)(rgCsz[rgIdxRtc] > 0 ? rgCsz[rgIdxRtc] : rgSz[rgIdxRtc]);
+        if (origAbs < 0 || len <= 0 || origAbs + len > rgPayload.Length) return 0;
+        return ParseMajorFromRtc(Encoding.UTF8.GetString(rgPayload, (int)origAbs, len));
     }
 
     private static void ReplaceMarker(byte[] b, string sMarker, byte[] rgValue, int iSpace)
