@@ -98,7 +98,7 @@ public partial class Form1
 
     public void PushUndo(bool bClearRedo = true)
     {
-        if (bUndoInProgress || wCurrentLeft == null) return;
+        if (bUndoInProgress || bUpdatingControls || bSuppressUndo || wCurrentLeft == null) return;
 
         //新操作开始 结束上一次的rapid序列
         sRapidStartLeft = null;
@@ -144,7 +144,7 @@ public partial class Form1
         tmrC64Reset?.Stop(); tmrC64Reset?.Dispose(); tmrC64Reset = null;
 
         if (bUndoInProgress) return;
-        if (bUndoPending) { tmrUndo?.Stop(); bUndoPending = false; PushUndo(false); }
+        if (bUndoPending) { tmrUndo?.Stop(); bUndoPending = false; if (rgWeapons.Count > 0) PushUndo(false); }
         if (llUndoStack.Count < 2)
         {
             LogService.Debug($"PopUndo: stack<2, aborted. stack={llUndoStack.Count}");
@@ -183,7 +183,7 @@ public partial class Form1
         tmrC64Reset?.Stop(); tmrC64Reset?.Dispose(); tmrC64Reset = null;
 
         if (bUndoInProgress) return;
-        if (bUndoPending) { tmrUndo?.Stop(); bUndoPending = false; PushUndo(false); }
+        if (bUndoPending) { tmrUndo?.Stop(); bUndoPending = false; if (rgWeapons.Count > 0) PushUndo(false); }
         if (llRedoStack.Count == 0) return;
         bUndoInProgress = true;
         try
@@ -298,6 +298,8 @@ public partial class Form1
         LogService.Debug("ClearUndoHistory");
         llUndoStack.Clear();
         llRedoStack.Clear();
+        tmrUndo?.Stop();
+        bUndoPending = false;
         tmrSnapshotCheck?.Stop(); tmrSnapshotCheck?.Dispose(); tmrSnapshotCheck = null;
         //清空历史时也结束未完成的rapid 否则残留的sRapidStart会阻止下次武器切换的入栈
         sRapidStartLeft = null;

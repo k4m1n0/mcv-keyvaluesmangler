@@ -16,6 +16,7 @@ public partial class Form1
     {
         try
         {
+            if (bSuppressUndo) return;
             var cmb = bIsLeft ? cmbWeaponsL : cmbWeaponsR;
             var wCurrent = bIsLeft ? wCurrentLeft : wCurrentRight;
             string sSide = bIsLeft ? "L" : "R";
@@ -636,6 +637,7 @@ public partial class Form1
     {
         if (bRefreshing) return;
         bRefreshing = true;
+        bSuppressUndo  = true;
         SetC64Status("LOADING...");
         string sLeftName = wCurrentLeft?.ScriptName ?? "";
         string sRightName = wCurrentRight?.ScriptName ?? "";
@@ -644,16 +646,25 @@ public partial class Form1
         {
             string sCsv = Path.Combine(AppContext.BaseDirectory, "weapons.csv");
             rgWeapons = await Task.Run(() => CsvService.LoadWeapons(sCsv));
+            if (rgWeapons.Count == 0)
+            {
+                wCurrentLeft = null;
+                wCurrentRight = null;
+                wSnapshotLeft = null;
+                wSnapshotRight = null;
+                tmrUndo?.Stop();
+                bUndoPending = false;
+            }
             try
             {
                 //先解绑事件防止刷新时弹出未保存确认
                 cmbWeaponsL.SelectedIndexChanged -= (s, ev) => WeaponSelected(true, s, ev);
                 cmbWeaponsR.SelectedIndexChanged -= (s, ev) => WeaponSelected(false, s, ev);
                 //DataSource设为null再赋值新列表 触发重新绑定
-                cmbWeaponsL.DataSource = null; cmbWeaponsL.DataSource = new List<WeaponData>(rgWeapons); cmbWeaponsL.DisplayMember = "PrintName";
-                cmbWeaponsR.DataSource = null; cmbWeaponsR.DataSource = new List<WeaponData>(rgWeapons); cmbWeaponsR.DisplayMember = "PrintName";
                 if (rgWeapons.Count > 0)
                 {
+                    cmbWeaponsL.DataSource = null; cmbWeaponsL.DataSource = new List<WeaponData>(rgWeapons); cmbWeaponsL.DisplayMember = "PrintName";
+                    cmbWeaponsR.DataSource = null; cmbWeaponsR.DataSource = new List<WeaponData>(rgWeapons); cmbWeaponsR.DisplayMember = "PrintName";
                     RestoreComboSelection(cmbWeaponsR, sRightName);
                     RestoreComboSelection(cmbWeaponsL, sLeftName);
                     cmbWeaponsL.SelectedIndexChanged += (s, ev) => WeaponSelected(true, s, ev); cmbWeaponsR.SelectedIndexChanged += (s, ev) => WeaponSelected(false, s, ev);
@@ -677,6 +688,8 @@ public partial class Form1
                 }
                 else
                 {
+                    cmbWeaponsL.DataSource = null;
+                    cmbWeaponsR.DataSource = null;
                     cmbWeaponsL.SelectedIndexChanged += (s, ev) => WeaponSelected(true, s, ev);
                     cmbWeaponsR.SelectedIndexChanged += (s, ev) => WeaponSelected(false, s, ev);
                     if (bShowingAltStats)
@@ -697,7 +710,7 @@ public partial class Form1
                     pnlSpread.Invalidate();
                     pnlRecoil.Invalidate();
                 }
-                UpdateC64Labels(rgWeapons.Count > 0);
+                UpdateC64Labels();
             }
             catch (Exception ex)
             {
@@ -709,7 +722,14 @@ public partial class Form1
             LogService.Error(ex, "RefreshWeaponList");
             MessageBox.Show($"Refresh failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
-        finally { bRefreshing = false; SetC64Status("READY."); }
+        finally
+        {
+            bSuppressUndo = false;
+            tmrUndo?.Stop();
+            bUndoPending = false;
+            bRefreshing = false;
+            SetC64Status(rgWeapons.Count > 0 ? "READY." : "");
+        }
     }
 
     private static void RestoreComboSelection(ComboBox cmb, string sScriptName)

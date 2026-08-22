@@ -30,6 +30,7 @@ public partial class Form1 : Form
 
     private string sLastScriptsDir = "";
     private bool bRefreshing = false;
+    private bool bSuppressUndo = false;
     private int iSaveLock = 0;
     private bool bIsTopmost = false;
     private bool bShowingAltStats = false;
@@ -98,7 +99,6 @@ public partial class Form1 : Form
             InitLeftPanel();
             InitRightPanel();
             InitC64Labels();
-            StartC64Anim();
             InitTopButtons();
             MarkPanelControls();
             if (SystemUsesDarkMode())
@@ -200,7 +200,7 @@ public partial class Form1 : Form
                     pnlSpread.Invalidate();
                     pnlRecoil.Invalidate();
 
-                    UpdateC64Labels(true);
+                    UpdateC64Labels();
                 }
                 bInitializing = false;
                 RegisterHotKey(this.Handle, iHotkeyId, MOD_CONTROL, VK_T);
@@ -317,7 +317,7 @@ public partial class Form1 : Form
         {
             tmrUndo?.Stop();
             bUndoPending = false;
-            PushUndo();
+            if (rgWeapons.Count > 0) PushUndo();
         }
         tmrSnapshotCheck?.Stop(); tmrSnapshotCheck?.Dispose(); tmrSnapshotCheck = null;
         bool bLeftDirty = wCurrentLeft != null && HasUnsavedChanges(true, bCheckBothSides: true);
@@ -887,6 +887,7 @@ public partial class Form1 : Form
 
     private void PnlSpread_Paint(object? sender, PaintEventArgs e)
     {
+        if (wCurrentLeft == null && wCurrentRight == null) { e.Graphics.Clear(Color.Black); return; }
         bool bLeftAds = nudIronSightL.Value != 0;
         bool bRightAds = nudIronSightR.Value != 0;
         prSpreadRenderer.DrawSpread(e.Graphics, wCurrentLeft, wCurrentRight,

@@ -25,6 +25,7 @@ public partial class Form1
 
     private System.Windows.Forms.Timer? tmrC64;
     private System.Windows.Forms.Timer? tmrC64Reset;
+
     private void StartC64Anim()
     {
         lblC64_2.TextAlign = ContentAlignment.MiddleCenter;
@@ -32,12 +33,6 @@ public partial class Form1
         tmrC64.Tick += (_, _) => lblC64_2.Text = FormatMemoryStatus();
         tmrC64.Start();
         lblC64_2.Text = FormatMemoryStatus();
-
-        if (lblC64_1.Text == "")
-        {
-            tmrC64.Stop();
-            lblC64_2.Text = "";
-        }
     }
 
     private static string FormatMemoryStatus()
@@ -61,7 +56,7 @@ public partial class Form1
         this.Controls.Add(lblC64_1);
         this.Controls.Add(lblC64_2);
         this.Controls.Add(lblC64_3);
-        UpdateC64Labels(rgWeapons.Count > 0);
+        UpdateC64Labels();
     }
 
     private void ToggleKeygenRenderer()
@@ -76,24 +71,40 @@ public partial class Form1
         _keygenRenderer = new KeygenRenderer(pnlSpread);
     }
 
-    private void UpdateC64Labels(bool bHasData)
+    private void UpdateC64Labels()
     {
-        lblC64_1.Text = bHasData ? "         **** COMMODORE 64 BASIC V2 ****" : "";
-        lblC64_3.Text = bHasData ? "READY." : "";
-        if (bHasData)
+        if (rgWeapons.Count > 0)
         {
-            if (tmrC64 == null) StartC64Anim();
-            else if (!tmrC64.Enabled) tmrC64.Start();
+            lblC64_1.Text = "         **** COMMODORE 64 BASIC V2 ****";
+            lblC64_3.Text = "READY.";
+            if (tmrC64 == null)
+            {
+                StartC64Anim();
+            }
+            else if (!tmrC64.Enabled)
+            {
+                tmrC64.Start();
+                lblC64_2.Text = FormatMemoryStatus();
+            }
         }
         else
         {
-            tmrC64?.Stop();
+            lblC64_1.Text = "";
             lblC64_2.Text = "";
+            lblC64_3.Text = "";
+            tmrC64?.Stop();
+            tmrC64?.Dispose();
+            tmrC64 = null;
         }
     }
 
     private void SetC64Status(string sStatus, bool bAutoReset = true)
     {
+        if (rgWeapons.Count == 0 && sStatus != "")
+        {
+            sStatus = "";
+            bAutoReset = false;
+        }
         tmrC64Reset?.Stop();
         tmrC64Reset?.Dispose();
         tmrC64Reset = null;

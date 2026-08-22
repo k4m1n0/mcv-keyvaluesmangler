@@ -23,6 +23,44 @@ public static class UndoTests
     {
         s_frm = frm;
         var tForm = typeof(Form1);
+        var wDummy = new WeaponData
+        {
+            ScriptName = "weapon_test",
+            PrintName = "#weapon_TEST",
+            FireModes = "Auto+Semi",
+            DefaultClip = 30,
+            ExtraBulletChamber = 1,
+            FireRate = 600,
+            BulletSpread = 7.5,
+            BulletSpreadDegreesIronsighted = 1.5,
+            RangeModifier = 0.94,
+            IronSight = 1,
+            CrouchSpreadMultiplier = 0.8,
+            Weight = 3.8,
+            ZMBuyPrice = 2700,
+            ZMWeight = 3,
+            MetalPenetrationDepth = 8,
+            ConcretePenetrationDepth = 10,
+            WoodPenetrationDepth = 18,
+            WoodDamageModifier = 1.25,
+            DamageHeadMultiplier = 2.75,
+            DamageGeneric = 40,
+            ClipSize = "30/90",
+        };
+        var rgWeaponsField = tForm.GetField("rgWeapons", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        rgWeaponsField.SetValue(frm, new List<WeaponData> { wDummy });
+        var cmbL = GetControl<ComboBox>("cmbWeaponsL");
+        var cmbR = GetControl<ComboBox>("cmbWeaponsR");
+        cmbL.DataSource = null; cmbL.DataSource = new List<WeaponData> { wDummy }; cmbL.DisplayMember = "PrintName";
+        cmbR.DataSource = null; cmbR.DataSource = new List<WeaponData> { wDummy }; cmbR.DisplayMember = "PrintName";
+        cmbL.SelectedIndex = 0; cmbR.SelectedIndex = 0;
+        var wCurrentLeftField = tForm.GetField("wCurrentLeft", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var wCurrentRightField = tForm.GetField("wCurrentRight", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        wCurrentLeftField.SetValue(frm, wDummy);
+        wCurrentRightField.SetValue(frm, wDummy);
+        frm.StoreSnapshot();
+        frm.ClearUndoHistory();
+        frm.PushUndoNow();
         s_miPopUndo = tForm.GetMethod("PopUndo", BindingFlags.NonPublic | BindingFlags.Instance)!;
         s_miPopRedo = tForm.GetMethod("PopRedo", BindingFlags.NonPublic | BindingFlags.Instance)!;
         s_miPushUndoNow = tForm.GetMethod("PushUndoNow", BindingFlags.Public | BindingFlags.Instance)!;
@@ -112,15 +150,41 @@ public static class UndoTests
                 throw new Exception($"Expected {decOrig}, got {nud.Value}");
         });
 
-        Test("Bottom undo is ignored", () =>
+        Test("CSV remove/restore cycle blocks undo of zeroed state", () =>
         {
             var nud = GetControl<NumericUpDown>("nudHipSpreadL");
-            ChangeNud("nudHipSpreadL", nud.Value + 0.3m);
+            var rgWeaponsField = tForm.GetField("rgWeapons", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var wDummy = (WeaponData)GetControl<ComboBox>("cmbWeaponsL").SelectedItem!;
+            var wCurrentLeftField = tForm.GetField("wCurrentLeft", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var wCurrentRightField = tForm.GetField("wCurrentRight", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var bSuppressUndoField = tForm.GetField("bSuppressUndo", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var bUpdatingControlsField = tForm.GetField("bUpdatingControls", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            bSuppressUndoField.SetValue(frm, false);
+            bUpdatingControlsField.SetValue(frm, false);
+            frm.ClearUndoHistory();
+            decimal decDummy = 3.34m;
+            nud.Value = decDummy;
+            PushUndoNow();
+            PushUndoNow();
+
+            for (int k = 0; k < 2; k++)
+            {
+                rgWeaponsField.SetValue(frm, new List<WeaponData>());
+                wCurrentLeftField.SetValue(frm, null);
+                wCurrentRightField.SetValue(frm, null);
+                rgWeaponsField.SetValue(frm, new List<WeaponData> { wDummy });
+                wCurrentLeftField.SetValue(frm, wDummy);
+                wCurrentRightField.SetValue(frm, wDummy);
+                var miLoad = tForm.GetMethod("LoadWeaponToControls", BindingFlags.NonPublic | BindingFlags.Instance)!;
+                miLoad.Invoke(frm, new object[] { wDummy, true });
+                miLoad.Invoke(frm, new object[] { wDummy, false });
+            }
+
             Undo();
-            decimal decAfterFirst = nud.Value;
-            Undo();
-            if (nud.Value != decAfterFirst)
-                throw new Exception("Second undo at stack bottom should be ignored");
+            if (nud.Value == 0m)
+                throw new Exception("Undo restored zeroed state from no CSV refresh");
+            if (Math.Abs(nud.Value - decDummy) > 0.005m)
+                throw new Exception($"Expected {decDummy}, got {nud.Value}");
         });
 
         Test("New change clears redo stack", () =>
