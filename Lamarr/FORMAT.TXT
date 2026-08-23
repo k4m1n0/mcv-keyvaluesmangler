@@ -42,6 +42,9 @@ Abstract
                  (bits 3:0), 1 = high nibble (bits 7:4).
         outPos   Current write position in decompressed output,
                  zero-based.
+        inPos    Current read position in the compressed input,
+                 zero-based.  inPos = 0 holds the initial octet;
+                 inPos = 1 is the first tag byte (Section 3.1).
         tag      The current tag byte (see Section 3.2).
 
     The term "nibble-aligned" refers to a read or write operation
@@ -112,8 +115,8 @@ Abstract
 
 3.1.  Initial Byte
 
-    The first octet of the original input is copied verbatim to the
-    first octet of the compressed output. This establishes the
+    The first octet of the original input MUST be copied verbatim to
+    the first octet of the compressed output. This establishes the
     output origin for backward references. Both cursors are then
     initialised to 1:  inPos = 1 (first tag byte) and outPos = 1
     (first output position already filled by the initial copy).
@@ -157,6 +160,9 @@ Abstract
     decompressed size, or when the compressed input is exhausted
     (cursor at end of buffer, accounting for current nibble
     alignment).
+
+    When either error condition below occurs, the decoder MUST halt
+    and report an error; it MUST NOT attempt to continue decoding.
 
     Error conditions:
 
@@ -258,7 +264,9 @@ Abstract
         C := C + (tag & 0x7F) + 4
         C := C << 1
 
-    The decompressor copies C * 4 octets directly from the compressed
+    The decompressor MUST validate that outPos + C * 4 does not
+    exceed the expected decompressed size before copying (Section
+    3.5). It then copies C * 4 octets directly from the compressed
     input to output, advancing both cursors by C * 4. This consumes
     the remaining bits of the current tag byte (inner loop break).
 
@@ -367,9 +375,13 @@ Abstract
     When the encoder detects that the compressed output for a segment
     exceeds the corresponding raw input size, it flushes the
     accumulated uncompressed data as a Copy Chunk (see Section 4.3).
+    Let cbUCData denote the number of uncompressed octets accumulated
+    since the start of the current uncompressed segment, and let
+    segBase denote the input position at which that segment began.
     The encoder advances inPtr past the flushed region by setting
-    inPtr to base + (cbUCData & ~7), then re-encodes the trailing
-    cbUCData & 7 octets in subsequent iterations (see B.3).
+    inPtr := segBase + (cbUCData & ~7), then encodes the trailing
+    cbUCData & 7 octets in subsequent iterations (see B.3). After
+    the flush, a new uncompressed segment begins at the updated inPtr.
 
 
 6.  Container Format
@@ -409,8 +421,8 @@ Abstract
         H is the bundle header offset; container length C =
         8 + 12 + 20*N + names_area + compressed_size, so the patched
         marker offset is H + C. compOff is relative to the first
-        compressed block. Entries are ordered with entry 0 as the
-        main assembly and the remaining entries as managed
+        compressed block. Entries MUST be ordered with entry 0 as
+        the main assembly and the remaining entries as managed
         dependencies collected from deps.json.
 
         Magic octets:  0x4C 0x61 0x6D 0x61 0x72 0x72 0x21 0x21
@@ -419,10 +431,10 @@ Abstract
         validate: 1 <= entry count <= 4096, sizes positive, entry table
         and compressed blocks within the file.
 
-        The stub SHALL be a Windows GUI executable (subsystem WINDOWS)
-        whose runtimeconfig declares Microsoft.WindowsDesktop.App with
-        rollForward LatestMajor, so payloads targeting .NET 5-10
-        (console or WinForms) resolve a compatible runtime.
+        The stub MUST be a Windows executable whose runtimeconfig
+        declares Microsoft.WindowsDesktop.App with rollForward
+        LatestMajor, so payloads targeting .NET 5-10 (console or
+        WinForms) resolve a compatible runtime.
 
     6.2.  Native Pack (PE sections)
 
@@ -585,7 +597,7 @@ Appendix B.  Implementation Notes
     When cbUCData is not a multiple of 8, the trailing octets up to
     the next multiple of 8 are not part of the copy chunk. The
     encoder MUST advance its input cursor by only cbCopy * 8 octets
-    and re-encode the remaining octets as literals or matches in
+    and encode the remaining octets as literals or matches in
     subsequent iterations. Advancing by the unrounded cbUCData drops
     the remainder and truncates the decompressed output, producing a
     stream the stub loader rejects as a corrupt payload.
