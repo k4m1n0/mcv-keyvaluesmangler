@@ -13,7 +13,7 @@ Abstract
     This document specifies a nibble-aligned LZ-style lossless
     compression format. The format operates on an octet stream,
     producing a self-delimiting compressed representation through a
-    tag-byte-driven state machine. A literal byte is emitted as-is;
+    tag-byte-driven state machine. A literal octet is emitted as-is;
     a backward reference (match) is encoded as a distance-length pair
     using variable-width fields whose bit alignment shifts at nibble
     granularity.
@@ -114,7 +114,9 @@ Abstract
 
     The first octet of the original input is copied verbatim to the
     first octet of the compressed output. This establishes the
-    output origin for backward references.
+    output origin for backward references. Both cursors are then
+    initialised to 1:  inPos = 1 (first tag byte) and outPos = 1
+    (first output position already filled by the initial copy).
 
 3.2.  Tag Byte
 
@@ -163,15 +165,15 @@ Abstract
 
 3.6.  Tag Byte Nibble Alignment
 
-    The tag byte itself is subject to nibble alignment. When the
-    preceding output ends on a nibble boundary (nib = 1), the tag
-    byte is split across two octets:  its low nibble occupies the
-    high nibble of the current octet (OR'd with residual data), and
-    its high nibble occupies the low nibble of the following octet.
-    To avoid residual garbage, the encoder MUST zero the following
-    octet before writing the tag. When nib = 0, the tag is written
-    as a whole octet at the current output position, which then
-    advances by one.
+    The tag byte itself is subject to nibble alignment. When nib = 1
+    (the previous write stopped mid-octet, so the current octet's
+    high nibble is still unused), the tag is split across two octets:
+    its low nibble occupies the high nibble of the current octet
+    (OR'd with residual data), and its high nibble occupies the low
+    nibble of the following octet. To avoid residual garbage, the
+    encoder MUST zero the following octet before writing the tag.
+    When nib = 0, the tag is written as a whole octet at the current
+    output position, which then advances by one.
 
 
 4.  Match Encoding
@@ -217,34 +219,41 @@ Abstract
 
 4.2.  Length Coding
 
-    A raw 12-bit field (u12, Section 2.2) is read. Cursor advances
-    by nib-phase octets and nib is toggled.
+    A raw 12-bit field (u12, Section 2.2) is read; after the read,
+    Cursor += nib; nib ^= 1. The three cases are nested, and the
+    Cursor += 1 in the second tier applies to both of its
+    sub-cases:
 
         (u12 & 0xF) != 0xF:
             L := (u12 & 0xF) + 3                      // [3, 17]
 
-        u12 != 0xFFF:
+        (u12 & 0xF) == 0xF:
             Cursor += 1.
-            L := (u12 >> 4) + 0x12                    // [18, 273]
 
-        u12 == 0xFFF:
-            Read E as u16 (Section 2.2).
-            Cursor += 2.
-            L := E + 0x111.
+            u12 != 0xFFF:
+                L := (u12 >> 4) + 0x12                // [18, 272]
 
-    The value E = 0xFFFF produces L = uCnt2Byte (0x10110),
-    which is a sentinel triggering a Copy Chunk (Section 4.3) instead
-    of a normal match.
+            u12 == 0xFFF:
+                Read E as u16 (Section 2.2).
+                Cursor += 2.
+                L := E + 0x111.                       // [273, 0x1010F]
+
+    The value E = 0xFFFF produces L = uCnt2Byte (0x10110), which is
+    a sentinel triggering a Copy Chunk (Section 4.3) instead of a
+    normal match.
+
+    The constants used above are uCnt1Byte := 0xFF + 0x12 (0x111)
+    and uCnt2Byte := 0xFFFF + uCnt1Byte (0x10110).
 
 4.3.  Copy Chunk  (Uncompressed Fallback)
 
     When L = uCnt2Byte, the item is an uncompressed data block. The
     length C (in units of 4-octet groups) is decoded from context:
 
-        nib = 1:   C := ((octet[cursor - 4] & 0xFC) << 5)
+        nib = 1:   C := ((octet[Cursor - 4] & 0xFC) << 5)
                    Cursor += 1; nib := 0.
 
-        nib = 0:   C := (u16[cursor - 5] & 0xFC0) << 1
+        nib = 0:   C := (u16[Cursor - 5] & 0xFC0) << 1
 
         C := C + (tag & 0x7F) + 4
         C := C << 1
@@ -271,29 +280,37 @@ Abstract
         start_pos := 0                       if p < uDistMax
         start_pos := p - uDistMax            otherwise
 
+    The reference encoder uses uDistMax = 0x4443F (279615), one less
+    than the maximum encodable long distance (Section 4.1.2).
+
 5.1.1.  RLE Fast Path
 
-    When (*(u32 *)(inPtr - 1)) == (*(u32 *)(inPtr)):
+    When cbIn - inPtr >= 4 AND
+         (*(u32 *)(inPtr - 1)) == (*(u32 *)(inPtr)):
         matchLen := 4
         while remaining > 0 AND inPtr[matchLen] == inPtr[matchLen - 1]:
             matchLen++
         return matchLen
+
 5.2.  Match Selection
 
     When multiple matches exist at a position:
 
         (a)  A longer match is always preferred.
-        (b)  If lengths differ by exactly 1, prefer the shorter
-             distance.
-        (c)  When the input position exceeds 0x880, prefer the match
-             whose distance satisfies (d_old * 128) > d_new, as the
-             distance coding overhead becomes significant.
+        (b)  If the candidate is longer by exactly 1, accept it only
+             when its distance satisfies the inequality of (c) or
+             (d); a candidate longer by more than 1 is always
+             accepted.
+        (c)  When the input position is at least 0x881, prefer the
+             match whose distance satisfies (d_old * 128) > d_new,
+             as the distance coding overhead becomes significant.
         (d)  Otherwise, prefer when (d_old * 8) > d_new.
 
     The encoder MAY use a progressive 2-byte hash-chain filter
     (a 16-bit lookahead value) to reduce false-positive byte
     comparisons. This is an optimisation detail and does not affect
     the format.
+
 5.3.  Nibble-Aligned Write Primitives
 
     Toggle column indicates whether the primitive modifies the nibble
@@ -357,116 +374,100 @@ Abstract
 
 6.  Container Format
 
-    The Lamarr reference implementations define two containers for
-    distributing a compressed payload alongside its stub. Both store a
-    conforming LZMAT-compatible bitstream per Sections 1 through 5;
-    other implementations MAY use a different container.
+    The reference implementations define two containers for shipping a
+    compressed payload beside its stub. Both embed a conforming LZMAT-
+    compatible bitstream per Sections 1 through 5; other implementations
+    MAY use a different container.
 
-    6.1.  Tail Append (managed stub)
+    6.1.  Managed stub (single-file bundle container)
 
-        Defined by Packer.cs and Stubloader.cs.
+        The stub is a .NET single-file executable (Lamarr.dll, deps.json,
+        runtimeconfig.json embedded by dotnet publish). The container is
+        inserted directly before the bundle header. The bundle marker is
+        a 40-octet structure:  an 8-octet u64 LE header offset followed
+        by a 32-octet signature. The packer patches the marker's header
+        offset so the bundle header stays addressable:
+
+        [stub data .. header_off] [Lamarr container] [bundle header]
 
         +-----------+-------------------------------+
         | Offset    | Content                       |
         +-----------+-------------------------------+
-        | 0         | Stub executable (S octets)    |
-        | S         | Magic: "Lamarr!!" (8 octets)  |
-        | S + 8     | Original size (u32 LE)        |
-        | S + 12    | Compressed size (u32 LE)      |
-        | S + 16    | Compressed payload (C octets) |
+        | 0         | Stub executable data (H)      |
+        | H         | Magic: "Lamarr!!" (8 octets)  |
+        | H + 8     | Entry count (u32 LE)          |
+        | H + 12    | Total original size (u32 LE)  |
+        | H + 16    | Total compressed size (u32 LE)|
+        | H + 20    | Entry table (20 octets each)  |
+        |           |   nameLen, rawLen, compLen,   |
+        |           |   compOff, reserved           |
+        | ...       | Names (UTF-8, 4-aligned)      |
+        | ...       | Compressed blocks (LZMAT)     |
+        | file-end  | Bundle header                 |
         +-----------+-------------------------------+
+
+        H is the bundle header offset; container length C =
+        8 + 12 + 20*N + names_area + compressed_size, so the patched
+        marker offset is H + C. compOff is relative to the first
+        compressed block. Entries are ordered with entry 0 as the
+        main assembly and the remaining entries as managed
+        dependencies collected from deps.json.
 
         Magic octets:  0x4C 0x61 0x6D 0x61 0x72 0x72 0x21 0x21
 
-        Loaders MUST search backwards from end-of-file for the magic
-        and validate: sizes positive, compressed < original,
-        C + (S + 16) does not exceed the file length.
+        Loaders MUST scan backwards from end-of-file for the magic and
+        validate: 1 <= entry count <= 4096, sizes positive, entry table
+        and compressed blocks within the file.
 
-        The stub SHALL be compiled as a Windows GUI executable
-        (subsystem WINDOWS) to suppress console allocation on startup.
+        The stub SHALL be a Windows GUI executable (subsystem WINDOWS)
+        whose runtimeconfig declares Microsoft.WindowsDesktop.App with
+        rollForward LatestMajor, so payloads targeting .NET 5-10
+        (console or WinForms) resolve a compatible runtime.
 
     6.2.  Native Pack (PE sections)
 
-        Defined by Lamarr/Native (LamarrNativePack + lamarr_stub.asm +
-        LamarrBoot). The payload is embedded as PE sections of a stub
-        executable instead of being appended to the file tail, keeping
-        the .NET single-file bundle contiguous:
+        The payload is embedded as PE sections of a stub executable,
+        keeping the .NET single-file bundle contiguous:
 
             [PE headers] [.stub] [bundle marker] [.lamapp]
             [bundle data] [bundle header]
 
-        The 40-octet bundle marker sits between .stub and .lamapp: the
-        bundle header file offset (u64 LE) followed by the 32-octet
-        bundle signature. hostfxr locates the marker by scanning the
-        packed exe file and reads the bundle header at the stored offset.
-        The file ends with the bundle header; there is no trailing marker.
+        The 40-octet bundle marker (layout as 6.1) sits between .stub and
+        .lamapp. The file ends with the bundle header.
 
-        .stub   position-independent native loader (lamarr_stub.asm).
-                No imports: walks the PEB to locate kernel32 and parses
-                its export table directly for the small API set it
-                needs, then calls hostfxr_main_bundle_startupinfo with
-                no manual image mapping:
+        .stub   native loader section (lamarr_stub.asm). It locates the
+                dotnet root (DOTNET_ROOT env -> HKLM registry -> Program
+                Files), selects the hostfxr in <root>\host\fxr (payload
+                runtime major preferred, else highest) and calls
+                hostfxr_main_bundle_startupinfo with this exe as
+                host_path and the bundle header offset.
 
-                resolve dotnet root at runtime (DOTNET_ROOT env -> HKLM
-                registry InstallLocation -> default Program Files);
-                scan <root>\host\fxr for the best hostfxr version
-                (preferring the payload's runtime major parsed from the
-                rebuilt runtimeconfig.json, falling back to the highest
-                installed); load hostfxr.dll (LoadLibraryA) and
-                GetProcAddress("hostfxr_main_bundle_startupinfo"), then
-                call it with host_path = this exe, dotnet_root, app_path
-                and the bundle header offset. hostfxr/hostpolicy then
-                run the bundle normally. The stub never maps or
-                decompresses a host image itself; there is no synthetic
-                LDR entry, no VEH, no TLS/CRT emulation.
+        .lamapp Lamarr-compressed payload (main managed DLL plus all
+                managed dependencies), consumed by LamarrBoot. Starting
+                at offset 8, the container layout, entry semantics,
+                compOff and validation are exactly those of 6.1. The
+                first 8 octets are implementation-specific filler
+                bytes; parsers MUST NOT interpret or validate them.
 
-        .lamapp Lamarr-compressed application payload, consumed by the
-                managed bootstrapper LamarrBoot:
+        bundle  A .NET single-file bundle whose main assembly is
+                LamarrBoot. Managed dependencies are moved out of the
+                bundle into .lamapp; the bundle keeps LamarrBoot,
+                deps.json, runtimeconfig.json and non-managed files.
+                The packer rebuilds the bundle header at end-of-file and
+                rewrites the deps.json / runtimeconfig.json location
+                fields (bundle version >= 2).
 
-                    +--------+------------------------------+
-                    | 0      | Header pad (8 octets)        |
-                    | 8      | Entry count N (u32 LE)       |
-                    | 12     | Total original size (u32)    |
-                    | 16     | Total compressed size(u32)   |
-                    | 20     | Entry table (20 octets each) |
-                    |        |   nameLen, rawLen, compLen,  |
-                    |        |   compOff, reserved          |
-                    | 20+20N | Names (UTF-8, 4-aligned)     |
-                    | ...    | Compressed blocks (Lamarr)   |
-                    +--------+------------------------------+
-
-                Entry 0 is the main managed DLL; the remaining entries
-                are managed dependency assemblies. compOff is relative
-                to the first compressed block. LamarrBoot decompresses
-                entry 0, loads it into an AssemblyLoadContext and
-                invokes the real entry point; dependencies are
-                decompressed lazily via AssemblyLoadContext.Resolving.
-
-        bundle  A .NET single-file bundle whose main assembly entry is
-                the uncompressed LamarrBoot. Managed dependency
-                assemblies are removed from the bundle and stored in
-                .lamapp (Lamarr-compressed); the bundle keeps only the
-                bootstrapper, deps.json, runtimeconfig.json and
-                non-managed files, all uncompressed, because framework-
-                dependent coreclr cannot inflate compressed bundle
-                entries (non-CORECLR_EMBEDDED build). The packer
-                rebuilds the bundle header at the end of the file,
-                rewrites the deps.json and runtimeconfig.json location
-                fields (bundle version >= 2) to the rebuilt offsets,
-                and strips the moved dependency assemblies from
-                deps.json so hosts that pre-validate the manifest do
-                not reject the missing files.
-
-        Bundle layout follows the host's single-file format: bundle
-        major 2 (.NET 5, entries carry no compressedSize field) vs
-        bundle major >= 6 (.NET 6+, entries carry compressedSize and
-        the header a runtimeconfig hash). Payloads targeting .NET 5
-        through 10 are supported.
+        .NET version compatibility: payloads targeting .NET 5-10 are
+        supported. LamarrBoot defaults to net8.0-windows (Boot.csproj
+        BootTfm; pass -p:BootTfm=net5.0-windows for older runtimes).
+        Bundle layouts: major 2 (net5, no per-entry compressedSize) vs
+        major >= 6 (net6+, compressedSize and a runtimeconfig hash
+        field).
 
     6.3.  Host Compatibility
 
-        The stub targets x64 Windows with the PEB/LDR layout shared by
-        Windows 7 SP1 through Windows 11. It resolves only these APIs:
+        The native stub targets x64 Windows (Windows 7 SP1 through
+        Windows 11). It resolves only these APIs:
 
             ExitProcess, LoadLibraryA, GetProcAddress,
             GetModuleFileNameW, GetEnvironmentVariableW,
@@ -474,30 +475,19 @@ Abstract
             RegOpenKeyExW, RegQueryValueExW,
             GetCommandLineW, CommandLineToArgvW
 
-        Two limitations apply:
+        RegOpenKeyExW / RegQueryValueExW come from advapi32.dll,
+        CommandLineToArgvW from shell32.dll, and
+        hostfxr_main_bundle_startupinfo via GetProcAddress on hostfxr.dll.
 
-        (a)  All kernel32 exports above are resolved by walking the
-             PEB module list to kernel32 and parsing its export table
-             directly. The walker resolves forwarders inline (chasing
-             "DLL.Func" strings to the target module), so kernel32 ->
-             KERNELBASE / api-set chains are handled by the stub itself,
-             not the OS loader. RegOpenKeyExW / RegQueryValueExW are
-             loaded explicitly from advapi32.dll; CommandLineToArgvW
-             from shell32.dll; hostfxr_main_bundle_startupinfo via
-             GetProcAddress on hostfxr.dll. The stub never invokes
-             OS loader import resolution.
-
-        (b)  Hardware-enforced CET (shadow stack / indirect branch
-             tracking) is not handled by the stub. It calls directly
-             into hostfxr_main_bundle_startupinfo, so a system
-             enforcing CET on non-ENDBR64 targets will fault. This is
-             not a practical issue on current mainstream Windows 7 SP1
-             through Windows 11 deployments, where CET is opt-in rather
-             than mandated.
+        Hardware-enforced CET (shadow stack / indirect branch tracking)
+        is not handled: a system enforcing CET on non-ENDBR64 targets
+        will fault. CET is opt-in on mainstream Windows 7 SP1 through
+        Windows 11 deployments.
 
         The .NET host itself (apphost + coreclr) carries its own OS
         support policy; the stub's native compatibility does not extend
         the runtime's supported Windows versions.
+
 
 7.  Security Considerations
 
@@ -522,17 +512,17 @@ Appendix A.  Field Width Summary
     |   Short dist 0    | 7 + 1  | Range [1, 128]             |
     |   Short dist 1    | 11 + 1 | Range [129, 2176], nib     |
     |                   |        | toggled                    |
-    |   Long dist 00    | 6 + 1  | Range [1, 64]              |
-    |   Long dist 01    | 10 + 1 | Range [65, 1088], nib      |
+    |   Long dist 00    | 6 + 2  | Range [1, 64]              |
+    |   Long dist 01    | 10 + 2 | Range [65, 1088], nib      |
     |                   |        | toggled                    |
-    |   Long dist 10    | 14 + 1 | Range [1089, 17472]        |
-    |   Long dist 11    | 18 + 1 | [17473, 279615] nib        |
-    |                   |        | toggled (fmt max 279616)   |
+    |   Long dist 10    | 14 + 2 | Range [1089, 17472]        |
+    |   Long dist 11    | 18 + 2 | Range [17473, 279616], nib |
+    |                   |        | toggled                    |
     | Match length      | 12     | u12, 2 octets              |
     |   Short (< 0xF)   | 4      | Range [3, 17]              |
-    |   Medium          | 8      | Range [18, 273], cursor +1 |
-    |   Long (== 0xFFF) | 16     | Range [274, ...],          |
-    |                   |        | cursor +2                  |
+    |   Medium          | 8      | Range [18, 272], cursor +1 |
+    |   Long (== 0xFFF) | 16     | Range [273, 0x1010F],      |
+    |                   |        | cursor +1 then +2          |
     |   Sentinel        | 16     | 0xFFFF triggers Copy Chunk |
     +-------------------+--------+----------------------------+
 
@@ -542,10 +532,11 @@ Appendix B.  Implementation Notes
     B.1.  Buffer Boundary Behaviour
 
     The format does not require the input buffer to extend beyond
-    cbIn octets. During match search, the progressive hash filter
-    (Section 5.2) MAY read one octet past the declared input length
-    when a match extends to the final octet. The value read at
-    position cbIn is therefore undefined in the general case.
+    cbIn octets. During match search, the hash function (Section 5.1)
+    MAY read up to three octets past the declared input length when a
+    match extends to the final octet. The values read at positions
+    cbIn through cbIn + 2 are therefore undefined in the general
+    case.
 
     Conforming encoders SHOULD provide the declared input in a
     buffer padded with one zero octet beyond cbIn, yielding
@@ -553,10 +544,18 @@ Appendix B.  Implementation Notes
 
     When such padding is used, compressed output MAY differ from
     implementations that read arbitrary memory at cbIn. This
-    difference is limited to the final ~200 compressed octets,
-    has no impact on decompression correctness, and affects only
-    input streams that lie within ~200 octets of a buffer page
-    boundary. Decoders are unaffected.
+    difference is limited to the final few compressed octets and
+    has no impact on decompression correctness. Decoders are
+    unaffected.
+
+    More generally, conforming encoders are free to choose their
+    own match-search heuristics, so compressed output MAY differ
+    between implementations anywhere in the stream, not just at
+    the end. For example, the Lamarr C# encoder limits hash-chain
+    traversal to 4096 entries while the original C reference
+    implementation does not; on inputs with long hash chains this
+    yields different (but equally valid) compressed output.
+    Decompression is unaffected by such differences.
 
     B.2.  Hash Table at Input Boundary
 
@@ -571,7 +570,7 @@ Appendix B.  Implementation Notes
     at all input positions except the final three, where the hash
     bucket differs from implementations that read past cbIn. The
     effect is indistinguishable from the B.1 boundary behaviour.
-    Compressed output MAY differ in the final ~200 octets with no
+    Compressed output MAY differ in the final few octets with no
     impact on decompression correctness.
 
     B.3.  Copy Chunk Octet Alignment

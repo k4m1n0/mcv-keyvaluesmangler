@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Runtime.CompilerServices;
 
 namespace Lamarr
@@ -6,14 +6,14 @@ namespace Lamarr
     //glhf
     public class LamarrEncoder
     {
-        #region 常量字段
+        #region 甯搁噺瀛楁
 
-        //hash表条目数 平衡碰撞率与内存占用
+        //hash琛ㄦ潯鐩暟 骞宠　纰版挒鐜囦笌鍐呭瓨鍗犵敤
         private const int iDictSize = 0x8000;
         private const int iIdxSize  = 0x8000;
         private const int iDictMsk = iDictSize - 1;
         private const int iIdxMsk = iIdxSize - 1;
-        private const int iHashBits = 9;//hash混入因子 经验值
+        private const int iHashBits = 9;//hash娣峰叆鍥犲瓙 缁忛獙鍊?
 
         private const uint uCntDefault = 0x12;
         private const uint uCnt1Byte = 0xFF + uCntDefault;
@@ -43,7 +43,7 @@ namespace Lamarr
         private byte bBitMsk, bThisTag;
 
         #endregion
-        #region 静态入口
+        #region 闈欐€佸叆鍙?
 
         public static uint GetMaxEncodedSize(uint cbIn)
         {
@@ -58,7 +58,7 @@ namespace Lamarr
 
         private int EncodeInternal(byte[] rgOut, ref uint pcbOut, byte[] rgIn, uint cbIn)
         {
-            //输入末尾补1字节0 match到末尾时读取rgIn[cbIn]=0
+            //杈撳叆鏈熬琛?瀛楄妭0 match鍒版湯灏炬椂璇诲彇rgIn[cbIn]=0
             if (rgIn.Length <= cbIn)
             {
                 byte[] rgPadded = new byte[cbIn + 1];
@@ -104,7 +104,7 @@ namespace Lamarr
                 else
                 {
                     EncodeDistance(ref uCurMatchCnt);
-                    if (uCurMatchCnt >= 3)//仅真实匹配才写长度和tag位
+                    if (uCurMatchCnt >= 3)//浠呯湡瀹炲尮閰嶆墠鍐欓暱搴﹀拰tag浣?
                     {
                         EncodeLength(uCurMatchCnt);
                         bThisTag |= bBitMsk;
@@ -141,7 +141,7 @@ namespace Lamarr
                 UpdateHash(uCurMatchCnt);
                             }
 
-            //尾部未满8个item的tag填充
+            //灏鹃儴鏈弧8涓猧tem鐨則ag濉厖
             if (bBitMsk != 0) { bThisTag |= bBitMsk; bThisTag |= (byte)(bBitMsk - 1); }
             if ((iTagNib & 1) != 0)
             {
@@ -156,13 +156,13 @@ namespace Lamarr
 
         private bool CheckCopyChunk(uint uCurMatchCnt)
         {
-            //iUCData溢出或iCpyTag超阈值触发flush bValid防止rewind循环
+            //iUCData婧㈠嚭鎴杋CpyTag瓒呴槇鍊艰Е鍙慺lush bValid闃叉rewind寰幆
             if (iCpyTag != 0 && cbUCData > 0xFFF8)
                 return true;
 
             uint i = uInPtr - (uProcessedData + uCurMatchCnt);
             uint cbCompressed = (uint)(iOutPos - iUCTagPos);
-            //bValid防FlushUCChunk后回绕导致的级联触发
+            //bValid闃睩lushUCChunk鍚庡洖缁曞鑷寸殑绾ц仈瑙﹀彂
             bool bValid = uInPtr > uProcessedData;
 
             if (bThisTag != 0)
@@ -205,9 +205,9 @@ namespace Lamarr
         }
 
         #endregion
-        #region 匹配编码
+        #region 鍖归厤缂栫爜
 
-        //短距离用1bit分两档 长距离用2bit分四档 第四档20bit编码要求match>=4字节 不够写成literal
+        //鐭窛绂荤敤1bit鍒嗕袱妗?闀胯窛绂荤敤2bit鍒嗗洓妗?绗洓妗?0bit缂栫爜瑕佹眰match>=4瀛楄妭 涓嶅鍐欐垚literal
         private void EncodeDistance(ref uint uCurMatchCnt)
         {
             if (uInPtr > uDistShort1)
@@ -227,11 +227,11 @@ namespace Lamarr
                 }
                 else
                 {
-                    //距离太远不够4字节 退为literal
+                    //璺濈澶繙涓嶅4瀛楄妭 閫€涓簂iteral
                     if (uCurMatchCnt < 4)
                     {
                         WriteU8(rgOut, ref iOutPos, ref iCurNib, rgIn[uInPtr]);
-                        uCurMatchCnt = 1;//已作为literal消费1字节 不设match位
+                        uCurMatchCnt = 1;//宸蹭綔涓簂iteral娑堣垂1瀛楄妭 涓嶈match浣?
                         return;
                     }
                     uStoreDist -= uDistLong2 << 2; uStoreDist |= 3;
@@ -252,7 +252,7 @@ namespace Lamarr
         }
 
 
-        //变长编码 越长的匹配用越多bit
+        //鍙橀暱缂栫爜 瓒婇暱鐨勫尮閰嶇敤瓒婂bit
         private void EncodeLength(uint uCurMatchCnt)
         {
             if (uCurMatchCnt < uCntDefault)
@@ -267,7 +267,7 @@ namespace Lamarr
         }
 
 
-        //链搜索上限4096 防碰撞退化
+        //閾炬悳绱笂闄?096 闃茬鎾為€€鍖?
         private uint FindMatch()
         {
             uint uCurPtr = uInPtr;
@@ -282,7 +282,7 @@ namespace Lamarr
 
             uint uHash = Hash(uInPtr);
 
-            //rgIn[uCurPtr-1..uCurPtr+2]==rgIn[uCurPtr..uCurPtr+3] -> 连续相同字节
+            //rgIn[uCurPtr-1..uCurPtr+2]==rgIn[uCurPtr..uCurPtr+3] -> 杩炵画鐩稿悓瀛楄妭
             if (uRemaining >= 4 && Read32LE(rgIn, uCurPtr) == Read32LE(rgIn, uCurPtr - 1))
             {
                 uint uRem = cbIn - 4 - uCurPtr;
@@ -346,7 +346,7 @@ namespace Lamarr
         }
 
 
-        //压缩体积超过原始时直接复制 省bit
+        //鍘嬬缉浣撶Н瓒呰繃鍘熷鏃剁洿鎺ュ鍒?鐪乥it
         private void FlushUCChunk()
         {
             uint cbCopy = cbUCData >> 3;
@@ -400,7 +400,7 @@ namespace Lamarr
         }
 
         #endregion
-        #region 位读写
+        #region 浣嶈鍐?
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void WriteU8(byte[] rgOut, ref int iPos, ref int iNib, uint uVal)
@@ -486,7 +486,7 @@ namespace Lamarr
             return (u16 + ((u32 >> iHashBits) & 0xFFFF)) & iDictMsk;
         }
 
-        //距离/长度择优 uCurPos>0x880后优先短距离匹配省bit
+        //璺濈/闀垮害鎷╀紭 uCurPos>0x880鍚庝紭鍏堢煭璺濈鍖归厤鐪乥it
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static bool IsBetterMatch(uint uCurPos, uint uNewDist, uint uNewLen,
                                           uint uOldDist, uint uOldLen)
@@ -497,7 +497,7 @@ namespace Lamarr
             return (uOldDist << 3) > uNewDist;
         }
 
-        //小端32位读 JIT在x64上优化为单条mov
+        //灏忕32浣嶈 JIT鍦▁64涓婁紭鍖栦负鍗曟潯mov
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static uint Read32LE(byte[] rg, uint uOff)
         {

@@ -212,22 +212,28 @@
   0A. LAMARR
 ==============================================================================
 
-  Keyvalues Mangler bundles its dependencies through an IL self extracting
-  compression stub called Lamarr to stay under a 360 KiB budget. It decompresses
-  the payload into memory at startup, loads it as an assembly, and runs it
+  To stay under a 360 KiB budget, Keyvalues Mangler ships its dependencies
+  in Lamarr, an IL self-extracting compression stub. At startup Lamarr
+  decompresses the payload into memory, loads it as an assembly and runs it;
+  managed dependencies (NuGet packages) ride as separate compressed entries,
+  decompressed lazily via AssemblyLoadContext.Resolving
 
-  Lamarr runs a decompressor inside a virtual machine, and the program that is 
-  decompressed by the decompressor that runs inside the virtual machine is
-  a program that will run inside the same virtual machine that the decompressor
-  is running in. This sounds like a joke. It is not
+  Lamarr runs a decompressor inside a virtual machine, and the program   
+  that is decompressed by the decompressor that runs inside the virtual  
+  machine is a program that will run inside the same virtual machine that 
+  the decompressor is running in. This sounds like a joke. It is not
 
   No temp files. No console window flash. HELL YEAH
 
   FORMAT
-    The compressed payload sits at the end of the EXE, marked by the
-    8 byte magic "Lamarr!!". An 8 byte header follows, storing the
-    original and compressed sizes as little endian u32. Then comes the
-    compressed data itself
+    The compressed payload sits in the .NET single-file stub right before
+    its bundle header, after the 8-byte magic "Lamarr!!". Then: entry count,
+    total original and compressed sizes (little endian u32), an entry table
+    (20 octets each: nameLen/rawLen/compLen/compOff), UTF-8 names, and one
+    compressed block per entry. Entry 0 is the main assembly; the rest are
+    managed dependencies collected from deps.json. The packer patches the
+    bundle marker's header offset forward by the container length so the
+    stub's own bundle header stays addressable
 
     The compression is a nibble aligned LZ format. Full specification:
     Lamarr/FORMAT.TXT
@@ -235,18 +241,23 @@
     +--------+--------------------------------------+
     | Offset | Content                              |
     +--------+--------------------------------------+
-    | 0      | Stub executable (arbitrary length S) |
-    | S      | "Lamarr!!" (8 bytes)                 |
-    | S + 8  | Original size (u32 LE)               |
-    | S + 12 | Compressed size (u32 LE)             |
-    | S + 16 | Compressed payload (C bytes)         |
+    | 0      | Stub executable data (H octets; H is |
+    |        |   the stub's bundle header offset)   |
+    | H      | "Lamarr!!" (8 bytes)                 |
+    | H + 8  | Entry count (u32 LE)                 |
+    | H + 12 | Total original size (u32 LE)         |
+    | H + 16 | Total compressed size (u32 LE)       |
+    | H + 20 | Entry table (20 octets each)         |
+    | H+20+20N | Names (UTF-8, 4-aligned)           |
+    | ...    | Compressed blocks                    |
+    | ...    | Bundle header (patched marker offset)|
     +--------+--------------------------------------+
 
   CREDITS
     The underlying LZMAT compression algorithm was designed by
     Vitaly Evseenko. The Lamarr encoder / decoder source is a clean
     room reimplementation - no third party code, no dependencies
-    beyond .NET 8.0, released under WTFPL too :))) 
+    beyond .NET 5.0 to 10.0, released under WTFPL too :))) 
 
 ==============================================================================
   0B. LAMARR NATIVE PACKER
@@ -256,22 +267,24 @@
   because why not. Both are Lamarr - just two containers, one goal
 
   The Packer property picks which Lamarr you get (default: managed):
-    -p:Packer=managed      Lamarr IL stub + Lamarr compressed DLL  (~320 KiB)
-    -p:Packer=native       native asm stub + Lamarr compressed DLL (~180 KiB)
-    -p:Packer=none         plain .NET single file (no packing)     (~540 KiB)
+    -p:Packer=managed      Lamarr IL stub + Lamarr compressed DLL  (~325 KiB)
+    -p:Packer=native       native asm stub + Lamarr compressed DLL (~185 KiB)
+    -p:Packer=none         plain .NET single file (no packing)     (~525 KiB)
     -p:SelfContained=true  MS official self contained single file (~37.5 MiB)
 
   HOW IT WORKS
-    The FDD single file is rebuilt into three PE sections. .stub is a
-    position independent asm loader with no imports: it walks the PEB
-    for kernel32/ntdll, resolves the dotnet root at runtime (DOTNET_ROOT
-    env -> HKLM registry -> default), scans <root>\host\fxr for the best
-    hostfxr (preferring the payload's runtime major, else highest), and
-    calls hostfxr_main_bundle_startupinfo with this exe as host path.
-    The main DLL rides in .lamapp as Lamarr compressed bytes. The bundle
-    keeps only a tiny uncompressed LamarrBoot, because FDD coreclr rejects
-    compressed bundle entries; LamarrBoot decompresses .lamapp and loads
-    the real main DLL from memory
+    The FDD single file is rebuilt into two PE sections: .stub and .lamapp.
+    .stub is a position-independent asm loader with no imports. It walks the
+    PEB for kernel32/ntdll, finds the dotnet root (DOTNET_ROOT env -> HKLM
+    registry -> Program Files), picks the best hostfxr in <root>\host\fxr
+    (payload runtime major preferred, else highest), and calls
+    hostfxr_main_bundle_startupinfo with this exe as host_path
+
+    .lamapp carries the main DLL and managed dependencies as compressed
+    bytes. The bundle keeps only the uncompressed bootstrapper LamarrBoot
+    plus deps.json / runtimeconfig.json, because FDD coreclr rejects
+    compressed bundle entries. LamarrBoot decompresses .lamapp, loads the
+    main DLL from memory, and resolves dependencies on demand
 
     No temp files. No console flash. Under 192 KiB. HELL YEAH! (again)
 
@@ -281,11 +294,10 @@
       and pretend this section never existed
 
   COULD I REUSE IT
-    To be honest it has not been properly tested yet. And if you are trying
-    to pack a native PE, use UPX or kkrunchy instead - those are way better
-    If you are packing a legacy .NET Framework app, go with mPress
-    Also: Packer=native is FDD only, SelfContained builds need the apphost
-    the stub deliberately does not map
+    If you are trying to pack a native PE, use UPX or kkrunchy instead -
+    those are way better. If you are packing a legacy .NET Framework app,
+    go with mPress. Also: Packer=native is FDD only, SelfContained builds
+    need the apphost the stub deliberately does not map
 
 ==============================================================================
   0C. CREDITS
