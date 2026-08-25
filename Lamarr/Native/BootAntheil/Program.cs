@@ -48,9 +48,7 @@ internal static class P
     private static readonly uint KS3A = 0x0F0F0F0F, KS3B = 0x9F278F0E;//0x90288001
 
     private const int LB_SEED = 64, LB_HASH = 96, LB_HEAD = 100, LB_TBL = 116;
-    private const string S_DECODER = "Iamdec";//真解码器条目名
-    private const string S_JIT = "!!jhk";
-    private const string S_SIG = "!!sig";
+    private static int _iDec = -1, _iJit = -1, _iSig = -1;
     private static IntPtr _decPtr = IntPtr.Zero;
     private static IntPtr _jitBase = IntPtr.Zero;
     private static uint _jitTextVa = 0;
@@ -351,6 +349,9 @@ internal static class P
             if (row[i * 5 + 2] > 0 && doff + row[i * 5 + 2] > g.Length) return false;
             r.Add((s, row[i * 5 + 1], row[i * 5 + 2], (uint)doff));
         }
+        _iDec = n - 4;
+        _iJit = _iDec + 1;
+        _iSig = _iDec + 2;
         return true;
     }
 
@@ -362,19 +363,17 @@ internal static class P
     private static void EnsureDecoder(byte[] g, List<(string, uint, uint, uint)> l)
     {
         if (_decPtr != IntPtr.Zero) return;
-        foreach (var e in l)
+        if (_iDec >= 0 && _iDec < l.Count)
         {
-            if (e.Item1 == S_DECODER)
-            {
-                byte[] kseed = KSeed();
-                byte[] dll = new byte[e.Item2];
-                for (int i = 0; i < dll.Length; i++)
-                    dll[i] = (byte)(g[(int)e.Item4 + i] ^ kseed[i % 16]);
-                Array.Clear(kseed, 0, kseed.Length);
-                _decPtr = LoadBare(dll);
-                Array.Clear(dll, 0, dll.Length);
-                return;
-            }
+            var e = l[_iDec];
+            byte[] kseed = KSeed();
+            byte[] dll = new byte[e.Item2];
+            for (int i = 0; i < dll.Length; i++)
+                dll[i] = (byte)(g[(int)e.Item4 + i] ^ kseed[i % 16]);
+            Array.Clear(kseed, 0, kseed.Length);
+            _decPtr = LoadBare(dll);
+            Array.Clear(dll, 0, dll.Length);
+            return;
         }
         throw new InvalidDataException(S1(0x7EF1D782u, new uint[] { 0x7E99D7F1u, 0x1D5B5154u }));
     }
@@ -479,35 +478,29 @@ internal static class P
 
     private static void EnsureJitHook(byte[] g, List<(string, uint, uint, uint)> l)
     {
-        foreach (var e in l)
+        if (_iJit >= 0 && _iJit < l.Count)
         {
-            if (e.Item1 == S_JIT)
-            {
-                byte[] dll = X3(g, e);
-                _jitBase = LoadBare(dll);
-                _jitTextVa = PeTextVa(dll);
-                var ex = ParseExports(dll);
-                _jitInstall = Mk<JitInstall>(ex["InstallJitHook"]);
-                _jitSetKey = Mk<JitSetKey>(ex["SetJitHookKey"]);
-                _jitAddSig = Mk<JitAddSig>(ex["AddPayloadSig"]);
-                Array.Clear(dll, 0, dll.Length);
-                return;
-            }
+            var e = l[_iJit];
+            byte[] dll = X3(g, e);
+            _jitBase = LoadBare(dll);
+            _jitTextVa = PeTextVa(dll);
+            var ex = ParseExports(dll);
+            _jitInstall = Mk<JitInstall>(ex["InstallJitHook"]);
+            _jitSetKey = Mk<JitSetKey>(ex["SetJitHookKey"]);
+            _jitAddSig = Mk<JitAddSig>(ex["AddPayloadSig"]);
+            Array.Clear(dll, 0, dll.Length);
         }
     }
 
     private static void InjectSigs(byte[] g, List<(string, uint, uint, uint)> l)
     {
-        foreach (var e in l)
+        if (_iSig >= 0 && _iSig < l.Count)
         {
-            if (e.Item1 == S_SIG)
-            {
-                byte[] sig = X3(g, e);
-                for (int i = 0; i + 4 <= sig.Length; i += 4)
-                    _jitAddSig(BitConverter.ToUInt32(sig, i));
-                Array.Clear(sig, 0, sig.Length);
-                return;
-            }
+            var e = l[_iSig];
+            byte[] sig = X3(g, e);
+            for (int i = 0; i + 4 <= sig.Length; i += 4)
+                _jitAddSig(BitConverter.ToUInt32(sig, i));
+            Array.Clear(sig, 0, sig.Length);
         }
     }
 

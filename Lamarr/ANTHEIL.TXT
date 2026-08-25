@@ -29,10 +29,8 @@
     40字节的marker（签名）从文件尾往前扫描定位。条目数据是明文的，谁都能拆出来
     ——这是后面所有加密的出发点。
 
-    另外，bundle header有版本差异：major 2（net5时代，无per-entry
-    compressedSize字段）；major 6+（net6+，每条目带compressedSize，还多
-    一个runtimeconfig哈希字段）。antheil重写bundle头时按payload的目标版本
-    选对应布局——老工具读新bundle会漏字段，这是单文件格式本身的版本兼容问题。
+    另外，bundle header有版本差异：major 2（net5时代，条目没有压缩大小字段）；
+    major 6+（net6+，每条目带压缩大小和runtimeconfig哈希）。
 
 
   1.2  PE与节区
@@ -104,13 +102,13 @@
       - 内联 / Tier1 / OSR提前读方法体 -> 读到密文 -> 拦下
       - 内存里解密过的IL是临时的，编译完即弃
 
-    这个决定把"加密"从存储问题变成了JIT层的运行时问题——这样就有了jithook。
+    这个决定把"加密"从存储问题变成了JIT层的运行时问题——于是就有了jithook
 
       1. 方法体加密    MethodBodyEncryptor：写密文 + CRC32签名表
       2. JIT解密      jithook：compileMethod解密 + canInline门禁
-      3. 条目伪装      Iamdec真解码器vs lamdec蜜罐 + 随机诱饵
+      3. 条目伪装      真解码器 vs 蜜罐 + 随机诱饵
 
-    逆向者能拿到的完整明文只有以万行计的机器码。
+    如此，逆向者能拿到的完整明文只有以万行计的机器码。
 
 
 ------------------------------------------------------------------------------
@@ -122,9 +120,8 @@
       PE头
       .text       anthel_stub.asm入口壳（找hostfxr）
       marker 40B  8B header偏移 + 32B签名
-      .rdata      .lamapp：seed/头/表/名称/4KB页数据
-      bundle数据  BootAntheil + 依赖 + Iamdec + !!jhk +
-                   !!sig + lamdec蜜罐 + 随机诱饵
+      .rdata      .lamapp：seed/头/表/名称/数据区（解码器/钩子/签名表/蜜罐/诱饵）
+      bundle数据  BootAntheil + deps.json + runtimeconfig（CLR需要真名）
       bundle头    重建的.NET bundle header（文件尾）
 
 
@@ -158,15 +155,15 @@
 
       BootAntheil    主程序条目，替换原主程序
       依赖dll         托管依赖，方法体已加密
-      Iamdec         真流式解码器（antheil_paged.asm）
-      !!jhk          jithook.dll
-      !!sig          CRC32签名表，每方法4字节
-      lamdec         假gzip解码器（z0.dll / antlion_deco.asm）
+      真解码器      antheil_paged.asm（4KB页解码，导出Iamdec）
+      jithook       jithook.dll
+      签名表        CRC32签名表，每方法4字节
+      蜜罐          假gzip解码器（z0.dll / antlion_deco.asm）
       *decoy*        4个随机命名/随机数据条目
 
-    逆向者凭直觉找解码器，先撞上的是小写L的lamdec——蜜罐；真解码器叫Iamdec（大写i）
-    "!!" 前缀模仿.NET内部标记，让 !!jhk / !!sig混在列表里不显眼。随机诱饵每次
-    打包都不同（名字4~16个小写字母，数据64~512随机字节）。
+     名字区写入时，解码器/钩子/签名表/蜜罐这4个特殊条目换成随机假名（和
+     诱饵名同款的小写串），运行时按表索引定位——产物里没有特殊条目名，
+     也没有加密特征，名字区只有主程序名、依赖名和一堆随机小写串。
 
 
   4.2  .lamapp区
@@ -183,6 +180,8 @@
     开头64字节是假metadata：伪造 #~ 和 #Strings两个stream，偏移指向诱饵区，按标准
     格式解析的工具会顺着 #~ 走进假数据。seed每次打包随机（Guid "N" 格式），两次产物
     互不相同——重打包等于整体换钥匙。bundle头四个u32都与派生key异或，直接读是噪音。
+    数据区：真实条目、诱饵、垃圾块按随机顺序物理排列，核心被穿插打散；gzip永远靠后，
+    每个前后都夹着垃圾块；表里的compOff指向实际位置。
 
 
   4.3  BSJB伪头逐字节
@@ -238,8 +237,8 @@
       1. 成本：AES每次编译现场解密的开销大得多，XOR逐字节几乎免费。
           方法体可能被编译两遍（Tier0/Tier1），开销会被放大。
       2. 威胁模型：目标不是密码学强度，而是挡静态反编译和
-          通用工具流水线。XOR密文足以让它们全部翻车。seed随机+重打包换钥匙
-          使得两次产物互不相同，避免固定密钥被复用。
+          通用工具流水线。XOR密文足以让它们全部翻车。seed随机+重打包换钥匙，
+          两次产物互不相同，避免固定密钥被复用。
     简单来说：密码学选型要匹配威胁模型和性能——防君子不防小人，
     但这里的"君子"（通用工具）已经全灭了。
 
@@ -265,7 +264,7 @@
       AD()              反调试：先确认环境干净
       X0()              伪造MethodDesc：给CLR一个假方法
       X1()              解析.lamapp：读seed、派生key、解表
-      EnsureDecoder()   找Iamdec条目，LoadBare裸映射
+      EnsureDecoder()   按索引取解码器，LoadBare裸映射
       X3()              解出主程序条目（XOR或按页解码）
       W1()              注册依赖解析 + 写元数据
       最后invoke        调主程序入口
@@ -300,7 +299,7 @@
      |       |-- AD()             反调试三查
      |       |-- X0()             伪造MethodDesc
      |       |-- X1()             解析.lamapp（seed -> key -> 表）
-     |       |-- EnsureDecoder()  找Iamdec -> LoadBare
+     |       |-- EnsureDecoder()  按索引取解码器 -> LoadBare
      |       |-- X3()             解主程序（XOR / 按页Iamdec）
      |       |-- W1()             写元数据 + 注册Resolving
      |       -- invoke            主程序Main
@@ -326,16 +325,14 @@
 
     四件事：读seed异或还原；K1派生主key；K2置换 + K3逐槽派生slot key；
     按置换解开bundle头，再按20字节一条解条目表。表里有真条目也有诱饵，
-    X1只解出来，不区分——区分是后面各步按名字做的事。
+    X1只解出来，不区分——区分是后面各步按表索引做的事。
 
 
   5.6  EnsureDecoder与LoadBare
 
-    EnsureDecoder在条目表里找名字等于"Iamdec"的条目，取出dll字节异或KSeed还原，
-    LoadBare映射进内存。
-
-    LoadBare为什么可以这么"裸"：Iamdec是自己写的dll，无导入表、无重定位、
-    最重要的是位置无关。映射只需三步：
+    EnsureDecoder按表索引取解码器条目，取出dll字节异或KSeed还原，LoadBare映射
+    进内存。解码器固定排在真条目末尾，索引在X1解析时就定了。LoadBare之所以能这么
+    "裸"，全靠Iamdec：无导入表、无重定位、最重要的是位置无关。映射只需三步：
 
       - 读PE头，找.text / .rdata两个节
       - VirtualAlloc一块RWX
@@ -446,10 +443,9 @@
     解密必须是幂等的——每次从密文XOR，不能解过一次就标记"已解密"然后放明文，
     否则第二次编译读到的是已经损坏的中间态。
 
-    还有一个必须讲清的前提：R2R（ReadyToRun）。如果程序集带R2R预编译的
-    native映像，JIT根本不编译该方法——方法体加密就绕过了。Antheil是安全的，
-    因为打包的是普通FDD单文件，不生成R2R；加密方法体时也没有R2R版本可走。
-    这一点是"磁盘密文"成立的前提。
+    还有一个前提：R2R（ReadyToRun）。如果程序集带R2R预编译的native映像，JIT根本
+    不编译该方法——方法体加密就绕过了。Antheil是安全的，因为打包的是普通FDD单文件，
+    不生成R2R；加密方法体时也没有R2R版本可走。这一点是"磁盘密文"成立的前提。
 
     附：DOTNET_TieredCompilation=0可关闭分层编译。对逆向者来说这会让
     编译路径变简单（只有一次编译），但也说明jithook的拦截点无论分层开关如何
@@ -471,8 +467,7 @@
           计算code size（含局部变量签名、EH区位置）
           方法体字节XOR jit_key          //磁盘写密文
           记录CRC32(method) 到签名表     //供jithook匹配
-    签名表整体作为 !!sig条目进bundle；密钥jit_key打包与
-    运行时同一派生（Fnv1a(KSeed)）。
+    签名表作为独立条目进lamapp；密钥jit_key打包与运行时同一派生（Fnv1a(KSeed)）。
 
     为什么用CRC32：它是"指纹"不是"密钥"。jithook在编译现场只有
     MethodDesc，用指纹快速判断"这个方法被加密过没有"——查表在解密之前，
@@ -489,8 +484,8 @@
 
     调试器也读IL：请求IL代码体（GetILCodeBody）、在方法上下断点（patch IL）。
     这些请求走的是调试器的通道，不经过compileMethod的解密。所以逆向者调试
-    加密方法时，拿到的IL还是密文——断点打在密文上没有任何意义。这一点和反调试
-    一起，构成了"动态分析也要先过密文这一关"的最后一层。
+    加密方法时，拿到的IL还是密文——断点打在密文上没有任何意义。这是反调试之外，
+    动态分析还要过的最后一关。
 
 
   jithook.dll导出
@@ -508,27 +503,24 @@
   七  伪装与诱饵
 ------------------------------------------------------------------------------
 
-  逆向者的第一步通常是找解码器：在bundle条目里翻名字。
-  既然第一步可以被预测，就让第一步走错。
+  逆向者的第一步通常是找解码器——在bundle条目里翻名字：既然这步可被预测，就让它走错。
 
 
   7.1  两个解码器
 
-      Iamdec    真解码器（antheil_paged.asm）。名字像拼写错误，
-                只有400行，更不像解码器。
-
-      lamdec    蜜罐（z0.dll = antlion_deco.asm）。长达1500行
-                且名字最像解码器，装的却是假gzip解码器，导出
-                z0_init / z0_read / z0_align / z0_size。
+     真解码器（antheil_paged.asm）：仅400行，名字区是随机假名，运行时按表索引取。
+     蜜罐（z0.dll = antlion_deco.asm）：长达1500行，装的却是假gzip解码器，导出
+     z0_init / z0_read / z0_align / z0_size。
 
 
   7.2  随机诱饵
 
-    打包器额外生成4个随机条目混进表里，名字4~16个小写字母；数据不是纯随机，
-    而是压缩的、包含随机x64指令的合法gzip流，解压像被压缩的代码，诱导反汇编。
-    整张表"内容很多"，真实目标淹没其中。
+    打包器额外生成4个随机条目混进表里，名字4~16个小写字母。第一个是完整伪PE
+    （MZ + DOS stub + PE签名 + 伪造节表 + 随机x64代码），明文存放，PE工具会
+    识别为合法dll，提取或加载即失败；其余3个是gzip流（压缩随机x64指令）。真实
+    条目压缩流里残留的MZ片段也故意不清理，作为额外的伪PE痕迹。
 
-    Pheropod是bundle层诱饵的代号，包含lamdec假解码器蜜罐和gzip诱饵，
+    Pheropod是bundle层诱饵的代号，包含假解码器蜜罐和gzip诱饵，
     它不试图挡住分析者，而是让其在错误目标上浪费时间。
 
 
@@ -553,8 +545,8 @@
   8.2  build_asm.ps1
 
     一个脚本管到底：工具链查找（vswhere -> VCToolsInstallDir -> PATH，定位
-    ml64 / link）-> 编译lamarr_stub（antheil模式再加anthel_stub /Iamdec
-    以及z0三个stub）-> 编译jithook -> 带 -Pack时继续调LamarrNativePack打包
+    ml64 / link）-> 编译lamarr_stub（antheil模式为anthel_stub / Iamdec / z0
+    三个stub）-> 编译jithook -> 带 -Pack时继续调LamarrNativePack打包
 
     参数：
       -AsmDir              汇编源码目录
@@ -575,7 +567,7 @@
           LoadPheropod / LoadPayload：读入各输入
       2. MakeSeed：生成随机seed（每次打包都不同）
       3. RebuildBundle：主程序换成BootAntheil，加密依赖方法体，组装条目
-         （Iamdec/!!jhk/!!sig/lamdec/诱饵）
+         （解码器/钩子/签名表/蜜罐/诱饵）
       4. ComputeLayout：按节对齐重算布局
       5. PatchStubVars：替换stub模板标记（##APPNAME##等），写bundle头偏移
       6. WriteFile：按布局写盘
@@ -585,7 +577,7 @@
 
   8.4  验证
 
-      --lamarr-selftest  解析lamapp -> 找Iamdec -> 解主程序 
+      --lamarr-selftest  解析lamapp -> 取解码器 -> 解主程序 
                           -> FNV对比，返回0通过
       EhTestE            大EH表（11个catch）：验fat EH拷
       EhTestS            单线程：基础链路
@@ -610,7 +602,7 @@
   常见问题
       0x02345678 / FailFast  -> 内联读密文（canInline没装）
       EH越界                 -> fat表漏拷
-      selftest非0            -> Iamdec条目名不匹配或key不一致
+      selftest非0            -> 解码器索引取错或key不一致
       ml64找不到             -> 缺VS Build Tools
 
 
@@ -631,7 +623,7 @@
       方法体密文           dump磁盘      密文，反编译失败
       反调试FailFast       attach        进程自杀
       canInline门禁       放行内联       JIT读密文 -> 自崩
-      Iamdec/lamdec混淆   找解码器       拿到蜜罐z0.dll
+      条目假名化       找解码器       名字全是随机串
 
 
   9.3  已知弱点

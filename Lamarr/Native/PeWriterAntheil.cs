@@ -70,10 +70,6 @@ internal class PeWriterAntheil
     private const int iHashOff = 96;
     private const int iHeadOff = 100;
     private const int iTblOff = 116;
-    private const string sDecoder = "Iamdec";
-    private const string sJit = "!!jhk";//jithook钩子dll
-    private const string sSig = "!!sig";//方法体密文CRC32签名表
-    private const string sPheropod = "lamdec";
 
     //密钥派生 常量A^B参与运算
     private static readonly uint uLK0A = 0x12345678, uLK0B = 0x9328CBBD;//0x811C9DC5
@@ -338,6 +334,9 @@ internal class PeWriterAntheil
     {
         var rgRaw = new List<byte[]>();
         var rgNames = new List<string>();
+        int iDecIdx = -1, iJitIdx = -1, iSigIdx = -1, iHoneyIdx = -1;
+        var rng = new Random(Environment.TickCount ^ (int)(DateTime.UtcNow.Ticks & 0x7FFFFFFF));
+        string RandName() => new string(Enumerable.Range(0, rng.Next(4, 16)).Select(_ => (char)('a' + rng.Next(26))).ToArray());
 
         {
             long lOndisk = rgCsz[iMainEntry] > 0 ? rgCsz[iMainEntry] : rgSz[iMainEntry];
@@ -352,8 +351,8 @@ internal class PeWriterAntheil
             Array.Copy(rgPayload, (int)(iBundleDataStart + rgRel[i]), rgDll, 0, (int)lOndisk);
             rgRaw.Add(rgDll); rgNames.Add(rgName[i]);
         }
-        //追加真解码器Iamdec条目
-        rgRaw.Add(rgDecoder); rgNames.Add(sDecoder);
+        iDecIdx = rgRaw.Count;
+        rgRaw.Add(rgDecoder); rgNames.Add(RandName());
 
         if (rgJitHook != null)
         {
@@ -370,14 +369,17 @@ internal class PeWriterAntheil
             var rgSigBytes = new byte[rgAllCrcs.Count * 4];
             for (int i = 0; i < rgAllCrcs.Count; i++)
                 BitConverter.GetBytes(rgAllCrcs[i]).CopyTo(rgSigBytes, i * 4);
-            rgRaw.Add(rgJitHook); rgNames.Add(sJit);
-            rgRaw.Add(rgSigBytes);  rgNames.Add(sSig);
+            iJitIdx = rgRaw.Count;
+            rgRaw.Add(rgJitHook); rgNames.Add(RandName());
+            iSigIdx = rgRaw.Count;
+            rgRaw.Add(rgSigBytes);  rgNames.Add(RandName());
         }
 
         //附加jithook钩子与诱饵
         if (rgPheropod != null)
         {
-            rgRaw.Add(rgPheropod); rgNames.Add(sPheropod);
+            iHoneyIdx = rgRaw.Count;
+            rgRaw.Add(rgPheropod); rgNames.Add(RandName());
             Console.WriteLine($"[pheropod] gzip decoy: {rgPheropod.Length} bytes");
         }
 
@@ -385,24 +387,25 @@ internal class PeWriterAntheil
 
         //生成随机诱饵条目混淆bundle
         const int iDecoys = 4;
-        var rng = new Random(Environment.TickCount ^ iCount);
         var rgDecName = new byte[iDecoys][];
         var rgDecData = new byte[iDecoys][];
         var rgDecoyOff = new uint[iDecoys];
-        uint uDecoyLen = 0;
         for (int i = 0; i < iDecoys; i++)
         {
             int iNl = rng.Next(4, 16);
             rgDecName[i] = new byte[iNl];
             for (int j = 0; j < iNl; j++)
                 rgDecName[i][j] = (byte)('a' + rng.Next(26));
-            byte[] rgPlain = GenRandomX64(rng, 64, 512);
-            using var ms = new MemoryStream();
-            using (var gz = new GZipStream(ms, CompressionLevel.SmallestSize, true))
-                gz.Write(rgPlain, 0, rgPlain.Length);
-            rgDecData[i] = ms.ToArray();
-            rgDecoyOff[i] = uDecoyLen;
-            uDecoyLen += (uint)rgDecData[i].Length;
+            if (i == 0)
+                rgDecData[i] = BuildFakePe(rng);
+            else
+            {
+                byte[] rgPlain = GenRandomX64(rng, 64, 512);
+                using var ms = new MemoryStream();
+                using (var gz = new GZipStream(ms, CompressionLevel.SmallestSize, true))
+                    gz.Write(rgPlain, 0, rgPlain.Length);
+                rgDecData[i] = ms.ToArray();
+            }
         }
 
         var rgNameBytes = new byte[iCount + iDecoys][];
@@ -423,14 +426,11 @@ internal class PeWriterAntheil
         var rgRawLen = new uint[iCount];
         var rgCompLen = new uint[iCount];
         var rgCompOff = new uint[iCount];
-        uint uDataOff = 0;
-        int iDec = -1;
         for (int i = 0; i < iCount; i++)
         {
             rgRawLen[i] = (uint)rgRaw[i].Length;
-            if (rgNames[i] == sDecoder || rgNames[i] == sJit || rgNames[i] == sSig || rgNames[i] == sPheropod)
+            if (i == iDecIdx || i == iJitIdx || i == iSigIdx || i == iHoneyIdx)
             {
-                if (rgNames[i] == sDecoder) iDec = i;
                 rgCompLen[i] = rgRawLen[i];
                 rgBlocks[i] = XorBytes(rgRaw[i], rgKSeed);
             }
@@ -443,12 +443,35 @@ internal class PeWriterAntheil
                     throw new InvalidOperationException($"Lamarr encode failed: {rgNames[i]}");
                 rgCompLen[i] = pcb;
             }
-            rgCompOff[i] = uDataOff;
-            uDataOff += rgCompLen[i];
+        }
+
+        var rgPhys = new List<(int Kind, int Idx)>();
+        var rgOrder = Enumerable.Range(0, iCount).OrderBy(_ => rng.Next()).ToArray();
+        for (int i = 0; i < rgOrder.Length; i++)
+        {
+            rgPhys.Add((0, rgOrder[i]));
+            if (i == 0) rgPhys.Add((1, 0));
+            if (i % 2 == 1) rgPhys.Add((2, -1));
+        }
+        rgPhys.Add((2, -1));
+        for (int i = 1; i < iDecoys; i++)
+        {
+            rgPhys.Add((2, -1));
+            rgPhys.Add((1, i));
+        }
+        rgPhys.Add((2, -1));
+
+        var rgGarbage = new List<int>();
+        uint uDataOff = 0;
+        foreach (var (kind, idx) in rgPhys)
+        {
+            if (kind == 0) { rgCompOff[idx] = uDataOff; uDataOff += rgCompLen[idx]; }
+            else if (kind == 1) { rgDecoyOff[idx] = uDataOff; uDataOff += (uint)rgDecData[idx].Length; }
+            else { int sz = rng.Next(32, 257); rgGarbage.Add(sz); uDataOff += (uint)sz; }
         }
 
         uint uTableLen = (uint)((iCount + iDecoys) * 20);
-        uint uTotalLen = iTblOff + uTableLen + uNameAreaLen + uDataOff + uDecoyLen;
+        uint uTotalLen = iTblOff + uTableLen + uNameAreaLen + uDataOff;
         rgLamApp = new byte[uTotalLen];
 
         uint cbOrigTotal = 0;
@@ -461,8 +484,8 @@ internal class PeWriterAntheil
         //假BSJB根 XOR写入lamapp头部
         int iNameOff = iTblOff + (iCount + iDecoys) * 20;
         int iDoff = iNameOff + (int)uNameAreaLen;
-        int iDecOff = iDec >= 0 ? iDoff + (int)rgCompOff[iDec] : 0;
-        byte[] rgBsjb = BuildFakeBsjb(iNameOff, (int)uNameAreaLen, iDecOff, iDec >= 0 ? (int)rgCompLen[iDec] : 0);
+        int iDecOff = iDecIdx >= 0 ? iDoff + (int)rgCompOff[iDecIdx] : 0;
+        byte[] rgBsjb = BuildFakeBsjb(iNameOff, (int)uNameAreaLen, iDecOff, iDecIdx >= 0 ? (int)rgCompLen[iDecIdx] : 0);
         for (int i = 0; i < iBsjbLen; i++)
             rgLamApp[i] = (byte)(rgBsjb[i] ^ rgKBsjb[i % rgKBsjb.Length]);
 
@@ -496,7 +519,7 @@ internal class PeWriterAntheil
                 rgF[0] = (uint)rgNameBytes[i].Length;
                 rgF[1] = (uint)rgDecData[iDd].Length;
                 rgF[2] = (uint)rgDecData[iDd].Length;
-                rgF[3] = uDataOff + rgDecoyOff[iDd];
+                rgF[3] = rgDecoyOff[iDd];
             }
             int iOff = iTblOff + i * 20;
             for (int iS = 0; iS < 4; iS++)
@@ -511,10 +534,27 @@ internal class PeWriterAntheil
         }
 
         int iDataBase = iTblOff + (iCount + iDecoys) * 20 + (int)uNameAreaLen;
-        for (int i = 0; i < iCount; i++)
-            Array.Copy(rgBlocks[i], 0, rgLamApp, iDataBase + (int)rgCompOff[i], rgCompLen[i]);
-        for (int i = 0; i < iDecoys; i++)
-            Array.Copy(rgDecData[i], 0, rgLamApp, iDataBase + (int)(uDataOff + rgDecoyOff[i]), rgDecData[i].Length);
+        uint uPos = 0; int iG = 0;
+        foreach (var (kind, idx) in rgPhys)
+        {
+            if (kind == 0)
+            {
+                Array.Copy(rgBlocks[idx], 0, rgLamApp, (int)(iDataBase + uPos), rgCompLen[idx]);
+                uPos += rgCompLen[idx];
+            }
+            else if (kind == 1)
+            {
+                Array.Copy(rgDecData[idx], 0, rgLamApp, (int)(iDataBase + uPos), rgDecData[idx].Length);
+                uPos += (uint)rgDecData[idx].Length;
+            }
+            else
+            {
+                byte[] gb = new byte[rgGarbage[iG++]];
+                rng.NextBytes(gb);
+                Array.Copy(gb, 0, rgLamApp, (int)(iDataBase + uPos), gb.Length);
+                uPos += (uint)gb.Length;
+            }
+        }
 
         Console.WriteLine($"  .rdata: {iCount} entry(s) + {iDecoys} decoy, {cbOrigTotal} -> {rgLamApp.Length} bytes (Lamarr)");
     }
@@ -576,6 +616,50 @@ internal class PeWriterAntheil
                     return b; }
             default: return new byte[] { 0xC3 };                                 //ret
         }
+    }
+
+    private static byte[] BuildFakePe(Random rng)
+    {
+        using var ms = new MemoryStream();
+        ms.Write(new byte[] { 0x4D, 0x5A, 0x90, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00 }, 0, 16);
+        ms.Write(new byte[0x20], 0, 0x20);
+        byte[] dos = Encoding.ASCII.GetBytes("This program cannot be run in DOS mode.\r\n\r\n$");
+        ms.Write(dos, 0, dos.Length);
+        ms.Position = 0x3C;
+        ms.Write(new byte[] { 0x80, 0x00, 0x00, 0x00 }, 0, 4);//e_lfanew -> PE
+        ms.Position = 0x80;
+        ms.Write(Encoding.ASCII.GetBytes("PE\0\0"), 0, 4);
+        var c = new BinaryWriter(ms, Encoding.ASCII, true);
+        c.Write((ushort)0x8664); //Machine x64
+        c.Write((ushort)2);      //NumberOfSections
+        c.Write(rng.Next());     //TimeDateStamp
+        c.Write(0u); c.Write(0u);//PtrToSymbolTable / NumSymbols
+        c.Write((ushort)0xF0);   //SizeOfOptionalHeader
+        c.Write((ushort)0x2022); //Characteristics
+        c.Write((ushort)0x20B);  //Magic PE32+
+        c.Write((byte)0); c.Write((byte)0);
+        c.Write(0u); c.Write(0u); c.Write(0u); c.Write(0u);
+        c.Write(0x180000000UL);  //ImageBase
+        c.Write(0x1000u); c.Write(0x200u);
+        c.Write((ushort)6); c.Write((ushort)0); c.Write((ushort)0); c.Write((ushort)0); c.Write((ushort)0); c.Write((ushort)0);
+        c.Write(0x4000u);        //SizeOfImage
+        c.Write(0x400u);         //SizeOfHeaders
+        c.Write(0u);             //Checksum
+        c.Write((ushort)3);      //Subsystem console
+        c.Write((ushort)0);      //DllCharacteristics
+        c.Write(0x100000UL); c.Write(0x1000UL); c.Write(0x100000UL); c.Write(0x1000UL);
+        c.Write(0u); c.Write(0u);
+        for (int i = 0; i < 16; i++) { c.Write(0u); c.Write(0u); }//数据目录
+        c.Write(Encoding.ASCII.GetBytes(".text\0\0\0")); c.Write(0x1000u); c.Write(0x1000u); c.Write(0x400u); c.Write(0x200u); c.Write(0u); c.Write(0u); c.Write(0u); c.Write(0x60000020u);
+        c.Write(Encoding.ASCII.GetBytes(".rdata\0\0")); c.Write(0x2000u); c.Write(0x200u); c.Write(0x600u); c.Write(0x600u); c.Write(0u); c.Write(0u); c.Write(0u); c.Write(0x40000040u);
+        c.Write(GenRandomX64(rng, 64, 256));//伪代码段
+        byte[] res = ms.ToArray();
+        //2字节交错 0x80起 MZ+DOS头明文保留
+        for (int i = 0x80; i + 1 < res.Length; i += 2)
+        {
+            byte tb = res[i]; res[i] = res[i + 1]; res[i + 1] = tb;
+        }
+        return res;
     }
 
     private static uint Fnv1a(byte[] rgD)

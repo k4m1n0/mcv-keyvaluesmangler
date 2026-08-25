@@ -101,7 +101,7 @@ internal static class Program
             catch (Exception ex) { Console.Error.WriteLine($"lamdec dll error: {ex.Message}"); }
             Console.Error.WriteLine($"lamdec: rc={rcAsm}, match={bAsm}");
 
-            //分页解码对照 Iamdec
+            //分页解码对照Iamdec
             byte[] rgRef = new byte[rgIn.Length];
             bool bRef = false;
             try
