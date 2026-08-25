@@ -476,9 +476,8 @@ Abstract
         major >= 6 (net6+, compressedSize and a runtimeconfig hash
         field).
 
-        An antheil variant extends this layout with method-body
-        encryption and an extended entry set (decoder, jithook,
-        signature table, honeypot). See Lamarr/ANTHEIL.TXT.
+        An antheil variant extends this layout with method-body encryption
+        and an extended entry set (e.g. decoder, jithook, signature table).
 
     6.3.  Host Compatibility
 
