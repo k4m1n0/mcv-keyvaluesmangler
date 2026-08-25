@@ -299,9 +299,6 @@
     go with mPress. Also: Packer=native is FDD only, SelfContained builds
     need the apphost the stub deliberately does not map
 
-  SEE ALSO
-    antheil variant (method-body encryption, jithook): Lamarr/ANTHEIL.TXT
-
 ==============================================================================
   0C. CREDITS
 ==============================================================================
