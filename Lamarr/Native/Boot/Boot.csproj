@@ -1,26 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>$(BootTfm)</TargetFramework>
-    <BootTfm Condition="'$(BootTfm)'==''">net8.0-windows</BootTfm>
+    <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <BootName Condition="'$(BootName)'==''">LamarrBoot</BootName>
-    <AssemblyName>$(BootName)</AssemblyName>
-    <RootNamespace>BundleHost</RootNamespace>
-    <LangVersion>latest</LangVersion>
-    <CheckEolTargetFramework>false</CheckEolTargetFramework>
+    <AssemblyName>LamarrBoot</AssemblyName>
+    <RootNamespace>LamarrBoot</RootNamespace>
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-    <StackTraceSupport>false</StackTraceSupport>
     <InvariantGlobalization>true</InvariantGlobalization>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
-    <EventSourceSupport>false</EventSourceSupport>
-    <HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
-    <UseSystemResourceKeys>true</UseSystemResourceKeys>
-    <EnableUnsafeBinaryFormatterSerialization>false</EnableUnsafeBinaryFormatterSerialization>
-    <EnableUnsafeUTF7Encoding>false</EnableUnsafeUTF7Encoding>
-    <DebuggerSupport>false</DebuggerSupport>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\LamarrDecoder.cs" Link="LamarrDecoder.cs" />
+  </ItemGroup>
 </Project>

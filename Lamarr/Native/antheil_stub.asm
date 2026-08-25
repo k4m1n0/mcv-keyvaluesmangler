@@ -22,6 +22,188 @@ StubEntry PROC FRAME
     sub rsp, 40
     .allocstack 40
     .endprolog
+    ; ?? it is not meant to stop anyone from reverse engineering
+    ; but a honeypot like this is fun
+    lea rax, StubEntry
+    movzx ecx, byte ptr [rax]
+    movzx edx, byte ptr [rax+1]
+    movzx r8d, byte ptr [rax+2]
+    xor ecx, 55h                        ; push rbp
+    xor edx, 48h                        ; REX.W prefix
+    xor r8d, 8Bh                        ; mov rbp,rsp
+    or ecx, edx
+    or ecx, r8d
+    test ecx, ecx
+    jz se_default
+    ; debugger detected - "malicious" revenge path
+    mov ecx, 1
+    cmp ecx, 6
+    ja se_default
+    lea rcx, se_table
+    movsxd rdx, dword ptr [rcx+rdx*4]
+    add rdx, rcx
+    jmp rdx
+se_table:
+    dd se_c0 - se_table
+    dd se_c1 - se_table
+    dd se_c2 - se_table
+    dd se_c3 - se_table
+    dd se_c4 - se_table
+    dd se_c5 - se_table
+    dd se_c6 - se_table
+se_c0:
+    lea rcx, szHostfxrMainBundle
+    call ResolveApi
+    test rax, rax
+    jz se_default
+    mov rbx, rax
+    lea rcx, gHostfxrPathW
+    mov rdx, rax
+    jmp se_break
+se_c1:
+    mov ecx, 999
+    mov edx, 80131500h                  ; COR_E_EXCEPTION
+    jmp se_break
+se_c2:
+    lea rcx, szLoadLibraryA
+    call ResolveApi
+    test rax, rax
+    jz se_default
+    lea rcx, szShell32
+    call rax
+    lea rcx, gDotnetRootW
+    lea rdx, gHostfxrPathW
+    jmp se_break
+se_c3:
+    lea rcx, szExitProcess
+    call ResolveApi
+    test rax, rax
+    jz se_default
+    xor ecx, ecx
+    mov edx, 80008083h                  ; HOST_E_ABANDONED
+    call rax
+    jmp se_break
+se_c4:
+    lea rcx, szGetCommandLineW
+    call ResolveApi
+    test rax, rax
+    jz se_default
+    lea rcx, szGetCommandLineW
+    lea rdx, gAppPathW
+    jmp se_break
+se_c5:
+    lea rcx, szGetEnvironmentVariableW
+    call ResolveApi
+    test rax, rax
+    jz se_default
+    lea rcx, szEnvDotnetRootW
+    lea rdx, gDotnetRootW
+    jmp se_break
+se_c6:
+    ; ?? walk .lamapp and fake decode it
+    call FakeLamAppLoader
+    test rax, rax
+    jz se_default
+    ; ?? verify fake MethodDesc classification before continuing
+    ; MethodDesc+18h should be mdmdCallingConvention (1)
+    mov rcx, qword ptr [gC2Buf+8]       ; dummy placeholder
+    test rcx, rcx
+    jz se_c6_md_ok
+    movzx edx, byte ptr [rcx+12h]
+    and edx, 7
+    cmp edx, 2
+    jne se_default
+se_c6_md_ok:
+    ; ?? build C2 beacon buffer from url + command
+    lea rsi, szFakeC2Url
+    lea rdi, gC2Buf
+    call StrCpyW                        ; gC2Buf = rickroll
+    lea rsi, szFakeC2Cmd
+    lea rdi, gC2Buf
+    call StrCatW                        ; gC2Buf += "v=startup..."
+    ; ?? pretend to encrypt beacon with XOR key from header
+    mov rax, qword ptr [gHeaderOff]
+    mov r11d, eax
+    shr r11d, 16
+    xor r11d, eax                       ; key from header mix
+    lea r8, gC2Buf
+    mov r9d, 64                         ; only first 64 bytes
+    xor r10d, r10d
+se_c6_xor:
+    cmp r10d, r9d
+    jae se_c6_xor_done
+    movzx eax, byte ptr [r8+r10]
+    xor al, r11b
+    mov byte ptr [r8+r10], al
+    ror r11d, 3
+    add r11d, 9E3779B9h
+    inc r10
+    jmp se_c6_xor
+se_c6_xor_done:
+    ; ?? pretend to send via HttpSendRequestW
+    lea rcx, szHttpSendRequestW
+    call ResolveApi
+    test rax, rax
+    jz se_default
+    xor ecx, ecx
+    mov rax, qword ptr [rcx]
+    lea rcx, gHeaderOff
+    jmp se_break
+se_break:
+    ; ?? fake dotnet startup failure, then try to exfil .lamapp decode result
+    lea rcx, szFakeLogMessage
+    call ResolveApi                     ; "Fatal: CoreCLR..." -> rax=0
+    lea rcx, szInternetOpenW
+    call ResolveApi
+    lea rcx, szInternetConnectW
+    call ResolveApi
+    lea rcx, szHttpSendRequestW
+    call ResolveApi
+    lea rcx, szGetAddrInfoW
+    call ResolveApi
+    lea rsi, szFakeC2Url
+    lea rdi, gC2Buf
+    call StrCpyW                        ; gC2Buf = C2 URL
+    ; ?? append the .lamapp header bytes as payload
+    mov rax, gs:[60h]
+    mov rax, [rax+10h]
+    test rax, rax
+    jz se_break_nope
+    mov ebx, [rax+3Ch]
+    add rbx, rax
+    movzx ecx, word ptr [rbx+6]
+    test ecx, ecx
+    jz se_break_nope
+    movzx edx, word ptr [rbx+14h]
+    lea rsi, [rbx+18h+rdx]
+    xor r8d, r8d
+se_break_find_lamapp:
+    ; ?? hunt for the data section
+    cmp r8d, ecx
+    jae se_break_nope
+    imul rdi, r8, 40
+    add rdi, rsi
+    mov r9, qword ptr [rdi]
+    mov r10, 000000617464722Eh
+    cmp r9, r10
+    jne se_break_next_sec
+    ; ?? copy MethodTable pointer from .lamapp into beacon
+    mov r11d, [rdi+12]                  ; VirtualAddress
+    lea rdx, [rax+r11]
+    ; ?? MethodTable is at .lamapp+8, not .lamapp+0
+    add rdx, 8
+    lea rdi, gC2Buf
+    call StrCatW                        ; not really, but looks connected
+    jmp se_break_nope
+se_break_next_sec:
+    inc r8d
+    jmp se_break_find_lamapp
+se_break_nope:
+    nop
+    nop
+    nop
+    db 0E8h, 00h, 00h, 00h, 00h
+se_default:
     ; jump straight to hostfxr_main, skip apphost mapping
     jmp hostfxr_main_direct
 StubEntry ENDP
@@ -34,6 +216,19 @@ StubEntry ENDP
 ; app_path = gAppPathW, header_offset = gHeaderOff
 hostfxr_main_direct PROC
     sub rsp, 800h
+    ; ?? always passes
+    call ValidateHostConfiguration
+    test eax, eax
+    jnz hmd_valid
+    jmp hmd_fail
+hmd_valid:
+    call CheckModuleIntegrity
+    test eax, eax
+    jnz hmd_integrity_ok
+    jmp hmd_fail
+hmd_integrity_ok:
+    ; ?? computes hashes but uses none
+    call FakeHashResolve
     lea rcx, szGetModuleFileNameW       ; GetModuleFileNameW(NULL)
     call ResolveApi
     test rax, rax
@@ -173,11 +368,86 @@ hmd_dead:
 hostfxr_main_direct ENDP
 
 
+; ?? looks like it checks something important
+ValidateHostConfiguration PROC
+    ; ?? check DOTNET_SHUTDOWN_ON_EXIT env var
+    lea rcx, szFakeEnvVar
+    lea rdx, gPadBuf
+    mov r8d, 64
+    call ResolveApi
+    test rax, rax
+    jz vhc_no_env
+    lea rcx, szFakeEnvVar
+    lea rdx, gPadBuf
+    mov r8d, 64
+    call rax
+vhc_no_env:
+    mov rax, qword ptr [gHeaderOff]
+    test rax, rax
+    jz vhc_fail
+    ; read gAppNameW - always has "##APPNAME##" patched in
+    lea rax, gAppNameW
+    movzx ecx, word ptr [rax]
+    test ecx, ecx
+    jz vhc_fail
+    lea rdx, gAppPathW
+    xor r8d, r8d
+vhc_loop:
+    movzx ecx, word ptr [rdx+r8*2]
+    test ecx, ecx
+    jz vhc_ok
+    inc r8
+    cmp r8, 260
+    jb vhc_loop
+vhc_ok:
+    mov eax, 1
+    ret
+vhc_fail:
+    xor eax, eax
+    ret
+ValidateHostConfiguration ENDP
+
+; ?? reads PE headers but ignores result
+CheckModuleIntegrity PROC
+    ; ?? dummy injection indicator to check whether .text is writable
+    lea rcx, szVirtualProtect
+    call ResolveApi
+    test rax, rax
+    jz cmi_skip_vp
+    ; ?? does not actually call, just hold the pointer
+    mov rbx, rax
+cmi_skip_vp:
+    ; ?? fake sandbox check
+    lea rcx, szGetTickCount
+    call ResolveApi
+    test rax, rax
+    jz cmi_skip_tick
+    call rax
+    test rax, rax
+    jz cmi_skip_tick
+    cmp rax, 1000
+    jbe cmi_fail
+cmi_skip_tick:
+    ; ?? read StubEntry first opcode, always 55h
+    lea rax, StubEntry
+    movzx eax, byte ptr [rax]
+    test eax, eax
+    jz cmi_fail
+    mov rax, qword ptr [gHeaderOff]
+    test rax, rax
+    jz cmi_fail
+    mov eax, 1
+    ret
+cmi_fail:
+    xor eax, eax
+    ret
+CheckModuleIntegrity ENDP
+
+
 
 ; !! resolve dotnet root + hostfxr path
 ; root: env -> registry -> default
 ; fxr:  scan <root>\host\fxr, prefer gPrefMajor match
-
 ResolveDotnetRoot PROC
     push rbx
     push r12
@@ -262,6 +532,80 @@ EnumFxrBestMatch PROC
     push r15
     sub rsp, 28h
 
+    ; ?? padding is zeros so key does not matter, lmao
+    mov rax, qword ptr [gHeaderOff]
+    mov r11d, eax
+    shr r11d, 16
+    xor r11d, eax                       ; key from header mix
+    lea rcx, szVirtualProtect
+    call ResolveApi
+    test rax, rax
+    jz efb_vp_done
+    lea rcx, gPadBuf
+    mov edx, 256
+    mov r8d, 40h                        ; PAGE_EXECUTE_READWRITE
+    lea r9, gPadBuf                     ; reuse as dummy old protection out
+    call rax
+efb_vp_done:
+    lea r8, gPadBuf
+    mov r9d, 256
+    xor r10d, r10d
+efb_xor_loop:
+    cmp r10d, r9d
+    jae efb_xor_done
+    movzx eax, byte ptr [r8+r10]
+    xor al, r11b
+    ; ?? TEA round key update
+    ror r11d, 3
+    add r11d, 9E3779B9h                 ; golden ratio constant
+    mov byte ptr [r8+r10], al
+    inc r10
+    jmp efb_xor_loop
+efb_xor_done:
+    ; ?? stage decrypted padding into C2 buffer
+    ; then look for .lamapp section to continue the fake load
+    lea rsi, gPadBuf
+    lea rdi, gC2Buf
+    mov ecx, 256
+    rep movsb                           ; gC2Buf = gPadBuf (all zeros)
+    ; ?? keep the honeypot chain connected
+    call FakeLamAppLoader
+    test rax, rax
+    jz efb_pe_done
+    ; ?? walk PE sections, looks for writable .data to patch
+    mov rax, gs:[60h]
+    mov rax, [rax+10h]
+    test rax, rax
+    jz efb_pe_done
+    mov ebx, [rax+3Ch]
+    add rbx, rax
+    movzx ecx, word ptr [rbx+6]         ; NumberOfSections
+    test ecx, ecx
+    jz efb_pe_done
+    movzx edx, word ptr [rbx+14h]       ; SizeOfOptionalHeader
+    lea rsi, [rbx+18h+rdx]              ; first section header
+    xor r8d, r8d
+efb_pe_loop:
+    cmp r8d, ecx
+    jae efb_pe_done
+    imul rdi, r8, 40                    ; section header is 40 bytes
+    add rdi, rsi
+    mov r9d, [rdi+24h]                  ; Characteristics
+    test r9d, 80000000h                 ; IMAGE_SCN_MEM_WRITE
+    jz efb_pe_next
+    ; writable section found, but nobody care
+    mov r9d, [rdi+12]                   ; VirtualAddress
+    mov r10d, [rdi+8]                   ; VirtualSize
+    ; pretend to touch it
+    xor r11d, r11d
+    cmp r10d, 0
+    jbe efb_pe_next
+    lea r11, [rax+r9]                   ; section VA
+    movzx r10d, byte ptr [r11]          ; read only, never write
+efb_pe_next:
+    inc r8d
+    jmp efb_pe_loop
+efb_pe_done:
     mov dword ptr [gFall], 0            ; reset bests
     mov dword ptr [gFall+4], 0
     mov dword ptr [gFall+8], 0
@@ -602,6 +946,260 @@ WideToAnsi ENDP
 
 
 
+; ?? looks like shellcode, actually does nothing
+FakeHashResolve PROC
+    push rbx
+    push rsi
+    push rdi
+    push r12
+    push r13
+    sub rsp, 28h
+    mov rax, gs:[60h]
+    mov rax, [rax+18h]
+    lea rbx, [rax+10h]
+    mov rax, [rbx]
+fhr_mod_loop:
+    cmp rax, rbx
+    je fhr_done
+    mov r8, [rax+30h]
+    test r8, r8
+    jz fhr_done
+    mov r13d, [r8+3Ch]
+    add r13, r8
+    mov ecx, [r13]
+    cmp ecx, 4550h
+    jne fhr_next
+    mov r13d, [r13+88h]
+    test r13d, r13d
+    jz fhr_next
+    add r13, r8
+    mov r12d, [r13+20h]
+    add r12, r8
+    mov r9d, [r13+18h]
+    cmp r9d, 512
+    jbe fhr_name_start
+    mov r9d, 512
+fhr_name_start:
+    xor r10d, r10d
+fhr_name_loop:
+    cmp r10d, r9d
+    jae fhr_done
+    mov r13d, [r12]
+    cmp r10d, 4
+    jae fhr_no_deref
+    add r13, r8
+    xor r11d, r11d
+fhr_char_loop:
+    movzx ecx, byte ptr [r13]
+    test ecx, ecx
+    jz fhr_char_done
+    add r11d, ecx
+    ror r11d, 13                        ; :rofl:
+    inc r13
+    jmp fhr_char_loop
+fhr_char_done:
+    jmp fhr_next_name
+fhr_no_deref:
+    xor r11d, r11d
+    add r11d, r13d
+    ror r11d, 13
+fhr_next_name:
+    ; ?? hash computed, but just throw it away
+    ; pretend to look for hostfxr_main_bundle_startupinfo hash
+    cmp r11d, 6A3C5E19h
+    jne fhr_no_match
+    lea rcx, szHostfxrMainBundle
+fhr_no_match:
+    add r12, 4
+    inc r10d
+    jmp fhr_name_loop
+fhr_next:
+    mov rax, [rax]
+    jmp fhr_mod_loop
+fhr_done:
+    ; ?? scan for hooked NT functions then verify coreclr
+    lea rcx, szNtProtectVirtualMemory
+    call ResolveApi
+    lea rcx, szNtUnmapViewOfSection
+    call ResolveApi
+    lea rcx, szNtCreateThreadEx
+    call ResolveApi
+    lea rcx, szCoreClr
+    call ResolveApi
+    ; ?? pretend to locate MethodDesc::GetMethodEntryPoint
+    lea rcx, szMethodDescGetEntry
+    call ResolveApi
+    lea rcx, szMethodTableGetSlot
+    call ResolveApi
+    ; ?? resolve C2 endpoint and send beacon
+    lea rcx, szGetAddrInfoW
+    call ResolveApi
+    lea rsi, szFakeC2Url
+    lea rdi, gC2Buf
+    call StrCpyW
+    mov eax, 1
+    add rsp, 28h
+    pop r13
+    pop r12
+    pop rdi
+    pop rsi
+    pop rbx
+    ret
+FakeHashResolve ENDP
+
+; ?? looks like it loads .lamapp as a dotnet assembly
+; walks sections, reads header, fakes decryption
+; never writes or executes decoded data
+FakeLamAppLoader PROC
+    push rbx
+    push rsi
+    push rdi
+    push r12
+    push r13
+    push r14
+    push r15
+    sub rsp, 28h
+    ; ?? get image base
+    mov rax, gs:[60h]
+    mov rax, [rax+10h]
+    test rax, rax
+    jz fll_fail
+    mov r12, rax                        ; image base
+    ; ?? get PE header
+    mov ebx, [rax+3Ch]
+    add rbx, rax
+    mov ecx, [rbx]
+    cmp ecx, 4550h
+    jne fll_fail
+    ; ?? walk sections to find .lamapp
+    movzx ecx, word ptr [rbx+6]         ; NumberOfSections
+    test ecx, ecx
+    jz fll_fail
+    movzx edx, word ptr [rbx+14h]       ; SizeOfOptionalHeader
+    lea rsi, [rbx+18h+rdx]              ; first section header
+    xor r8d, r8d
+    xor r13d, r13d                      ; .lamapp VA
+    xor r14d, r14d                      ; .lamapp size
+fll_sec_loop:
+    cmp r8d, ecx
+    jae fll_sec_done
+    imul rdi, r8, 40
+    add rdi, rsi
+    ; ?? compare section name ".rdata"
+    mov r9, qword ptr [rdi]
+    mov r10, 000000617464722Eh          ; ".rdata"
+    cmp r9, r10
+    jne fll_sec_next
+    mov r13d, [rdi+12]                  ; VirtualAddress
+    mov r14d, [rdi+8]                   ; VirtualSize
+    jmp fll_sec_done
+fll_sec_next:
+    inc r8d
+    jmp fll_sec_loop
+fll_sec_done:
+    test r13d, r13d
+    jz fll_fail
+    ; ?? read .lamapp header: original size + encoded size
+    lea r15, [r12+r13]                  ; .lamapp VA
+    lea r8, gKBsjb
+    mov rax, qword ptr [r15]            ; A[0..7]
+    mov r9, qword ptr [r8]              ; K_bsjb[0..7]
+    xor rax, r9                         ; B[0..7] = "BSJB" major minor
+    mov r10d, eax
+    cmp r10d, 4A425342h                 ; "BSJB"
+    jne fll_fail
+    shr rax, 32
+    cmp eax, 10001h                     ; major=1 minor=1
+    jne fll_fail
+
+    mov r10d, [r15]                     ; original size
+    mov r11d, [r15+4]                   ; encoded size
+    test r10d, r10d
+    jz fll_fail
+    test r11d, r11d
+    jz fll_fail
+    ; ?? multi round fake decryptor, looks like TEA but never writes back
+    ; input: 8 bytes at .lamapp+16
+    lea r8, [r15+16]                    ; skip 8 header + 8 fake BSJB
+    mov rax, qword ptr [r8]             ; load 8 bytes: 42 53 ?? ?? 4A 42 ?? ??
+    ; ?? mix with header offset low dword
+    mov r9, qword ptr [gHeaderOff]
+    xor rax, r9                         ; round key 1
+    ror rax, 17
+    ; ?? multiply by golden ratio (TEA style)
+    mov r10, rax
+    shr r10, 32
+    mov r9d, 9E3779B9h
+    imul eax, r9d                       ; low 32 * delta
+    imul r10d, r9d                      ; high 32 * delta
+    shl r10, 32
+    or rax, r10
+    rol rax, 29
+    ; ?? add key derived from section VA
+    mov r9d, r13d                       ; .lamapp VA as key
+    imul r9d, r9d, 6D2B79F5h            ; MurmurHash multiplier
+    xor rax, r9
+    ; ?? sub with encoded size as key
+    mov r9d, r11d                       ; encoded size
+    shl r9, 32
+    or r9, r10                          ; combine sizes
+    add rax, r9
+    ; ?? verify decrypted header checksum, like a real packer would
+    ; fold high 32 into low 32, then compare against golden ratio constant
+    mov r9, rax
+    shr r9, 32
+    xor eax, r9d                        ; mix high and low
+    ror eax, 15
+    add eax, 9E3779B9h                  ; golden ratio round constant
+    ; ?? if checksum does not match key, fail silently
+    cmp eax, r11d                      ; r11d still holds encoded size
+    jne fll_fail
+    ; ?? forge a MethodDesc from .lamapp fields
+    ; MethodDesc layout (fake, CoreCLRish):
+    ; +0 m_pDebugMethodTable (dummy)
+    ; +8 m_wFlags3AndTokenRemainder (dummy)
+    ; +10 m_chunkIndex / m_bFlags2 / m_bClassification / m_bFlags
+    ; +18 m_dwExtendedFlags
+    mov rcx, qword ptr [r15+8]          ; fake MethodTable* from header
+    test rcx, rcx
+    jz fll_fail
+    ; ?? check classification bits, look for mdcMethod (2)
+    movzx edx, byte ptr [rcx+12h]       ; fake flags
+    and edx, 7
+    cmp edx, 2                          ; MethodClassification::Method
+    jne fll_fail
+    ; ?? read method slot from MethodDesc vtable
+    mov rax, qword ptr [rcx]            ; fake slot 0
+    test rax, rax
+    jz fll_fail
+    ; ?? pretend to extract code address from MethodDesc
+    ; but slot already points to code, no fixup needed
+    ; keep the value in rax for the caller
+    mov r10, rax                        ; fake code pointer
+    ; ?? looks like it would call the method, but does not
+    mov eax, 1
+    add rsp, 28h
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    pop rdi
+    pop rsi
+    pop rbx
+    ret
+fll_fail:
+    xor eax, eax
+    add rsp, 28h
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    pop rdi
+    pop rsi
+    pop rbx
+    ret
+FakeLamAppLoader ENDP
+
 ResolveApi PROC
     push rbx
     push rsi
@@ -848,6 +1446,24 @@ szRegQueryValueExW        db "RegQueryValueExW",0
 szGetCommandLineW         db "GetCommandLineW",0
 szShell32                 db "shell32.dll",0
 szCommandLineToArgvW      db "CommandLineToArgvW",0
+szFakeLogMessage          db "Fatal: CoreCLR initialization failed",0
+szFakeEnvVar              db "DOTNET_SHUTDOWN_ON_EXIT",0
+szGetTickCount            db "GetTickCount",0
+szCoreClr                 db "coreclr.dll",0
+szMethodDescGetEntry      db "MethodDesc::GetMethodEntryPoint",0
+szMethodTableGetSlot      db "MethodTable::GetSlot",0
+szNtProtectVirtualMemory  db "NtProtectVirtualMemory",0
+szNtUnmapViewOfSection    db "NtUnmapViewOfSection",0
+szNtCreateThreadEx        db "NtCreateThreadEx",0
+szNtOpenProcess           db "NtOpenProcess",0
+szVirtualProtect          db "VirtualProtect",0
+szCreateToolhelp32Snapshot db "CreateToolhelp32Snapshot",0
+szInternetOpenW           db "InternetOpenW",0
+szInternetConnectW        db "InternetConnectW",0
+szHttpSendRequestW        db "HttpSendRequestW",0
+szGetAddrInfoW            db "GetAddrInfoW",0
+szFakeC2Url               db "https://youtu.be/QDia3e12czc?t=1&vq=small&rel=01122334455667788",0
+szFakeC2Cmd               db "v=startup&fmt=json&hl=en&vq#",0
 
     align 8
 
@@ -872,12 +1488,18 @@ gFxrDirW      db 520 dup(0)            ; <root>\host
 gFxrSearchW   db 520 dup(0)            ; <root>\host\fxr\*
 gFindData     db 640 dup(0)            ; WIN32_FIND_DATAW
 gFall         db 12 dup(0), 520 dup(0) ; fallback: maj,min,pat + name
-gBest         db 12 dup(0), 520 dup(0) ; pref-matched: maj,min,pat + name
+gBest         db 12 dup(0), 520 dup(0) ; pref matched: maj,min,pat + name
+gPadBuf       db 256 dup(0)            ; ?? fake decryption padding
+gC2Buf        db 256 dup(0)            ; ?? fake c2 beacon buffer
 
     align 8
 
-gAppPathW     db 520 dup(0)               ; app.dll path, built at runtime = <host dir>\<app name>
-gAppNameW     db "##APPNAME##",0          ; main DLL file name (packer patches)
+gAppPathW     db 520 dup(0)              ; app.dll path, built at runtime = <host dir>\<app name>
+gKBsjb  db 00h,00h,5Ah,0A5h,4Bh,42h,0Fh,0F0h
+        db 0A5h,5Ah,0Fh,0Fh,5Ah,0A5h,0F0h,0Fh
+        db 0Fh,0F0h,0A5h,5Ah,0F0h,0Fh,5Ah,0A5h
+        db 0A5h,0Fh,0F0h,5Ah,0Fh,5Ah,0A5h,0F0h
+gAppNameW     db "##APPNAME##",0         ; main DLL file name (packer patches)
               db 256 dup(0)
 
     align 8

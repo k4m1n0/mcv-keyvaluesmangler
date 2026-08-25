@@ -268,7 +268,7 @@
 
   The Packer property picks which Lamarr you get (default: managed):
     -p:Packer=managed      Lamarr IL stub + Lamarr compressed DLL  (~325 KiB)
-    -p:Packer=native       native asm stub + Lamarr compressed DLL (~185 KiB)
+    -p:Packer=native       native asm stub + Lamarr compressed DLL (~180 KiB)
     -p:Packer=none         plain .NET single file (no packing)     (~525 KiB)
     -p:SelfContained=true  MS official self contained single file (~37.5 MiB)
 
@@ -289,7 +289,7 @@
     No temp files. No console flash. Under 192 KiB. HELL YEAH! (again)
 
   EXTRA BUILD REQUIREMENTS
-    - MSVC x64 toolchain (ml64/link). Locator: Lamarr/Native/build_stub.ps1
+    - MSVC x64 toolchain (ml64/link). Locator: Lamarr/Native/build_asm.ps1
       (vswhere -> VCToolsInstallDir -> PATH). Without it, use Packer=managed
       and pretend this section never existed
 
@@ -298,6 +298,9 @@
     those are way better. If you are packing a legacy .NET Framework app,
     go with mPress. Also: Packer=native is FDD only, SelfContained builds
     need the apphost the stub deliberately does not map
+
+  SEE ALSO
+    antheil variant (method-body encryption, jithook): Lamarr/ANTHEIL.TXT
 
 ==============================================================================
   0C. CREDITS

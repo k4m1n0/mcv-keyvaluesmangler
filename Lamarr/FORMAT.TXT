@@ -476,6 +476,10 @@ Abstract
         major >= 6 (net6+, compressedSize and a runtimeconfig hash
         field).
 
+        An antheil variant extends this layout with method-body
+        encryption and an extended entry set (decoder, jithook,
+        signature table, honeypot). See Lamarr/ANTHEIL.TXT.
+
     6.3.  Host Compatibility
 
         The native stub targets x64 Windows (Windows 7 SP1 through
