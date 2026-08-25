@@ -37,11 +37,11 @@
 
   <PropertyGroup>
     <Packer Condition="'$(Packer)' == ''">managed</Packer>
-    <BootName Condition="'$(BootName)' == ''">LamarrBoot</BootName>
+    <BootName Condition="'$(BootName)' == ''">WeaponDamageCalc.Boot</BootName>
     <BootTfm Condition="'$(BootTfm)' == ''">net8.0-windows</BootTfm>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(SelfContained)' == '' And '$(Packer)' == 'native'">
+  <PropertyGroup Condition="'$(SelfContained)' == '' And ('$(Packer)' == 'native' Or '$(Packer)' == 'antheil')">
     <SelfContained>false</SelfContained>
   </PropertyGroup>
 
@@ -56,20 +56,25 @@
     <Delete Files="$(PublishDir)WeaponDamageCalc_packed.exe" />
   </Target>
 
-  <Target Name="NativeStubPack" AfterTargets="Publish" Condition="'$(Packer)' == 'native' And '$(Configuration)' != 'Debug'">
+  <Target Name="NativeStubPack" AfterTargets="Publish" Condition="'$(Packer)' == 'native' Or '$(Packer)' == 'antheil'">
     <Delete Files="$(PublishDir)WeaponDamageCalc.exe" />
-    <Exec Command="dotnet publish &quot;$(ProjectDir)WeaponDamageCalc.csproj&quot; -c $(Configuration) -r $(RuntimeIdentifier) --no-self-contained -p:PublishSingleFile=true -p:Packer=none -o &quot;$(PublishDir)&quot;" Condition="'$(SelfContained)' != 'true'" />   
+    <Exec Command="dotnet publish &quot;$(ProjectDir)WeaponDamageCalc.csproj&quot; -c $(Configuration) -r $(RuntimeIdentifier) --no-self-contained -p:PublishSingleFile=true -p:Packer=none -o &quot;$(PublishDir)&quot;" Condition="'$(SelfContained)' != 'true'" />
     <Exec Command="dotnet build &quot;$(ProjectDir)Lamarr\Native\Native.csproj&quot; -c Release -v q" />
-    <Exec Command="dotnet build &quot;$(ProjectDir)Lamarr\Native\Boot\Boot.csproj&quot; -c Release -p:BootName=$(BootName) -p:BootTfm=$(BootTfm) -v q" />
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)Lamarr\Native\build_stub.ps1&quot; -AsmDir &quot;$(ProjectDir)Lamarr\Native&quot; -OutDir &quot;$(PublishDir)&quot;" />
-    <Exec Command="&quot;$(ProjectDir)Lamarr\Native\bin\Release\net8.0-windows\LamarrNativePack.exe&quot; --stub &quot;$(PublishDir)lamarr_stub.dll&quot; --input &quot;$(PublishDir)WeaponDamageCalc.exe&quot; --boot &quot;$(ProjectDir)Lamarr\Native\Boot\bin\Release\$(BootTfm)\$(BootName).dll&quot; --output &quot;$(PublishDir)WeaponDamageCalc_packed.exe&quot;" />
+    <Exec Command="dotnet build &quot;$(ProjectDir)Lamarr\Native\BootAntheil\Boot.csproj&quot; -c Release -p:BootName=$(BootName) -p:BootTfm=$(BootTfm) -v q" Condition="'$(Packer)' == 'antheil'" />
+    <Exec Command="dotnet build &quot;$(ProjectDir)Lamarr\Native\Boot\Boot.csproj&quot; -c Release -v q" Condition="'$(Packer)' == 'native'" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)Lamarr\Native\build_asm.ps1&quot; -AsmDir &quot;$(ProjectDir)Lamarr\Native&quot; -OutDir &quot;$(ProjectDir)Lamarr\Native\out&quot; -Packer antheil -Pack -InputPath &quot;$(PublishDir)WeaponDamageCalc.exe&quot; -Output &quot;$(PublishDir)WeaponDamageCalc_packed.exe&quot; -Boot &quot;$(ProjectDir)Lamarr\Native\BootAntheil\bin\Release\$(BootTfm)\$(BootName).dll&quot; -Decoder &quot;$(ProjectDir)Lamarr\Native\out\Iamdec.dll&quot; -JitHook &quot;$(ProjectDir)Lamarr\Native\out\jithook.dll&quot; -Pheropod &quot;$(ProjectDir)Lamarr\Native\out\z0.dll&quot; -Mode antheil" Condition="'$(Packer)' == 'antheil'" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)Lamarr\Native\build_asm.ps1&quot; -AsmDir &quot;$(ProjectDir)Lamarr\Native&quot; -OutDir &quot;$(ProjectDir)Lamarr\Native\out&quot; -Packer native -Pack -InputPath &quot;$(PublishDir)WeaponDamageCalc.exe&quot; -Output &quot;$(PublishDir)WeaponDamageCalc_packed.exe&quot; -Boot &quot;$(ProjectDir)Lamarr\Native\Boot\bin\Release\net8.0-windows\LamarrBoot.dll&quot; -Mode clean" Condition="'$(Packer)' == 'native'" />
     <Copy SourceFiles="$(PublishDir)WeaponDamageCalc_packed.exe" DestinationFiles="$(PublishDir)WeaponDamageCalc.exe" OverwriteReadOnlyFiles="true" />
     <Delete Files="$(PublishDir)WeaponDamageCalc_packed.exe" />
   </Target>
 
   <ItemGroup>
     <Compile Remove="Lamarr\**" />
+    <Compile Remove="publish\**" />
+    <Compile Remove="PeWriter.cs" />
     <EmbeddedResource Remove="Lamarr\**" />
+    <EmbeddedResource Remove="publish\**" />
+    <None Remove="publish\**" />
   </ItemGroup>
 
   <ItemGroup>

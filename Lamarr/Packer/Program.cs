@@ -1,5 +1,5 @@
 using Lamarr;
-using BundleHost;
+using System.Runtime.InteropServices;
 
 namespace LamarrPacker;
 
@@ -9,11 +9,112 @@ internal static class Program
     const int iErrUsage = 1;
     const int iErrException = 5;
 
+    [DllImport("lamdec.dll")]
+    private static extern int lamdec(byte[] rgDst, byte[] rgSrc, uint cbSrc, uint cbDst);
+
+    [DllImport("Iamdec.dll")]
+    private static extern int Iamdec(byte[] state, byte[] hist, byte[] page, byte[] src);
+
     static int Main(string[] rgArgs)
     {
         string? sStub = Opt(rgArgs, "--stub");
         string? sInput = Opt(rgArgs, "--input");
         string? sOutput = Opt(rgArgs, "--output");
+
+        if (rgArgs.Length == 2 && rgArgs[0] == "--test-page")
+        {
+            string sFile = rgArgs[1];
+            if (!File.Exists(sFile)) { Console.Error.WriteLine($"File not found: {sFile}"); return iErrUsage; }
+            byte[] rgIn = File.ReadAllBytes(sFile);
+            Console.Error.WriteLine($"Input: {rgIn.Length} bytes");
+            uint cbCap = LamarrEncoder.GetMaxEncodedSize((uint)rgIn.Length);
+            byte[] rgComp = new byte[cbCap]; uint pcb = cbCap;
+            int iE = LamarrEncoder.Encode(rgComp, ref pcb, rgIn, (uint)rgIn.Length);
+            Console.Error.WriteLine($"Encode: {iE}, comp={pcb}");
+
+            //asm分页解码器测试
+            byte[] rgHist = new byte[0x80000];
+            byte[] rgPage = new byte[0x1000];
+            byte[] st = new byte[0x38];
+            BitConverter.GetBytes(1u).CopyTo(st, 0x00);//uInPos
+            BitConverter.GetBytes(1u).CopyTo(st, 0x04);//iHist
+            BitConverter.GetBytes(1u).CopyTo(st, 0x08);//uOutPos
+            BitConverter.GetBytes(0u).CopyTo(st, 0x0C);//uTag
+            BitConverter.GetBytes(0u).CopyTo(st, 0x10);//iBC
+            BitConverter.GetBytes(0u).CopyTo(st, 0x14);//flags
+            BitConverter.GetBytes(0u).CopyTo(st, 0x18);//uRemain
+            BitConverter.GetBytes(0u).CopyTo(st, 0x1C);//uSrc
+            BitConverter.GetBytes(0u).CopyTo(st, 0x20);//iNib
+            BitConverter.GetBytes((uint)pcb).CopyTo(st, 0x28);//srcLen
+            BitConverter.GetBytes((uint)rgIn.Length).CopyTo(st, 0x34);//dstLen
+            rgHist[0] = rgComp[0];
+
+            byte[] rgAsm = new byte[rgIn.Length];
+            int rc = 0;
+            bool bPage = true;
+            for (uint pg = 0; pg * 0x1000 < (uint)rgIn.Length; pg++)
+            {
+                uint ps = pg * 0x1000;
+                uint pe = Math.Min(ps + 0x1000, (uint)rgIn.Length);
+                if (pg == 0) rgPage[0] = rgComp[0];
+                else Array.Clear(rgPage, 0, 0x1000);
+                BitConverter.GetBytes(ps).CopyTo(st, 0x2C);//pageStart
+                BitConverter.GetBytes(pe).CopyTo(st, 0x30);//pageEnd
+                rc = Iamdec(st, rgHist, rgPage, rgComp);
+                if (rc != 0) { bPage = false; Console.Error.WriteLine($"page {pg} rc={rc:X}"); break; }
+                Array.Copy(rgPage, 0, rgAsm, (int)ps, (int)(pe - ps));
+            }
+            if (bPage) bPage = rgAsm.AsSpan().SequenceEqual(rgIn);
+            if (!bPage)
+                for (int i = 0; i < rgIn.Length; i++)
+                    if (rgAsm[i] != rgIn[i]) { Console.Error.WriteLine($"diff@{i}: exp={rgIn[i]:X2} got={rgAsm[i]:X2}"); break; }
+
+            Console.Error.WriteLine($"Iamdec: {bPage} (rc={rc:X})");
+            Console.Error.WriteLine(bPage ? "PAGE OK!" : "PAGE FAILED!");
+            return bPage ? iOk : 2;
+        }
+
+        if (rgArgs.Length == 2 && rgArgs[0] == "--test-asm")
+        {
+            string sFile = rgArgs[1];
+            if (!File.Exists(sFile)) { Console.Error.WriteLine($"File not found: {sFile}"); return iErrUsage; }
+            byte[] rgIn = File.ReadAllBytes(sFile);
+            Console.Error.WriteLine($"Input: {rgIn.Length} bytes");
+            uint cbCap = LamarrEncoder.GetMaxEncodedSize((uint)rgIn.Length);
+            byte[] rgComp = new byte[cbCap]; uint pcb = cbCap;
+            int iRes = LamarrEncoder.Encode(rgComp, ref pcb, rgIn, (uint)rgIn.Length);
+            Console.Error.WriteLine($"Encode: {iRes}, comp={pcb} ({pcb*100.0/rgIn.Length:F1}%)");
+            Console.Error.WriteLine("comp: " + string.Join(" ", rgComp.AsSpan(0, Math.Min(64, (int)pcb)).ToArray().Select(x => x.ToString("X2"))));
+
+            //asm解码器测试 lamdec平铺接口
+            byte[] rgAsm = new byte[rgIn.Length];
+            int rcAsm = 0;
+            bool bAsm = false;
+            try
+            {
+                rcAsm = lamdec(rgAsm, rgComp, pcb, (uint)rgIn.Length);
+                bAsm = rcAsm == 0 && rgAsm.AsSpan().SequenceEqual(rgIn);
+                if (!bAsm)
+                    for (int i = 0; i < rgIn.Length; i++)
+                        if (rgAsm[i] != rgIn[i]) { Console.Error.WriteLine($"diff@{i}: exp={rgIn[i]:X2} got={rgAsm[i]:X2}"); break; }
+            }
+            catch (Exception ex) { Console.Error.WriteLine($"lamdec dll error: {ex.Message}"); }
+            Console.Error.WriteLine($"lamdec: rc={rcAsm}, match={bAsm}");
+
+            //分页解码对照 Iamdec
+            byte[] rgRef = new byte[rgIn.Length];
+            bool bRef = false;
+            try
+            {
+                rgRef = PageDecode(rgComp, 0, (int)pcb, (uint)rgIn.Length);
+                bRef = rgRef.AsSpan().SequenceEqual(rgIn);
+            }
+            catch (Exception ex) { Console.Error.WriteLine($"PageDecode error: {ex.Message}"); }
+            Console.Error.WriteLine($"paged: match={bRef}");
+
+            Console.Error.WriteLine((bAsm && bRef) ? "ASM+REF OK!" : "ASM+REF FAILED!");
+            return (bAsm && bRef) ? iOk : 2;
+        }
         if (rgArgs.Length == 2 && rgArgs[0] == "--test-roundtrip")
         {
             string sFile = rgArgs[1];
@@ -45,32 +146,25 @@ internal static class Program
             int iRes = LamarrEncoder.Encode(rgComp, ref pcb, rgIn, (uint)rgIn.Length);
             Console.Error.WriteLine($"Encode: {iRes}, comp={pcb}");
 
-            //参考解码器
+            //参考解码 LamarrDecoder
             byte[] rgRef = new byte[rgIn.Length]; uint pcbRef = (uint)rgRef.Length;
             iRes = LamarrDecoder.Decode(rgRef, ref pcbRef, rgComp, pcb);
             bool bRef = iRes == 0 && pcbRef == rgIn.Length &&
                         rgRef.AsSpan(0, (int)pcbRef).SequenceEqual(rgIn);
 
-            //流式解码器 与Boot同一份源码
+            //分页解码 PageDecode
             byte[] rgStm = new byte[rgIn.Length];
             int n = 0;
             string? sErr = null;
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            using (var stm = new BundleStream(rgComp, 0, (int)pcb, (uint)rgIn.Length))
+            try
             {
-                try
-                {
-                    while (n < rgStm.Length)
-                    {
-                        int r = stm.Read(rgStm, n, Math.Min(4096, rgStm.Length - n));
-                        if (r <= 0) break;
-                        n += r;
-                    }
-                }
-                catch (Exception ex) { sErr = ex.Message; }
+                rgStm = PageDecode(rgComp, 0, (int)pcb, (uint)rgIn.Length);
+                n = rgStm.Length;
             }
+            catch (Exception ex) { sErr = ex.Message; }
             sw.Stop();
-            Console.Error.WriteLine($"stream decode: {sw.Elapsed.TotalMilliseconds:F1} ms");
+            Console.Error.WriteLine($"paged decode: {sw.Elapsed.TotalMilliseconds:F1} ms");
             bool bStm = sErr == null && n == rgIn.Length && rgStm.AsSpan(0, n).SequenceEqual(rgIn);
 
             Console.Error.WriteLine(bRef && bStm ? "REF+STREAM OK!"
@@ -91,17 +185,8 @@ internal static class Program
             byte[] rgComp = File.ReadAllBytes(rgArgs[1]);
             uint rawLen = uint.Parse(rgArgs[2]);
 
-            byte[] rgOut = new byte[rawLen];
-            int n = 0;
-            using (var stm = new BundleStream(rgComp, 0, rgComp.Length, rawLen))
-            {
-                while (n < rgOut.Length)
-                {
-                    int r = stm.Read(rgOut, n, Math.Min(4096, rgOut.Length - n));
-                    if (r <= 0) break;
-                    n += r;
-                }
-            }
+            byte[] rgOut = PageDecode(rgComp, 0, rgComp.Length, rawLen);
+            int n = rgOut.Length;
 
             byte[] rgRef = new byte[rawLen]; uint pcb = rawLen;
             int iRes = LamarrDecoder.Decode(rgRef, ref pcb, rgComp, (uint)rgComp.Length);
@@ -122,17 +207,8 @@ internal static class Program
             uint rawLen = uint.Parse(rgArgs[3]);
             int compLen = rg.Length - off;
 
-            byte[] rgOut = new byte[rawLen];
-            int n = 0;
-            using (var stm = new BundleStream(rg, off, compLen, rawLen))
-            {
-                while (n < rgOut.Length)
-                {
-                    int r = stm.Read(rgOut, n, Math.Min(4096, rgOut.Length - n));
-                    if (r <= 0) break;
-                    n += r;
-                }
-            }
+            byte[] rgOut = PageDecode(rg, off, compLen, rawLen);
+            int n = rgOut.Length;
 
             byte[] rgSub = new byte[compLen];
             Array.Copy(rg, off, rgSub, 0, compLen);
@@ -169,6 +245,42 @@ internal static class Program
             Console.Error.WriteLine($"Error: {ex.Message}");
             return iErrException;
         }
+    }
+
+    private static byte[] PageDecode(byte[] src, int off, int compLen, uint rawLen)
+    {
+        byte[] comp = new byte[compLen];
+        Array.Copy(src, off, comp, 0, compLen);
+        byte[] hist = new byte[0x80000];
+        byte[] page = new byte[0x1000];
+        byte[] st = new byte[0x38];
+        BitConverter.GetBytes(1u).CopyTo(st, 0x00);//uInPos
+        BitConverter.GetBytes(1u).CopyTo(st, 0x04);//iHist
+        BitConverter.GetBytes(1u).CopyTo(st, 0x08);//uOutPos
+        BitConverter.GetBytes(0u).CopyTo(st, 0x0C);
+        BitConverter.GetBytes(0u).CopyTo(st, 0x10);
+        BitConverter.GetBytes(0u).CopyTo(st, 0x14);
+        BitConverter.GetBytes(0u).CopyTo(st, 0x18);
+        BitConverter.GetBytes(0u).CopyTo(st, 0x1C);
+        BitConverter.GetBytes(0u).CopyTo(st, 0x20);
+        BitConverter.GetBytes((uint)compLen).CopyTo(st, 0x28);//srcLen
+        BitConverter.GetBytes(rawLen).CopyTo(st, 0x34);//dstLen
+        hist[0] = comp[0];
+        byte[] outBuf = new byte[rawLen];
+        for (uint pg = 0; pg * 0x1000 < rawLen; pg++)
+        {
+            uint ps = pg * 0x1000;
+            uint pe = Math.Min(ps + 0x1000, rawLen);
+            if (pg == 0) page[0] = comp[0];
+            else Array.Clear(page, 0, 0x1000);
+            BitConverter.GetBytes(ps).CopyTo(st, 0x2C);//pageStart
+            BitConverter.GetBytes(pe).CopyTo(st, 0x30);//pageEnd
+            int rc = Iamdec(st, hist, page, comp);
+            if (rc != 0)
+                throw new InvalidDataException($"Iamdec rc={rc:X}");
+            Array.Copy(page, 0, outBuf, (int)ps, (int)(pe - ps));
+        }
+        return outBuf;
     }
 
     static string? Opt(string[] rgArgs, string sName)

@@ -13,5 +13,7 @@
   <ItemGroup>
     <Compile Remove="Boot\**" />
     <EmbeddedResource Remove="Boot\**" />
+    <Compile Remove="BootAntheil\**" />
+    <EmbeddedResource Remove="BootAntheil\**" />
   </ItemGroup>
 </Project>

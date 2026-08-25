@@ -7,8 +7,11 @@
 /Lamarr/Packer/obj
 /Lamarr/Native/bin
 /Lamarr/Native/obj
+/Lamarr/Native/out
 /Lamarr/Native/Boot/bin
 /Lamarr/Native/Boot/obj
+/Lamarr/Native/BootAntheil/bin
+/Lamarr/Native/BootAntheil/obj
 /Lamarr/obj
 *.bin
 *.exe
