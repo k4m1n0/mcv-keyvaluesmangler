@@ -426,13 +426,14 @@ internal class PeWriterAntheil
         var rgRawLen = new uint[iCount];
         var rgCompLen = new uint[iCount];
         var rgCompOff = new uint[iCount];
+        byte[] rgSeedKey = SeedKey(Encoding.ASCII.GetBytes(sSeed));   // XOR key derived from seed
         for (int i = 0; i < iCount; i++)
         {
             rgRawLen[i] = (uint)rgRaw[i].Length;
             if (i == iDecIdx || i == iJitIdx || i == iSigIdx || i == iHoneyIdx)
             {
                 rgCompLen[i] = rgRawLen[i];
-                rgBlocks[i] = XorBytes(rgRaw[i], rgKSeed);
+                rgBlocks[i] = XorBytes(rgRaw[i], rgSeedKey);
             }
             else
             {
@@ -549,10 +550,10 @@ internal class PeWriterAntheil
             }
             else
             {
-                byte[] gb = new byte[rgGarbage[iG++]];
-                rng.NextBytes(gb);
-                Array.Copy(gb, 0, rgLamApp, (int)(iDataBase + uPos), gb.Length);
-                uPos += (uint)gb.Length;
+                byte[] rgGb = new byte[rgGarbage[iG++]];
+                rng.NextBytes(rgGb);
+                Array.Copy(rgGb, 0, rgLamApp, (int)(iDataBase + uPos), rgGb.Length);
+                uPos += (uint)rgGb.Length;
             }
         }
 
@@ -590,8 +591,8 @@ internal class PeWriterAntheil
         using var ms = new MemoryStream();
         while (ms.Length < cbTarget)
         {
-            byte[] b = X64Insn(rng);
-            ms.Write(b, 0, b.Length);
+            byte[] rgInsn = X64Insn(rng);
+            ms.Write(rgInsn, 0, rgInsn.Length);
         }
         return ms.ToArray();
     }
@@ -605,15 +606,15 @@ internal class PeWriterAntheil
             case 2: return new byte[] { (byte)(0x58 + rng.Next(8)) };            //pop rX
             case 3: return new byte[] { 0x31, (byte)(0xC0 + rng.Next(8)) };      //xor rX,rAX
             case 4: return new byte[] { 0x48, 0x8B, (byte)(0xC0 + rng.Next(8)) };//mov rAX,rX
-            case 5: { var b = new byte[10]; b[0] = 0x48; b[1] = 0xB8;            //mov rAX,imm64
-                    BitConverter.GetBytes(((ulong)(uint)rng.Next() << 32) | (uint)rng.Next()).CopyTo(b, 2);
-                    return b; }
+            case 5: { var rgInsn = new byte[10]; rgInsn[0] = 0x48; rgInsn[1] = 0xB8; //mov rAX,imm64
+                    BitConverter.GetBytes(((ulong)(uint)rng.Next() << 32) | (uint)rng.Next()).CopyTo(rgInsn, 2);
+                    return rgInsn; }
             case 6: return new byte[] { 0x48, 0x83, (byte)(0xC0 + rng.Next(8)), (byte)rng.Next(256) };//add rX,imm8
             case 7: return new byte[] { 0xEB, (byte)rng.Next(256) };             //jmp rel8
-            case 8: { var b = new byte[7]; b[0] = 0x48; b[1] = 0x8D;             //lea rX,[rAX+disp32]
-                    b[2] = (byte)(0x80 + rng.Next(8));
-                    BitConverter.GetBytes(rng.Next()).CopyTo(b, 3);
-                    return b; }
+            case 8: { var rgInsn = new byte[7]; rgInsn[0] = 0x48; rgInsn[1] = 0x8D; //lea rX,[rAX+disp32]
+                    rgInsn[2] = (byte)(0x80 + rng.Next(8));
+                    BitConverter.GetBytes(rng.Next()).CopyTo(rgInsn, 3);
+                    return rgInsn; }
             default: return new byte[] { 0xC3 };                                 //ret
         }
     }
@@ -623,43 +624,43 @@ internal class PeWriterAntheil
         using var ms = new MemoryStream();
         ms.Write(new byte[] { 0x4D, 0x5A, 0x90, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00 }, 0, 16);
         ms.Write(new byte[0x20], 0, 0x20);
-        byte[] dos = Encoding.ASCII.GetBytes("This program cannot be run in DOS mode.\r\n\r\n$");
-        ms.Write(dos, 0, dos.Length);
+        byte[] rgDos = Encoding.ASCII.GetBytes("This program cannot be run in DOS mode.\r\n\r\n$");
+        ms.Write(rgDos, 0, rgDos.Length);
         ms.Position = 0x3C;
         ms.Write(new byte[] { 0x80, 0x00, 0x00, 0x00 }, 0, 4);//e_lfanew -> PE
         ms.Position = 0x80;
         ms.Write(Encoding.ASCII.GetBytes("PE\0\0"), 0, 4);
-        var c = new BinaryWriter(ms, Encoding.ASCII, true);
-        c.Write((ushort)0x8664); //Machine x64
-        c.Write((ushort)2);      //NumberOfSections
-        c.Write(rng.Next());     //TimeDateStamp
-        c.Write(0u); c.Write(0u);//PtrToSymbolTable / NumSymbols
-        c.Write((ushort)0xF0);   //SizeOfOptionalHeader
-        c.Write((ushort)0x2022); //Characteristics
-        c.Write((ushort)0x20B);  //Magic PE32+
-        c.Write((byte)0); c.Write((byte)0);
-        c.Write(0u); c.Write(0u); c.Write(0u); c.Write(0u);
-        c.Write(0x180000000UL);  //ImageBase
-        c.Write(0x1000u); c.Write(0x200u);
-        c.Write((ushort)6); c.Write((ushort)0); c.Write((ushort)0); c.Write((ushort)0); c.Write((ushort)0); c.Write((ushort)0);
-        c.Write(0x4000u);        //SizeOfImage
-        c.Write(0x400u);         //SizeOfHeaders
-        c.Write(0u);             //Checksum
-        c.Write((ushort)3);      //Subsystem console
-        c.Write((ushort)0);      //DllCharacteristics
-        c.Write(0x100000UL); c.Write(0x1000UL); c.Write(0x100000UL); c.Write(0x1000UL);
-        c.Write(0u); c.Write(0u);
-        for (int i = 0; i < 16; i++) { c.Write(0u); c.Write(0u); }//数据目录
-        c.Write(Encoding.ASCII.GetBytes(".text\0\0\0")); c.Write(0x1000u); c.Write(0x1000u); c.Write(0x400u); c.Write(0x200u); c.Write(0u); c.Write(0u); c.Write(0u); c.Write(0x60000020u);
-        c.Write(Encoding.ASCII.GetBytes(".rdata\0\0")); c.Write(0x2000u); c.Write(0x200u); c.Write(0x600u); c.Write(0x600u); c.Write(0u); c.Write(0u); c.Write(0u); c.Write(0x40000040u);
-        c.Write(GenRandomX64(rng, 64, 256));//伪代码段
-        byte[] res = ms.ToArray();
+        var writer = new BinaryWriter(ms, Encoding.ASCII, true);
+        writer.Write((ushort)0x8664); //Machine x64
+        writer.Write((ushort)2);      //NumberOfSections
+        writer.Write(rng.Next());     //TimeDateStamp
+        writer.Write(0u); writer.Write(0u);//PtrToSymbolTable / NumSymbols
+        writer.Write((ushort)0xF0);   //SizeOfOptionalHeader
+        writer.Write((ushort)0x2022); //Characteristics
+        writer.Write((ushort)0x20B);  //Magic PE32+
+        writer.Write((byte)0); writer.Write((byte)0);
+        writer.Write(0u); writer.Write(0u); writer.Write(0u); writer.Write(0u);
+        writer.Write(0x180000000UL);  //ImageBase
+        writer.Write(0x1000u); writer.Write(0x200u);
+        writer.Write((ushort)6); writer.Write((ushort)0); writer.Write((ushort)0); writer.Write((ushort)0); writer.Write((ushort)0); writer.Write((ushort)0);
+        writer.Write(0x4000u);        //SizeOfImage
+        writer.Write(0x400u);         //SizeOfHeaders
+        writer.Write(0u);             //Checksum
+        writer.Write((ushort)3);      //Subsystem console
+        writer.Write((ushort)0);      //DllCharacteristics
+        writer.Write(0x100000UL); writer.Write(0x1000UL); writer.Write(0x100000UL); writer.Write(0x1000UL);
+        writer.Write(0u); writer.Write(0u);
+        for (int i = 0; i < 16; i++) { writer.Write(0u); writer.Write(0u); }//数据目录
+        writer.Write(Encoding.ASCII.GetBytes(".text\0\0\0")); writer.Write(0x1000u); writer.Write(0x1000u); writer.Write(0x400u); writer.Write(0x200u); writer.Write(0u); writer.Write(0u); writer.Write(0u); writer.Write(0x60000020u);
+        writer.Write(Encoding.ASCII.GetBytes(".rdata\0\0")); writer.Write(0x2000u); writer.Write(0x200u); writer.Write(0x600u); writer.Write(0x600u); writer.Write(0u); writer.Write(0u); writer.Write(0u); writer.Write(0x40000040u);
+        writer.Write(GenRandomX64(rng, 64, 256));//伪代码段
+        byte[] rgRes = ms.ToArray();
         //2字节交错 0x80起 MZ+DOS头明文保留
-        for (int i = 0x80; i + 1 < res.Length; i += 2)
+        for (int i = 0x80; i + 1 < rgRes.Length; i += 2)
         {
-            byte tb = res[i]; res[i] = res[i + 1]; res[i + 1] = tb;
+            byte byTmp = rgRes[i]; rgRes[i] = rgRes[i + 1]; rgRes[i + 1] = byTmp;
         }
-        return res;
+        return rgRes;
     }
 
     private static uint Fnv1a(byte[] rgD)
@@ -667,6 +668,20 @@ internal class PeWriterAntheil
         uint uH = uLK0A ^ uLK0B;
         foreach (byte bX in rgD) { uH ^= bX; uH *= uLK1A ^ uLK1B; }
         return uH;
+    }
+
+    private static byte[] SeedKey(byte[] rgSeed)
+    {
+        byte[] rgKey = new byte[16];
+        uint uA = 0x811C9DC5u, uB = 0x1B0CA2B5u;
+        for (int i = 0; i < 16; i++)
+        {
+            uA ^= rgSeed[i]; uA *= 0x01000193u;
+            uB ^= rgSeed[i + 16]; uB *= 0x9E3779B9u;
+            uint uT = (uA ^ (uB << 1)) + (uB ^ (uA >> 3));
+            rgKey[i] = (byte)((uT >> 16) ^ (uT >> 24) ^ rgSeed[i]);
+        }
+        return rgKey;
     }
 
     private static byte[] XorBytes(byte[] rgD, byte[] rgKey)

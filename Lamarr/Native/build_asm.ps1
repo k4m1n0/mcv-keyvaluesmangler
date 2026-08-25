@@ -1,4 +1,3 @@
-# build_asm.ps1 - unified assembly build + optional pack (replaces build_stub/build_jithook/pack_retry)
 param(
     [Parameter(Mandatory)][string]$AsmDir,
     [Parameter(Mandatory)][string]$OutDir,
@@ -17,7 +16,6 @@ $ErrorActionPreference = 'Stop'
 $AsmDir, $OutDir = $AsmDir, $OutDir | ForEach-Object { $_.Trim().TrimEnd('\', '"') }
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 
-# --- locate MSVC toolchain (shared by stub + jithook builds) ---
 $sMl64 = $null
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 if (Test-Path $vswhere) {
@@ -72,7 +70,6 @@ function Build-StubDll([string]$AsmName, [string]$DllName, [switch]$Page, [strin
     Write-Host "[build-asm] done: $sDll"
 }
 
-# --- stub dlls (antheil needs all 4; native only the lamarr stub) ---
 Build-StubDll 'lamarr_stub.asm' 'lamarr_stub.dll'
 if ($Packer -eq 'antheil')
 {
@@ -81,7 +78,6 @@ if ($Packer -eq 'antheil')
     Build-StubDll 'antlion_deco.asm' 'z0.dll' -Exports 'z0_init,z0_read,z0_align,z0_size'
 }
 
-# --- jithook dll (antheil only) ---
 if ($Packer -eq 'antheil')
 {
     $sJitAsm = Join-Path $AsmDir 'jithook.asm'
@@ -97,10 +93,8 @@ if ($Packer -eq 'antheil')
     Write-Host "[build-asm] done: $sJitDll"
 }
 
-# --- optional pack step (with retry) ---
 if ($Pack)
 {
-    # native stderr lines become NativeCommandError; must not abort the retry loop
     $ErrorActionPreference = 'Continue'
     $sPackerExe = Join-Path $AsmDir 'bin\Release\net8.0-windows\LamarrNativePack.exe'
     if (!(Test-Path $sPackerExe)) { throw "packer not found: $sPackerExe" }

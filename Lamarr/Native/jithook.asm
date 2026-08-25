@@ -1,12 +1,10 @@
-.CODE
-
-PUBLIC g_orig, g_key, g_sigs, g_sigCount, g_decryptCount
-PUBLIC InstallJitHook, SetJitHookKey, AddPayloadSig, GetJitHookDecryptCount
+.DATA
 
 g_orig          dq 0                    ; original compileMethod
 g_key           dd 0                    ; stream cipher key
 g_sigCount      dd 0
 g_decryptCount  dd 0
+g_rdtsc_start   dd 0
 ALIGN 8
 g_sigs          dd 4096 dup(0)          ; CRC32 table of encrypted method bodies
 
@@ -16,6 +14,11 @@ g_pVirtualProtect   dq 0
 g_origGMA           dq 0                ; original ICorJitInfo::getMethodAttribs (slot1)
 g_origCanInline     dq 0                ; original ICorJitInfo::canInline (slot6)
 g_compLock          dd 0                ; compile serialization lock (reserved, unused)
+
+.CODE
+
+PUBLIC g_orig, g_key, g_sigs, g_sigCount, g_decryptCount
+PUBLIC InstallJitHook, SetJitHookKey, AddPayloadSig, GetJitHookDecryptCount
 
 szVirtualAlloc     db 'VirtualAlloc',0
 szVirtualFree      db 'VirtualFree',0
@@ -221,6 +224,30 @@ xd_done:
     ret
 XorDecrypt ENDP
 
+; single-step slowdown detection via RDTSC
+RdtscStart PROC
+    push rax
+    push rdx
+    rdtsc
+    mov dword ptr [g_rdtsc_start], eax
+    pop rdx
+    pop rax
+    ret
+RdtscStart ENDP
+RdtscCheck PROC
+    push rax
+    push rdx
+    rdtsc
+    sub eax, dword ptr [g_rdtsc_start]
+    cmp eax, 400000000
+    jb rc_ok
+    ud2
+rc_ok:
+    pop rdx
+    pop rax
+    ret
+RdtscCheck ENDP
+
 ; FindClrJit: -> rax = clrjit DllBase or 0 (PEB walk)
 FindClrJit PROC
     push rbx
@@ -339,6 +366,14 @@ CompileHook PROC
     push r15
     sub rsp, 60h
 
+    ; single-step (TF) detection
+    pushfq
+    pop rax
+    test rax, 100h
+    jz ch_ss_ok
+    ud2
+ch_ss_ok:
+
     xor r15, r15                        ; scratch=0
     mov rbx, rcx                        ; self
     mov r12, rdx                        ; comp
@@ -407,10 +442,10 @@ ch_sig:
 
 ch_payload:
     lock inc dword ptr [g_decryptCount]
-    xor ecx, ecx                        ; VirtualAlloc(NULL, ilSize+0x1000, MEM_RW, PAGE_RWX)
+    xor ecx, ecx                        ; VirtualAlloc(NULL, ilSize+0x1000, MEM_RW, PAGE_RW) JIT only reads
     lea edx, [rdi+1000h]                ; ilSize + EH slack
     mov r8d, 3000h
-    mov r9d, 40h
+    mov r9d, 4h
     mov rax, [g_pVirtualAlloc]
     test rax, rax
     jz ch_orig
@@ -421,7 +456,9 @@ ch_payload:
     mov rcx, r15
     mov rdx, rsi
     mov r8d, edi
+    call RdtscStart
     call XorDecrypt
+    call RdtscCheck
     ; !! fat methods with more-sections (EH table): copy raw-image EH to scratch+ilSize
     ;    JIT getEHinfo locates EH by ILCode+ILCodeSize; without this it reads OOB
     mov al, byte ptr [rsi-1]            ; header byte0
@@ -586,6 +623,14 @@ InstallJitHook PROC
     push r14
     push r15
     sub rsp, 40h
+
+    ; single-step (TF) detection
+    pushfq
+    pop rax
+    test rax, 100h
+    jz ih_ss_ok
+    ud2
+ih_ss_ok:
 
     lea rcx, szVirtualAlloc
     call ResolveApi
