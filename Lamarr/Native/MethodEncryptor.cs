@@ -5,7 +5,7 @@ using System.Reflection.PortableExecutable;
 namespace Lamarr.NativePack;
 
 //方法体IL保长流密码加密 密文CRC32供jithook判定 s=s*0x9E3779B1+0x9747B28C 取s>>24
-public static class MethodBodyEncryptor
+public static class MethodEncryptor
 {
     public static List<uint> EncryptAll(byte[] rgD, uint uKey, IReadOnlyCollection<uint>? rgOnly = null)
     {

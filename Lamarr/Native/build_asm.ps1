@@ -16,10 +16,11 @@ $ErrorActionPreference = 'Stop'
 $AsmDir, $OutDir = $AsmDir, $OutDir | ForEach-Object { $_.Trim().TrimEnd('\', '"') }
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 
+# 1) locate ml64 (vswhere -> VS env -> PATH)
 $sMl64 = $null
-$vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-if (Test-Path $vswhere) {
-    $sVs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>$null
+$sVsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+if (Test-Path $sVsWhere) {
+    $sVs = & $sVsWhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>$null
     if ($sVs) {
         $sMl64 = Get-ChildItem (Join-Path $sVs 'VC\Tools\MSVC\*\bin\Hostx64\x64\ml64.exe') -EA SilentlyContinue |
             Sort-Object FullName -Desc | Select-Object -First 1 -Exp FullName
@@ -40,6 +41,7 @@ if (!$sMl64) {
 $sLink = Join-Path (Split-Path $sMl64) 'link.exe'
 if (!(Test-Path $sLink)) { throw "link.exe not found next to ml64: $sLink" }
 
+# 2) locate Windows SDK kernel32.lib
 $sK32 = $null
 $sKitsRoot = "${env:ProgramFiles(x86)}\Windows Kits\10\Lib"
 if (Test-Path $sKitsRoot) {
@@ -48,6 +50,7 @@ if (Test-Path $sKitsRoot) {
 }
 if (!$sK32) { throw 'kernel32.lib not found (Windows SDK needed)' }
 
+# 3) assemble asm -> dll
 Write-Host "[build-asm] ml64: $sMl64`n[build-asm] out : $OutDir"
 
 function Build-StubDll([string]$AsmName, [string]$DllName, [switch]$Page, [string]$Exports)
@@ -58,14 +61,14 @@ function Build-StubDll([string]$AsmName, [string]$DllName, [switch]$Page, [strin
     $sDll = Join-Path $OutDir $DllName
     & $sMl64 /nologo /c ("/Fo" + $sObj) $sAsm
     if ($LASTEXITCODE -ne 0) { throw "ml64($AsmName) failed ($LASTEXITCODE)" }
-    $args = New-Object System.Collections.Generic.List[string]
-    $args.Add('/nologo'); $args.Add('/dll'); $args.Add('/noentry'); $args.Add('/machine:x64'); $args.Add('/subsystem:console')
-    if ($Page) { $args.Add('/export:Iamdec'); $args.Add('/nodefaultlib') }
-    if ($Exports) { foreach ($e in $Exports.Split(',')) { if ($e.Trim()) { $args.Add('/export:' + $e.Trim()) } } }
-    $args.Add('/out:' + $sDll)
-    $args.Add($sObj)
-    if ($Page) { $args.Add($sK32) }
-    & $sLink $args.ToArray()
+    $rgLinkArgs = New-Object System.Collections.Generic.List[string]
+    $rgLinkArgs.Add('/nologo'); $rgLinkArgs.Add('/dll'); $rgLinkArgs.Add('/noentry'); $rgLinkArgs.Add('/machine:x64'); $rgLinkArgs.Add('/subsystem:console')
+    if ($Page) { $rgLinkArgs.Add('/export:Iamdec'); $rgLinkArgs.Add('/nodefaultlib') }
+    if ($Exports) { foreach ($e in $Exports.Split(',')) { if ($e.Trim()) { $rgLinkArgs.Add('/export:' + $e.Trim()) } } }
+    $rgLinkArgs.Add('/out:' + $sDll)
+    $rgLinkArgs.Add($sObj)
+    if ($Page) { $rgLinkArgs.Add($sK32) }
+    & $sLink $rgLinkArgs.ToArray()
     if ($LASTEXITCODE -ne 0) { throw "link($DllName) failed ($LASTEXITCODE)" }
     Write-Host "[build-asm] done: $sDll"
 }
@@ -93,6 +96,7 @@ if ($Packer -eq 'antheil')
     Write-Host "[build-asm] done: $sJitDll"
 }
 
+# 4) invoke packer (retry 3x)
 if ($Pack)
 {
     $ErrorActionPreference = 'Continue'
@@ -107,22 +111,22 @@ if ($Pack)
         else { throw '-Output required when -Pack is used without -PublishDir' }
     }
 
-    $argsList = @('--stub', $sStub, '--input', $InputPath, '--output', $Output)
-    if ($Boot)    { $argsList += @('--boot', $Boot) }
-    if ($Decoder) { $argsList += @('--decoder', $Decoder) }
-    if ($JitHook) { $argsList += @('--jithook', $JitHook) }
-    if ($Pheropod) { $argsList += @('--pheropod', $Pheropod) }
-    if ($Mode)    { $argsList += @('--mode', $Mode) }
+    $rgArgs = @('--stub', $sStub, '--input', $InputPath, '--output', $Output)
+    if ($Boot)    { $rgArgs += @('--boot', $Boot) }
+    if ($Decoder) { $rgArgs += @('--decoder', $Decoder) }
+    if ($JitHook) { $rgArgs += @('--jithook', $JitHook) }
+    if ($Pheropod) { $rgArgs += @('--pheropod', $Pheropod) }
+    if ($Mode)    { $rgArgs += @('--mode', $Mode) }
 
-    $log = Join-Path $env:TEMP 'lamarr_pack_retry.log'
-    $code = 1
+    $sLog = Join-Path $env:TEMP 'lamarr_pack_retry.log'
+    $iCode = 1
     for ($i = 0; $i -lt 3; $i++) {
-        & $sPackerExe @argsList *> $log
-        $code = $LASTEXITCODE
-        if ($code -eq 0) { Write-Host "[build-asm] pack ok"; break }
-        Write-Host "[build-asm] packer exit=$code, retry $($i+1)/3..."
-        if (Test-Path $log) { Get-Content $log | Select-Object -Last 6 }
+        & $sPackerExe @rgArgs *> $sLog
+        $iCode = $LASTEXITCODE
+        if ($iCode -eq 0) { Write-Host "[build-asm] pack ok"; break }
+        Write-Host "[build-asm] packer exit=$iCode, retry $($i+1)/3..."
+        if (Test-Path $sLog) { Get-Content $sLog | Select-Object -Last 6 }
         Start-Sleep -Seconds 1
     }
-    if ($code -ne 0) { exit 1 }
+    if ($iCode -ne 0) { exit 1 }
 }

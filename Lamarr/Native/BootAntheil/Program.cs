@@ -8,10 +8,6 @@ namespace A0;
 
 internal static class P
 {
-    private const uint uU0 = 0x10;
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern int M0(IntPtr hWnd, string lpText, string lpCaption, uint uType);
 
     [DllImport("kernel32.dll")]
     private static extern bool IsDebuggerPresent();
@@ -21,6 +17,17 @@ internal static class P
 
     [DllImport("ntdll.dll")]
     private static extern int NtQueryInformationProcess(IntPtr hProc, int cls, out IntPtr info, int len, out int ret);
+    [DllImport("ntdll.dll")]
+    private static extern int NtQueryInformationProcess(IntPtr hProc, int cls, byte[] info, int len, out int ret);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr OpenThread(uint dwAccess, bool bInherit, uint dwThreadId);
+    [DllImport("kernel32.dll")]
+    private static extern bool GetThreadContext(IntPtr hThread, ref CONTEXT lpContext);
+    [DllImport("kernel32.dll")]
+    private static extern bool CloseHandle(IntPtr hObj);
 
     [DllImport("kernel32.dll")]
     private static extern bool QueryPerformanceCounter(out long lp);
@@ -41,6 +48,19 @@ internal static class P
     private delegate void JitSetKey(uint key);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate void JitAddSig(uint crc);
+    private delegate bool X1D(byte[] rgG, out List<(string, uint, uint, uint)> rgEntries);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct CONTEXT
+    {
+        public ulong P1Home, P2Home, P3Home, P4Home, P5Home, P6Home;
+        public uint ContextFlags, MxCsr;
+        public ushort SegCs, SegDs, SegEs, SegFs, SegGs, SegSs;
+        public uint EFlags;
+        public ulong Dr0, Dr1, Dr2, Dr3, Dr6, Dr7;
+        public ulong Rax, Rcx, Rdx, Rbx, Rsp, Rbp, Rsi, Rdi, R8, R9, R10, R11, R12, R13, R14, R15;
+        public ulong Rip;
+    }
 
     //密钥派生 常量A^B参与运算
     private static readonly uint uLK0A = 0x12345678, uLK0B = 0x9328CBBD;//0x811C9DC5
@@ -64,16 +84,46 @@ internal static class P
     private static JitSetKey _fnJitSetKey = null!;
     private static JitAddSig _fnJitAddSig = null!;
 
+    //常量拆解 XOR对 运行时派生防静态识别
+    private static readonly uint uQ1A = 0x12345678, uQ1B = 0xB7F1F3DD;//0xA5A5A5A5
+    private static readonly uint uQ2A = 0x1A2B3C4D, uQ2B = 0x40716617;//0x5A5A5A5A
+    private static readonly uint uQ3A = 0x12345678, uQ3B = 0x0938F4CD;//0x1B0CA2B5
+    private static readonly uint uQ4A = 0x1A2B3C4D, uQ4B = 0x841C45F4;//0x9E3779B9
+    private static readonly uint uR1A = 0x12345678, uR1B = 0x133457EB;//0x01000193
+    private static readonly uint uR2A = 0x12345678, uR2B = 0x8C032FC1;//0x9E3779B9
+    private static readonly uint uHs = 0x13579BDFu;
+    //方法体hash委托引用 ldftn token不依赖名字 供元数据重命名
+    private static readonly Action _ad = AD;
+    private static readonly X1D _x1 = X1;
+    private static readonly Func<byte[], (string, uint, uint, uint), byte[]> _x3 = X3;
+    private static readonly Func<byte[]> _x6 = X6;
+    //AD状态
+    private static uint _uAdCt = 0;
+    private static uint _uX1H = 0;
+    //调试器辅助DLL名单
+    private static readonly string[] rgDbg =
+    {
+        S2(0x432BF782u, new uint[] { 0x41B3F49Au, 0xE2AB725Bu, 0x7CFAE9FCu, 0x1F9267E5u, 0xBF29DD4Eu, 0x5B315B3Fu, 0xFB18D2B8u, 0x96B04B91u }, uR2A, uR2B),
+        S2(0x7579CA59u, new uint[] { 0x77E1C919u, 0x10B94782u, 0xB268BFB3u, 0x520036F4u, 0xED77B25Du, 0x8FEF2AF6u }, uR2A, uR2B),
+        S2(0x234E5F7Eu, new uint[] { 0x206E5C0Eu, 0xC31DDAB7u, 0x5C755380u, 0xFED4CFC9u, 0x9F4C4662u }, uR2A, uR2B),
+        S2(0x2B7E1516u, new uint[] { 0x28BE14A6u, 0xC8158DEFu, 0x64FD0BB0u, 0x07548169u, 0xA79BF8D2u, 0x429375B3u }, uR2A, uR2B),
+        S2(0x28AED2A6u, new uint[] { 0x2B16D1EEu, 0xC5964F7Fu, 0x660DC520u, 0x02253CF9u, 0xA24CBAA2u, 0x3FC43343u }, uR2A, uR2B),
+        S2(0xABF71588u, new uint[] { 0xA8EF16C8u, 0x49068C49u, 0xEBC60BD2u, 0x85ED818Bu, 0x279CFF1Cu, 0xC024774Du, 0x6283EE1Eu, 0xFECB6B6Fu, 0x9C02E2F0u, 0x3A9A5E21u, 0xD9E1D5EAu, 0x7859507Bu }, uR2A, uR2B),
+    };
+
     //uint[]与k+i*delta异或 按UTF-16拼字符串
     private static string S1(uint uK, uint[] rgV)
     {
         char[] rgChars = new char[rgV.Length * 2];
+        uint uD = (uK ^ 0x3C6EF372u) + (uint)rgV.Length;
         for (int i = 0; i < rgV.Length; i++)
         {
             uint uT = rgV[i] ^ (uK + (uLGAA ^ uLGAB) * (uint)i);
             rgChars[i * 2] = (char)(uT & 0xFFFF);
             rgChars[i * 2 + 1] = (char)(uT >> 16);
+            uD = (uD * 0x01000193u) ^ (uT & 0xFF);
         }
+        GC.KeepAlive(uD);
         int iLen = Array.IndexOf(rgChars, '\0');
         if (iLen < 0) iLen = rgChars.Length;
         return new string(rgChars, 0, iLen);
@@ -83,35 +133,69 @@ internal static class P
     private static byte[] KSeed()
     {
         byte[] rgKey = new byte[16];
-        BitConverter.GetBytes(uKS0A ^ uKS0B).CopyTo(rgKey, 0);
-        BitConverter.GetBytes(uKS1A ^ uKS1B).CopyTo(rgKey, 4);
-        BitConverter.GetBytes(uKS2A ^ uKS2B).CopyTo(rgKey, 8);
-        BitConverter.GetBytes(uKS3A ^ uKS3B).CopyTo(rgKey, 12);
+        uint uFake = (uint)Environment.TickCount ^ 0x5A5A5A5Au;
+        BitConverter.GetBytes(uKS0A ^ uKS0B ^ (uFake & 0)).CopyTo(rgKey, 0);
+        BitConverter.GetBytes(uKS1A ^ uKS1B ^ ((uFake >> 8) & 0)).CopyTo(rgKey, 4);
+        BitConverter.GetBytes(uKS2A ^ uKS2B ^ ((uFake >> 16) & 0)).CopyTo(rgKey, 8);
+        BitConverter.GetBytes(uKS3A ^ uKS3B ^ ((uFake >> 24) & 0)).CopyTo(rgKey, 12);
+        GC.KeepAlive(uFake);
+        GC.KeepAlive((uint)(uKS0A ^ uKS1A ^ uKS2A ^ uKS3A));
         return rgKey;
     }
 
     private static byte[] SeedKey(byte[] rgSeed)
     {
         byte[] rgKey = new byte[16];
-        uint uA = 0x811C9DC5u, uB = 0x1B0CA2B5u;
+        uint uA = uLK0A ^ uLK0B, uB = uQ3A ^ uQ3B, uG = 0x5A5A5A5Au;
         for (int i = 0; i < 16; i++)
         {
-            uA ^= rgSeed[i]; uA *= 0x01000193u;
-            uB ^= rgSeed[i + 16]; uB *= 0x9E3779B9u;
+            uA ^= rgSeed[i]; uA *= (uR1A ^ uR1B);
+            uB ^= rgSeed[i + 16]; uB *= (uR2A ^ uR2B);
             uint uT = (uA ^ (uB << 1)) + (uB ^ (uA >> 3));
             rgKey[i] = (byte)((uT >> 16) ^ (uT >> 24) ^ rgSeed[i]);
+            uG = (uG * 0x9E3779B9u) ^ rgKey[i];
         }
+        GC.KeepAlive(uG);
         return rgKey;
+    }
+
+    private static string S2(uint uK, uint[] rgV, uint uR2A, uint uR2B)
+    {
+        char[] rgChars = new char[rgV.Length * 2];
+        uint uE = (uR2A ^ uR2B) ^ (uint)rgV.Length;
+        for (int i = 0; i < rgV.Length; i++)
+        {
+            uint uT = rgV[i] ^ (uK + (uR2A ^ uR2B) * (uint)i);
+            uT = (uT << 13) | (uT >> 19);
+            rgChars[i * 2] = (char)(uT & 0xFFFF);
+            rgChars[i * 2 + 1] = (char)(uT >> 16);
+            uE = (uE * 0x9E3779B9u) ^ (uT & 0x1F);
+        }
+        GC.KeepAlive(uE);
+        int iLen = Array.IndexOf(rgChars, '\0');
+        if (iLen < 0) iLen = rgChars.Length;
+        return new string(rgChars, 0, iLen);
+    }
+    private static uint Mx(byte[] rgKey)
+    {
+        uint uA = rgKey[0] | ((uint)rgKey[1] << 8) | ((uint)rgKey[2] << 16) | ((uint)rgKey[3] << 24);
+        uint uB = rgKey[4] | ((uint)rgKey[5] << 8) | ((uint)rgKey[6] << 16) | ((uint)rgKey[7] << 24);
+        uint uM = uA ^ uB ^ 0x811C9DC5u;
+        GC.KeepAlive((uint)(uA + uB));
+        return uM != 0 ? uM : 0x811C9DC5u;
     }
 
     private static uint K1(byte[] rgSeed)
     {
         uint uH = uLK0A ^ uLK0B;
+        uint uG = 0x9E3779B9u;
         foreach (byte byCh in rgSeed)
         {
             uH ^= byCh;
             uH *= uLK1A ^ uLK1B;
+            uG = (uG * 0x01000193u) + byCh;
         }
+        GC.KeepAlive(uG);
         return uH;
     }
 
@@ -119,13 +203,15 @@ internal static class P
     private static int[] K2(uint uK)
     {
         int[] rgPerm = { 0, 1, 2, 3 };
-        uint uS = uK;
+        uint uS = uK, uS2 = uK ^ 0x5A5A5A5Au;
         for (int i = 3; i > 0; i--)
         {
             uS = uS * (uLLCA ^ uLLCB) + (uLQCA ^ uLQCB);
+            uS2 = (uS2 * 0x01000193u) + (uS >> 8);
             int j = (int)(uS % (uint)(i + 1));
             (rgPerm[i], rgPerm[j]) = (rgPerm[j], rgPerm[i]);
         }
+        GC.KeepAlive(uS2);
         return rgPerm;
     }
 
@@ -140,8 +226,7 @@ internal static class P
     {
         try
         {
-            if (rgArgs.Length == 1 && rgArgs[0] == S1(0x11223344u, new uint[] { 0x110F3369u, 0xAF38AC91u, 0x4DF026DBu, 0xEBBAA01Du, 0x8A731A05u, 0x285B9384u, 0xC61B0DFCu, 0x64D58736u, 0x02DE0178u }))
-                return Selftest();
+            if (uLK0A == 0xDEADBEEFu) Environment.FailFast(null);
             H1(rgArgs);
             byte[] rgG;
             List<(string, uint, uint, uint)> rgEntries;
@@ -153,22 +238,23 @@ internal static class P
 
             if ((RuntimeSeed() & 0x20000000u) != 0)
             {
-                //真分叉：路径A带诱饵计算
-                uint uQ1 = (uint)Environment.TickCount ^ 0xA5A5A5A5u;
+                //真分叉 路径A带诱饵计算
+                uint uQ1 = (uint)Environment.TickCount ^ (uQ1A ^ uQ1B);
                 byte[] rgGA = X6();
                 GC.KeepAlive(uQ1);
                 rgG = rgGA;
             }
             else
             {
-                //真分叉：路径B不同诱饵
-                uint uQ2 = RuntimeSeed() ^ 0x5A5A5A5Au;
+                //真分叉 路径B不同诱饵
+                uint uQ2 = RuntimeSeed() ^ (uQ2A ^ uQ2B);
                 rgG = X6();
                 GC.KeepAlive(uQ2);
             }
             if (rgG.Length < 128)
                 goto QF;
             H2(rgG);
+            GC.KeepAlive(X9(rgG));
             AD();
             long llParse = T0();
             if (!X1(rgG, out rgEntries))
@@ -179,18 +265,18 @@ internal static class P
             InjectSigs(rgG, rgEntries);
             if (_fnJitInstall != null)
             {
-                _fnJitSetKey(K1(KSeed()));
+                _fnJitSetKey(K1(_rgSeedKey));
                 _fnJitInstall();
             }
             if ((RuntimeSeed() & 0x10000000u) == 0)
             {
-                uint uQ3 = (uint)Process.GetCurrentProcess().Id ^ 0x1B0CA2B5u;
+                uint uQ3 = (uint)Process.GetCurrentProcess().Id ^ (uQ3A ^ uQ3B);
                 W1(rgG, rgEntries);
                 GC.KeepAlive(uQ3);
             }
             else
             {
-                uint uQ4 = (uint)Environment.TickCount ^ 0x9E3779B9u;
+                uint uQ4 = (uint)Environment.TickCount ^ (uQ4A ^ uQ4B);
                 W1(rgG, rgEntries);
                 GC.KeepAlive(uQ4);
             }
@@ -217,21 +303,104 @@ internal static class P
     //反调试 检测到调试器即FailFast
     private static void AD()
     {
+        if (uLQCA == 0xFEEDFACEu) Environment.FailFast(null);
+        uint uCt = ++_uAdCt;
         bool fDbg = IsDebuggerPresent();
-        if (!fDbg)
-        {
-            bool fCr = false;
-            if (CheckRemoteDebuggerPresent(Process.GetCurrentProcess().Handle, ref fCr) && fCr)
-                fDbg = true;
-        }
+        if (!fDbg && HwBp())
+            fDbg = true;
+        if (!fDbg && (uCt & 0x0Fu) == 0 && DllScan())
+            fDbg = true;
         if (!fDbg)
         {
             IntPtr pPort = IntPtr.Zero;
             if (NtQueryInformationProcess(Process.GetCurrentProcess().Handle, 7, out pPort, IntPtr.Size, out _) == 0 && pPort != IntPtr.Zero)
                 fDbg = true;
         }
+        if (!fDbg && PebDbg())
+            fDbg = true;
+        if (!fDbg && PfDetect())
+            fDbg = true;
+        if (!fDbg && (uCt & 0x07u) == 0 && (Environment.TickCount & 1) == 0)
+            GC.KeepAlive((uint)Environment.TickCount ^ uCt);
+        if (!fDbg)
+        {
+            bool fCr = false;
+            if (CheckRemoteDebuggerPresent(Process.GetCurrentProcess().Handle, ref fCr) && fCr)
+                fDbg = true;
+        }
+        if (!fDbg && (uCt & 0x3Fu) == 0 && _uX1H != 0 && MethodHash(_x1) != _uX1H)
+            fDbg = true;
         if (fDbg)
             Environment.FailFast(null);
+    }
+
+    private static bool HwBp()
+    {
+        try
+        {
+            IntPtr hTh = OpenThread(0x0048u, false, GetCurrentThreadId());
+            if (hTh == IntPtr.Zero) return false;
+            try
+            {
+                var ctx = new CONTEXT();
+                ctx.ContextFlags = 0x00100010u;
+                if (!GetThreadContext(hTh, ref ctx)) return false;
+                if ((ctx.Dr7 & 0xFFFFFF00) != 0) GC.KeepAlive(ctx.Dr6);
+                if (ctx.Dr0 != 0 || ctx.Dr1 != 0 || ctx.Dr2 != 0 || ctx.Dr3 != 0 || (ctx.Dr7 & 0xFF) != 0)
+                    return true;
+            }
+            finally { CloseHandle(hTh); }
+        }
+        catch { }
+        return false;
+    }
+
+    private static bool PebDbg()
+    {
+        try
+        {
+            byte[] rgPbi = new byte[16];
+            if (NtQueryInformationProcess(Process.GetCurrentProcess().Handle, 0, rgPbi, rgPbi.Length, out _) != 0) return false;
+            long lPeb = BitConverter.ToInt64(rgPbi, 8);
+            if (lPeb == 0) return false;
+            GC.KeepAlive(lPeb ^ BitConverter.ToInt64(rgPbi, 0));
+            return Marshal.ReadByte(new IntPtr(lPeb), 2) != 0;
+        }
+        catch { }
+        return false;
+    }
+
+    private static bool PfDetect()
+    {
+        try
+        {
+            if (Environment.GetEnvironmentVariable("CORECLR_ENABLE_PROFILING") == "1") return true;
+            if (Environment.GetEnvironmentVariable("CORECLR_PROFILER") != null) return true;
+            if (Environment.GetEnvironmentVariable("CORECLR_PROFILER_PATH") != null) return true;
+            if (Environment.GetEnvironmentVariable("COR_ENABLE_PROFILING") == "1") return true;
+            if (Environment.GetEnvironmentVariable("COR_PROFILER") != null) return true;
+        }
+        catch { }
+        return false;
+    }
+
+    private static bool DllScan()
+    {
+        try
+        {
+            foreach (ProcessModule m in Process.GetCurrentProcess().Modules)
+            {
+                string s = m.ModuleName;
+                if (s.Length == 0) GC.KeepAlive(s);
+                for (int i = 0; i < rgDbg.Length; i++)
+                {
+                    if (string.Equals(s, rgDbg[i], StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+        }
+        catch { }
+        return false;
     }
 
     private static long T0() { QueryPerformanceCounter(out long llT); return llT; }
@@ -244,33 +413,31 @@ internal static class P
     }
     private static void SelfCheck()
     {
-        //关键常量完整性：防patch密钥派生常量
+        //防patch密钥派生常量
         if ((uKS0A ^ uKS0B) != 0x80020010u) Environment.FailFast(null);
         if ((uKS1A ^ uKS1B) != 0xEB900128u) Environment.FailFast(null);
         if ((uKS2A ^ uKS2B) != 0x021000C3u) Environment.FailFast(null);
         if ((uKS3A ^ uKS3B) != 0x90288001u) Environment.FailFast(null);
         if ((uLK0A ^ uLK0B) != 0x811C9DC5u) Environment.FailFast(null);
         if ((uLK1A ^ uLK1B) != 0x000001B3u) Environment.FailFast(null);
+        //防patch反调试/解密逻辑
+        if (MethodHash(_ad) != (uHs ^ 0x9317DAD4u)) Environment.FailFast(null);
+        if (MethodHash(_x1) != (uHs ^ 0xF8505C84u)) Environment.FailFast(null);
+        if (MethodHash(_x3) != (uHs ^ 0x5684034Fu)) Environment.FailFast(null);
+        if (MethodHash(_x6) != (uHs ^ 0x586C1AF3u)) Environment.FailFast(null);
+        _uX1H = MethodHash(_x1);
     }
 
-    private static int Selftest()
+    private static uint MethodHash(Delegate d)
     {
-        byte[] rgG = X6();
-        if (!X1(rgG, out var rgEntries) || rgEntries.Count == 0) return 2;
-        EnsureDecoder(rgG, rgEntries);
-        byte[] rgMain = X3(rgG, rgEntries[0]);
-        uint uExp = BitConverter.ToUInt32(rgG, LB_HASH);
-        uint uAct = Fnv1a(rgMain);
-        Array.Clear(rgMain, 0, rgMain.Length);
-        return uAct == uExp ? 0 : 3;
-    }
-
-    private static uint Fnv1a(byte[] rgData)
-    {
+        byte[] il = d.Method.GetMethodBody()?.GetILAsByteArray() ?? Array.Empty<byte>();
         uint uH = uLK0A ^ uLK0B;
-        foreach (byte byX in rgData) { uH ^= byX; uH *= uLK1A ^ uLK1B; }
+        uint uC = (uint)il.Length ^ 0x9E3779B9u;
+        foreach (byte byX in il) { uH ^= byX; uH *= uLK1A ^ uLK1B; uC = (uC * 0x01000193u) ^ byX; }
+        GC.KeepAlive(uC);
         return uH;
     }
+
 
     //解析--参数 诱饵
     private static void H1(string[] rgArgs)
@@ -295,9 +462,21 @@ internal static class P
         GC.KeepAlive(uH);
     }
 
+    //诱饵 看似核心解密 实际无意义
+    private static uint X9(byte[] rgG)
+    {
+        uint uH = 0x811C9DC5u;
+        int iN = Math.Min(rgG.Length, 0x40);
+        for (int i = 0; i < iN; i++)
+            uH = (uH ^ rgG[i]) * 0x01000193u;
+        GC.KeepAlive(uH);
+        return uH;
+    }
+
     //写元数据 并注册AssemblyLoadContext.Resolving
     private static void W1(byte[] rgG, List<(string, uint, uint, uint)> rgEntries)
     {
+        if (uKS2A == 0x0BADF00Du) return;
         byte[] rgMeta = Encoding.Unicode.GetBytes(S1(0xCF7DA6AEu, new uint[] { 0xCF12A6CDu, 0x6DD02015u, 0x0B809A43u, 0xAA0513ABu, 0x48358DC7u, 0xE6FD0720u, 0x84BD816Bu, 0x234CFAD3u, 0xC15D7419u, 0x5F1CEE5Au, 0xFD86678Du, 0x9BB3E1C5u, 0x3A175B36u }));
         byte[] rgVer = Encoding.ASCII.GetBytes(S1(0x3EBB0388u, new uint[] { 0x3E9503B1u, 0xDCDC7D71u, 0x7B04F6CAu, 0x191370C3u, 0xB7EEEA09u, 0x55B5644Cu, 0xF429DDA9u, 0x921157A6u, 0x3042D162u, 0xCE964B39u, 0x6CCBC4F2u, 0x0B1D3E42u }));
         int iEnd = 0;
@@ -321,6 +500,7 @@ internal static class P
         try
         {
             if (rgG.Length < 64) return;
+            GC.KeepAlive((uint)rgG.Length);
             BitConverter.GetBytes(0x1000u).CopyTo(rgG, 0);
             BitConverter.GetBytes((ushort)0x0002).CopyTo(rgG, 8);
             rgG[0x10] = 1; rgG[0x11] = 0; rgG[0x12] = 2; rgG[0x13] = 0x80;
@@ -334,85 +514,115 @@ internal static class P
 
     private static int F()
     {
+        if (uLLCA == 0xDEADBEEFu) return 7;
         Span<long> rgStack = stackalloc long[16];
         for (int i = 0; i < rgStack.Length; i++)
             rgStack[i] = unchecked((long)0xC300EB9090909090);
-        try
-        {
-            M0(IntPtr.Zero,
-               S1(0x2ABF5FF6u, new uint[] { 0x2ADE5FB0u, 0xC897D9DBu, 0x67145304u, 0x0526CD01u, 0xA3EF46B5u, 0x4197C0F6u, 0xE05E3A00u, 0x7E2AB425u, 0x1C122DD0u, 0xBADBA703u, 0x58862151u, 0xF75B9A80u, 0x952D14C3u, 0x33FF8E32u, 0xD1E8087Au, 0x6F9E81ABu, 0x0E5AFBEFu, 0xAC0A755Au }),
-               S1(0x29CE007Au, new uint[] { 0x29A10012u, 0xC8717A40u, 0x6644F38Au, 0x04746DD7u }),
-               uU0);
-        }
-        catch { }
-        return 1;
+        GC.KeepAlive(rgStack.Length);
+        return (int)(RuntimeSeed() & 0xF) + 1;
     }
 
     //解析bundle条目表 用seed派生key解密
     private static bool X1(byte[] rgG, out List<(string, uint, uint, uint)> rgEntries)
     {
         rgEntries = new List<(string, uint, uint, uint)>();
-        if (rgG.Length < 128) return false;
-
-        uint uK;
+        if (uKS0A == 0xCAFEBABEu) return false;
+        byte[] rgSeed = Array.Empty<byte>(), rgKseed = Array.Empty<byte>();
+        uint uK = 0, uOff1 = 0, uOff2 = 0, uNameTotal = 0, uKk = 0;
+        int iCount = 0, iDecoys = 0, iTotal = 0, i = 0, j = 0, o = 0;
+        long llTEnd = 0, llNa = 0, llDs = 0, llNo = 0, llDoff = 0;
+        string sName = "";
+        int[] rgPerm = Array.Empty<int>();
+        uint[] rgRow = Array.Empty<uint>();
+        uint[] rgF = new uint[4];
+        int iSt = 0;
+        while (true)
         {
-            byte[] rgSeed = new byte[32];
-            byte[] rgKseed = KSeed();
-            for (int i = 0; i < 32; i++)
-                rgSeed[i] = (byte)(rgG[LB_SEED + i] ^ rgKseed[i % 16]);
-            uK = K1(rgSeed);
-            _rgSeedKey = SeedKey(rgSeed);
-            Array.Clear(rgSeed, 0, rgSeed.Length);
-            Array.Clear(rgKseed, 0, rgKseed.Length);
+            switch (iSt)
+            {
+                case 0:
+                    if (rgG.Length < 128) return false;
+                    iSt = 1;
+                    continue;
+                case 1:
+                    rgSeed = new byte[32];
+                    rgKseed = KSeed();
+                    uint uDm = 0x9E3779B9u ^ (uint)rgKseed[3];
+                    for (i = 0; i < 32; i++)
+                    {
+                        rgSeed[i] = (byte)(rgG[LB_SEED + i] ^ rgKseed[i % 16]);
+                        uDm = (uDm * 0x01000193u) ^ ((uint)rgSeed[i] << (i & 7));
+                    }
+                    uK = K1(rgSeed);
+                    _rgSeedKey = SeedKey(rgSeed);
+                    GC.KeepAlive(uDm);
+                    Array.Clear(rgSeed, 0, rgSeed.Length);
+                    Array.Clear(rgKseed, 0, rgKseed.Length);
+                    iSt = 2;
+                    continue;
+                case 2:
+                    if (rgG.Length == 0x7FFFFFFF) return false;
+                    uint uD2 = uK ^ 0x3C6EF372u;
+                    iCount = (int)(Q(rgG, LB_HEAD) ^ uK);
+                    uOff1 = Q(rgG, LB_HEAD + 4) ^ uK;
+                    uD2 = (uD2 * 0x9E3779B9u) + uOff1;
+                    uOff2 = Q(rgG, LB_HEAD + 8) ^ uK;
+                    iDecoys = (int)(Q(rgG, LB_HEAD + 12) ^ K3(uK, iCount));
+                    GC.KeepAlive(uD2);
+                    if (iCount <= 0 || iCount > 0x1000 || uOff1 == 0 || uOff1 > 0x10000000 || uOff2 == 0 || iDecoys < 0 || iDecoys > 0x100)
+                        return false;
+                    iTotal = iCount + iDecoys;
+                    llTEnd = LB_TBL + (long)iTotal * 20;
+                    if (llTEnd > rgG.Length) return false;
+                    rgPerm = K2(uK);
+                    rgRow = new uint[iTotal * 5];
+                    uNameTotal = 0;
+                    i = 0;
+                    iSt = 3;
+                    continue;
+                case 3:
+                    if (i >= iTotal) { iSt = 4; continue; }
+                    uKk = K3(uK, i);
+                    int iO5 = (i << 2) + i;
+                    o = LB_TBL + (i << 4) + (i << 2);
+                    for (int s = 0; s < 4; s++)
+                        rgF[rgPerm[s]] = Q(rgG, o + (s << 2)) ^ uKk;
+                    rgRow[iO5 + 0] = rgF[0];
+                    rgRow[iO5 + 1] = rgF[1];
+                    rgRow[iO5 + 2] = rgF[2];
+                    rgRow[iO5 + 3] = rgF[3];
+                    uNameTotal += rgF[0] + (uint)(iO5 & 0);
+                    i++;
+                    iSt = 3;
+                    continue;
+                case 4:
+                    llNa = (uNameTotal + 3u) & ~3u;
+                    llDs = llTEnd + llNa;
+                    if (llDs > rgG.Length) return false;
+                    i = 0;
+                    iSt = 5;
+                    continue;
+                case 5:
+                    if (i >= iCount) { iSt = 6; continue; }
+                    int iR5 = (i << 2) + i;
+                    if (rgRow[iR5 + 1] == 0) return false;
+                    llNo = llTEnd;
+                    for (j = 0; j < i; j++) llNo += rgRow[(j << 2) + j];
+                    if (llNo + rgRow[iR5] > rgG.Length) return false;
+                    sName = Encoding.UTF8.GetString(rgG, (int)llNo, (int)rgRow[iR5]);
+                    llDoff = llDs + rgRow[iR5 + 3];
+                    if (rgRow[iR5 + 2] > 0 && llDoff + rgRow[iR5 + 2] > rgG.Length) return false;
+                    rgEntries.Add((sName, rgRow[iR5 + 1], rgRow[iR5 + 2], (uint)llDoff));
+                    i++;
+                    iSt = 5;
+                    continue;
+                case 6:
+                    _iDec = iCount - 4;
+                    _iJit = _iDec + 1;
+                    _iSig = _iDec + 2;
+                    return true;
+            }
         }
-
-        int iCount = (int)(Q(rgG, LB_HEAD) ^ uK);
-        uint uOff1 = Q(rgG, LB_HEAD + 4) ^ uK;
-        uint uOff2 = Q(rgG, LB_HEAD + 8) ^ uK;
-        int iDecoys = (int)(Q(rgG, LB_HEAD + 12) ^ K3(uK, iCount));
-        if (iCount <= 0 || iCount > 0x1000 || uOff1 == 0 || uOff1 > 0x10000000 || uOff2 == 0 || iDecoys < 0 || iDecoys > 0x100)
-            return false;
-
-        int iTotal = iCount + iDecoys;
-        long llTEnd = LB_TBL + (long)iTotal * 20;
-        if (llTEnd > rgG.Length) return false;
-
-        int[] rgPerm = K2(uK);
-        var rgRow = new uint[iTotal * 5];
-        uint uNameTotal = 0;
-        for (int i = 0; i < iTotal; i++)
-        {
-            uint uKk = K3(uK, i);
-            int o = LB_TBL + i * 20;
-            uint[] rgF = new uint[4];
-            for (int s = 0; s < 4; s++)
-                rgF[rgPerm[s]] = Q(rgG, o + s * 4) ^ uKk;
-            rgRow[i * 5 + 0] = rgF[0];
-            rgRow[i * 5 + 1] = rgF[1];
-            rgRow[i * 5 + 2] = rgF[2];
-            rgRow[i * 5 + 3] = rgF[3];
-            uNameTotal += rgF[0];
-        }
-
-        long llNa = (uNameTotal + 3u) & ~3u;
-        long llDs = llTEnd + llNa;
-        if (llDs > rgG.Length) return false;
-
-        for (int i = 0; i < iCount; i++)
-        {
-            if (rgRow[i * 5 + 1] == 0) return false;
-            long llNo = llTEnd;
-            for (int j = 0; j < i; j++) llNo += rgRow[j * 5];
-            if (llNo + rgRow[i * 5] > rgG.Length) return false;
-            string sName = Encoding.UTF8.GetString(rgG, (int)llNo, (int)rgRow[i * 5]);
-            long llDoff = llDs + rgRow[i * 5 + 3];
-            if (rgRow[i * 5 + 2] > 0 && llDoff + rgRow[i * 5 + 2] > rgG.Length) return false;
-            rgEntries.Add((sName, rgRow[i * 5 + 1], rgRow[i * 5 + 2], (uint)llDoff));
-        }
-        _iDec = iCount - 4;
-        _iJit = _iDec + 1;
-        _iSig = _iDec + 2;
-        return true;
     }
 
     private static string X2(string sName)
@@ -422,56 +632,70 @@ internal static class P
     //提取Iamdec解码器 以LoadBare加载
     private static void EnsureDecoder(byte[] rgG, List<(string, uint, uint, uint)> rgEntries)
     {
+        if (uKS3A == 0x8BADF00Du) return;
         if (_decPtr != IntPtr.Zero) return;
         if (_iDec >= 0 && _iDec < rgEntries.Count)
         {
             var entry = rgEntries[_iDec];
+            uint uAdj = Mx(_rgSeedKey);
             byte[] rgDll = new byte[entry.Item2];
+            uint uDq = uAdj ^ 0x3C6EF372u;
             for (int i = 0; i < rgDll.Length; i++)
-                rgDll[i] = (byte)(rgG[(int)entry.Item4 + i] ^ _rgSeedKey[i % 16]);
+            {
+                rgDll[i] = (byte)(rgG[(int)entry.Item4 + i] ^ _rgSeedKey[i & 15] ^ (byte)(uAdj >> (8 * (i & 3))));
+                uDq = (uDq * 0x9E3779B9u) ^ rgDll[i];
+            }
+            GC.KeepAlive(uDq);
             _decPtr = LoadBare(rgDll, true);
             Array.Clear(rgDll, 0, rgDll.Length);
             return;
         }
-        throw new InvalidDataException(S1(0x7EF1D782u, new uint[] { 0x7E99D7F1u, 0x1D5B5154u }));
+        throw new InvalidDataException();
     }
 
     //手工映射裸PE返回基址 .text/.rdata按RVA排布
     private static IntPtr LoadBare(byte[] rgDll, bool fRx)
     {
+        if (uLGAA == 0xFEEDFACEu) return IntPtr.Zero;
         int iPe = BitConverter.ToInt32(rgDll, 0x3C);
         ushort usCnt = BitConverter.ToUInt16(rgDll, iPe + 6);
         ushort usOpt = BitConverter.ToUInt16(rgDll, iPe + 20);
         int iSec = iPe + 24 + usOpt;
         uint uTextVa = 0; int iTextRaw = 0, iTextSz = 0;
-        uint uDataVa = 0; int iDataRaw = 0, iDataSz = 0;      // .rdata
-        uint uData2Va = 0; int iData2Raw = 0, iData2Sz = 0;    // .data
+        uint uDataVa = 0; int iDataRaw = 0, iDataSz = 0;//.rdata
+        uint uData2Va = 0; int iData2Raw = 0, iData2Sz = 0;//.data
+        string sTxt = S2(0x15083CC2u, new uint[] { 0x14783F62u, 0xB017B5BBu, 0x52D73034u }, uR2A, uR2B);
+        string sRda = S2(0x44F79C99u, new uint[] { 0x45879F09u, 0xE00F155Au, 0x82C69303u, 0x1F9E09C4u }, uR2A, uR2B);
+        string sDat = S2(0x432BF782u, new uint[] { 0x425BF4A2u, 0xE26B729Bu, 0x7C92EAF4u }, uR2A, uR2B);
         for (int i = 0; i < usCnt; i++)
         {
-            int o = iSec + i * 40;
+            int o = iSec + (i << 5) + (i << 3);
             string sName = Encoding.ASCII.GetString(rgDll, o, 8).TrimEnd('\0');
             uint uVa = BitConverter.ToUInt32(rgDll, o + 12);
             uint uRaw = BitConverter.ToUInt32(rgDll, o + 20);
             uint uRsz = BitConverter.ToUInt32(rgDll, o + 16);
-            if (sName == ".text") { uTextVa = uVa; iTextRaw = (int)uRaw; iTextSz = (int)uRsz; }
-            else if (sName == ".rdata") { uDataVa = uVa; iDataRaw = (int)uRaw; iDataSz = (int)uRsz; }
-            else if (sName == ".data") { uData2Va = uVa; iData2Raw = (int)uRaw; iData2Sz = (int)uRsz; }
+            if (sName.Length >= 4 && sName[0] == '.' && uRsz == 0)
+                GC.KeepAlive(uVa);
+            if (sName == sTxt) { uTextVa = uVa; iTextRaw = (int)uRaw; iTextSz = (int)uRsz; }
+            else if (sName == sRda) { uDataVa = uVa; iDataRaw = (int)uRaw; iDataSz = (int)uRsz; }
+            else if (sName == sDat) { uData2Va = uVa; iData2Raw = (int)uRaw; iData2Sz = (int)uRsz; }
         }
         if (iTextSz == 0)
-            throw new InvalidDataException(S1(0x55667788u, new uint[] { 0x550777EAu, 0xF3BDF125u, 0x91B06A9Eu, 0x3063E4D0u, 0xCE215E08u, 0x6C7BD857u }));
+            throw new InvalidDataException();
         int cbMap = iTextSz + 0x1000 + (iDataSz > 0 ? (int)(uDataVa - uTextVa) + iDataSz : 0) + (iData2Sz > 0 ? (int)(uData2Va - uTextVa) + iData2Sz : 0) + 0x1000;
         IntPtr p = VirtualAlloc(IntPtr.Zero, (UIntPtr)cbMap, 0x3000, fRx ? 0x04u : 0x40u);
         if (p == IntPtr.Zero)
-            throw new InvalidDataException(S1(0x99AABBCCu, new uint[] { 0x99CBBBBAu, 0x378E35E9u, 0xD67AAF51u }));
+            throw new InvalidDataException();
         Marshal.Copy(rgDll, iTextRaw, p, iTextSz);
         if (iDataSz > 0)
             Marshal.Copy(rgDll, iDataRaw, new IntPtr(p.ToInt64() + (uDataVa - uTextVa)), iDataSz);
         if (iData2Sz > 0)
             Marshal.Copy(rgDll, iData2Raw, new IntPtr(p.ToInt64() + (uData2Va - uTextVa)), iData2Sz);
         if (fRx)
-            VirtualProtect(p, (UIntPtr)iTextSz, 0x20, out _);   // .text -> RX (no W)
+            VirtualProtect(p, (UIntPtr)iTextSz, 0x20, out _);//.text置RX
         return p;
     }
+
     //解析PE导出表
     private static Dictionary<string, uint> ParseExports(byte[] rgDll)
     {
@@ -485,20 +709,25 @@ internal static class P
         int iExpOff = RvaToOff(rgDll, iPe, usOpt, uExpRva);
         if (iExpOff <= 0) return rgExports;
         int iNameCount = BitConverter.ToInt32(rgDll, iExpOff + 0x18);
+        int iFuncCount = BitConverter.ToInt32(rgDll, iExpOff + 0x1C);
         int iNameOff = RvaToOff(rgDll, iPe, usOpt, BitConverter.ToUInt32(rgDll, iExpOff + 0x20));
         int iOrdOff = RvaToOff(rgDll, iPe, usOpt, BitConverter.ToUInt32(rgDll, iExpOff + 0x24));
         int iFuncOff = RvaToOff(rgDll, iPe, usOpt, BitConverter.ToUInt32(rgDll, iExpOff + 0x1C));
+        if (iNameOff <= 0 || iOrdOff <= 0 || iFuncOff <= 0) return rgExports;
         for (int i = 0; i < iNameCount; i++)
         {
-            int iNameRva = BitConverter.ToInt32(rgDll, iNameOff + i * 4);
+            int iNameRva = BitConverter.ToInt32(rgDll, iNameOff + (i << 2));
             int iNameOff2 = RvaToOff(rgDll, iPe, usOpt, (uint)iNameRva);
             if (iNameOff2 <= 0) continue;
+            uint uDp = (uint)(iNameRva ^ i ^ 0x9E3779B9u);
             int iEnd = iNameOff2;
             while (iEnd < rgDll.Length && rgDll[iEnd] != 0) iEnd++;
             string sName = Encoding.ASCII.GetString(rgDll, iNameOff2, iEnd - iNameOff2);
-            int usOrd = BitConverter.ToUInt16(rgDll, iOrdOff + i * 2);
+            int usOrd = BitConverter.ToUInt16(rgDll, iOrdOff + (i << 1));
+            if (usOrd >= iFuncCount) { GC.KeepAlive(uDp); continue; }
             uint uFnRva = BitConverter.ToUInt32(rgDll, iFuncOff + usOrd * 4);
             rgExports[sName] = uFnRva;
+            GC.KeepAlive(uDp ^ uFnRva);
         }
         return rgExports;
     }
@@ -509,7 +738,7 @@ internal static class P
         int iSec = iPe + 24 + usOpt;
         for (int i = 0; i < usCnt; i++)
         {
-            int o = iSec + i * 40;
+            int o = iSec + (i << 5) + (i << 3);
             uint uVs = BitConverter.ToUInt32(rgDll, o + 8);
             uint uVa = BitConverter.ToUInt32(rgDll, o + 12);
             uint uRs = BitConverter.ToUInt32(rgDll, o + 16);
@@ -528,8 +757,8 @@ internal static class P
         int iSec = iPe + 24 + usOpt;
         for (int i = 0; i < usCnt; i++)
         {
-            int o = iSec + i * 40;
-            if (Encoding.ASCII.GetString(rgDll, o, 8).TrimEnd('\0') == ".text")
+            int o = iSec + (i << 5) + (i << 3);
+            if (Encoding.ASCII.GetString(rgDll, o, 8).TrimEnd('\0') == S2(0x15083CC2u, new uint[] { 0x14783F62u, 0xB017B5BBu, 0x52D73034u }, uR2A, uR2B))
                 return BitConverter.ToUInt32(rgDll, o + 12);
         }
         return 0x1000;
@@ -543,28 +772,37 @@ internal static class P
 
     private static void EnsureJitHook(byte[] rgG, List<(string, uint, uint, uint)> rgEntries)
     {
+        if (uLK1A == 0xDEADBEEFu) return;
         if (_iJit >= 0 && _iJit < rgEntries.Count)
         {
             var entry = rgEntries[_iJit];
             byte[] rgDll = X3(rgG, entry);
-            _jitBase = LoadBare(rgDll, true);   // jithook .data now mapped RW, .text RX
+            uint uDh = (uint)rgDll.Length ^ 0x5A5A5A5Au;
+            _jitBase = LoadBare(rgDll, true);//.text只读 .data可写
             _uJitTextVa = PeTextVa(rgDll);
             var rgExports = ParseExports(rgDll);
-            _fnJitInstall = Mk<JitInstall>(rgExports["InstallJitHook"]);
-            _fnJitSetKey = Mk<JitSetKey>(rgExports["SetJitHookKey"]);
-            _fnJitAddSig = Mk<JitAddSig>(rgExports["AddPayloadSig"]);
+            GC.KeepAlive(uDh);
+            _fnJitInstall = Mk<JitInstall>(rgExports[S2(0x7579CA59u, new uint[] { 0x7731C929u, 0x102947B2u, 0xB2E0BEABu, 0x534035D4u, 0xED1FB29Du, 0x8ECF298Eu, 0x29BEA7F7u, 0xC8FE1E68u }, uR2A, uR2B)]);
+            _fnJitSetKey = Mk<JitSetKey>(rgExports[S2(0x234E5F7Eu, new uint[] { 0x21D65C56u, 0xC225DB67u, 0x5CF55150u, 0xFFB4CFD1u, 0x9F54453Au, 0x383BC333u, 0xDB5339D4u }, uR2A, uR2B)]);
+            _fnJitAddSig = Mk<JitAddSig>(rgExports[S2(0x29CE007Au, new uint[] { 0x2BC6035Au, 0xCB2578B3u, 0x6534F024u, 0x07146EDDu, 0xA1A3E47Eu, 0x427B625Fu, 0xDC22DAD0u }, uR2A, uR2B)]);
             Array.Clear(rgDll, 0, rgDll.Length);
         }
     }
 
     private static void InjectSigs(byte[] rgG, List<(string, uint, uint, uint)> rgEntries)
     {
+        if (uLK1B == 0xCAFEBABEu) return;
         if (_iSig >= 0 && _iSig < rgEntries.Count)
         {
             var entry = rgEntries[_iSig];
             byte[] rgSig = X3(rgG, entry);
+            uint uDs = (uint)rgSig.Length;
             for (int i = 0; i + 4 <= rgSig.Length; i += 4)
+            {
                 _fnJitAddSig(BitConverter.ToUInt32(rgSig, i));
+                uDs = (uDs * 0x9E3779B9u) ^ BitConverter.ToUInt32(rgSig, i);
+            }
+            GC.KeepAlive(uDs);
             Array.Clear(rgSig, 0, rgSig.Length);
         }
     }
@@ -572,50 +810,78 @@ internal static class P
     //解压条目 压缩按4KB页调Iamdec 非压缩直接XOR
     private static byte[] X3(byte[] rgG, (string, uint, uint, uint) entry)
     {
-        int iDoff = (int)entry.Item4;
-        uint uRawLen = entry.Item2;
-        int iCompLen = (int)entry.Item3;
-        if (iCompLen == (int)uRawLen)
+        if (uKS1A == 0xF00DFACEu) return rgG;
+        byte[] rgRaw = Array.Empty<byte>(), rgComp = Array.Empty<byte>(), rgOut = Array.Empty<byte>(), rgHist = Array.Empty<byte>(), rgPage = Array.Empty<byte>(), rgState = Array.Empty<byte>();
+        DecPage fnDec = null!;
+        uint uRawLen = 0, uPg = 0, uPs = 0, uPe = 0;
+        int iDoff = 0, iCompLen = 0, iRc = 0, iC = 0;
+        int iSt = 0;
+        while (true)
         {
-            //非压缩 直接XOR seed key还原
-            byte[] rgRaw = new byte[uRawLen];
-            for (int i = 0; i < rgRaw.Length; i++)
-                rgRaw[i] = (byte)(rgG[iDoff + i] ^ _rgSeedKey[i % 16]);
-            return rgRaw;
+            switch (iSt)
+            {
+                case 0:
+                    iDoff = (int)entry.Item4;
+                    uRawLen = entry.Item2;
+                    iCompLen = (int)entry.Item3;
+                    iSt = (iCompLen == (int)uRawLen) ? 1 : 2;
+                    continue;
+                case 1:
+                    if (uRawLen == 0x7FFFFFFF) return rgG;
+                    rgRaw = new byte[uRawLen];
+                    uint uAdj = Mx(_rgSeedKey);
+                    uint uDy = uAdj ^ 0x5A5A5A5Au;
+                    for (int i = 0; i < rgRaw.Length; i++)
+                    {
+                        rgRaw[i] = (byte)(rgG[iDoff + i] ^ _rgSeedKey[i & 15] ^ (byte)(uAdj >> (8 * (i & 3))));
+                        uDy = (uDy * 0x9E3779B9u) ^ (uint)rgRaw[i];
+                    }
+                    GC.KeepAlive(uDy);
+                    return rgRaw;
+                case 2:
+                    if (_decPtr == IntPtr.Zero)
+                        throw new InvalidDataException();
+                    fnDec = Marshal.GetDelegateForFunctionPointer<DecPage>(_decPtr);
+                    rgComp = new byte[iCompLen];
+                    Array.Copy(rgG, iDoff, rgComp, 0, iCompLen);
+                    rgOut = new byte[uRawLen];
+                    rgHist = new byte[0x80000];
+                    rgPage = new byte[0x1000];
+                    rgState = new byte[0x38];
+                    BitConverter.GetBytes(1u).CopyTo(rgState, 0x00);
+                    BitConverter.GetBytes(1u).CopyTo(rgState, 0x04);
+                    BitConverter.GetBytes(1u).CopyTo(rgState, 0x08);
+                    BitConverter.GetBytes((uint)iCompLen).CopyTo(rgState, 0x28);
+                    BitConverter.GetBytes(uRawLen).CopyTo(rgState, 0x34);
+                    rgHist[0] = rgComp[0];
+                    uPg = 0;
+                    iSt = 3;
+                    continue;
+                case 3:
+                    if (uPg << 12 >= uRawLen) { iSt = 5; continue; }
+                    uPs = uPg << 12;
+                    uPe = Math.Min(uPs + 0x1000, uRawLen);
+                    if (uPg == 0) rgPage[0] = rgComp[0];
+                    else Array.Clear(rgPage, 0, 0x1000);
+                    BitConverter.GetBytes(uPs).CopyTo(rgState, 0x2C);
+                    BitConverter.GetBytes(uPe).CopyTo(rgState, 0x30);
+                    uint uD3 = (uPg ^ 0x0F0F0F0Fu) * 0x9E3779B9u;
+                    iRc = fnDec(rgState, rgHist, rgPage, rgComp);
+                    GC.KeepAlive(uD3);
+                    if (iRc != 0)
+                        throw new InvalidDataException();
+                    iC = (int)(uPe - uPs);
+                    Array.Copy(rgPage, 0, rgOut, (int)uPs, iC);
+                    uPg++;
+                    iSt = 3;
+                    continue;
+                case 5:
+                    Array.Clear(rgComp, 0, rgComp.Length);
+                    Array.Clear(rgState, 0, rgState.Length);
+                    Array.Clear(rgHist, 0, rgHist.Length);
+                    return rgOut;
+            }
         }
-        if (_decPtr == IntPtr.Zero)
-            throw new InvalidDataException(S1(0xDDEEFF00u, new uint[] { 0xDD8BFF64u, 0x7C4978DAu, 0x1A38F216u, 0xB8B56C59u, 0x56A3E58Au, 0xF5245FE9u, 0x9354D93Au, 0x3117536Eu, 0xCFCECCADu }));
-        var fnDec = Marshal.GetDelegateForFunctionPointer<DecPage>(_decPtr);
-        byte[] rgComp = new byte[iCompLen];
-        Array.Copy(rgG, iDoff, rgComp, 0, iCompLen);
-        byte[] rgOut = new byte[uRawLen];
-        byte[] rgHist = new byte[0x80000];
-        byte[] rgPage = new byte[0x1000];
-        byte[] rgState = new byte[0x38];
-        BitConverter.GetBytes(1u).CopyTo(rgState, 0x00);//uInPos
-        BitConverter.GetBytes(1u).CopyTo(rgState, 0x04);//iHist
-        BitConverter.GetBytes(1u).CopyTo(rgState, 0x08);//uOutPos
-        BitConverter.GetBytes((uint)iCompLen).CopyTo(rgState, 0x28);//srcLen
-        BitConverter.GetBytes(uRawLen).CopyTo(rgState, 0x34);//dstLen
-        rgHist[0] = rgComp[0];
-        for (uint uPg = 0; uPg * 0x1000 < uRawLen; uPg++)
-        {
-            uint uPs = uPg * 0x1000;
-            uint uPe = Math.Min(uPs + 0x1000, uRawLen);
-            if (uPg == 0) rgPage[0] = rgComp[0];
-            else Array.Clear(rgPage, 0, 0x1000);
-            BitConverter.GetBytes(uPs).CopyTo(rgState, 0x2C);
-            BitConverter.GetBytes(uPe).CopyTo(rgState, 0x30);
-            int iRc = fnDec(rgState, rgHist, rgPage, rgComp);
-            if (iRc != 0)
-                throw new InvalidDataException(S1(0x12345678u, new uint[] { 0x1251561Cu, 0xB04BD052u, 0x4EC04998u, 0xECDAC39Eu }) + iRc.ToString("X"));
-            int iC = (int)(uPe - uPs);
-            Array.Copy(rgPage, 0, rgOut, (int)uPs, iC);
-        }
-        Array.Clear(rgComp, 0, rgComp.Length);
-        Array.Clear(rgState, 0, rgState.Length);
-        Array.Clear(rgHist, 0, rgHist.Length);
-        return rgOut;
     }
 
     private static Assembly X4(AssemblyLoadContext alc, byte[] rgB)
@@ -639,37 +905,81 @@ internal static class P
         finally { Array.Clear(rgB, 0, rgB.Length); }
     }
 
+    //内存读节 命中返回数据 失败null回退文件
+    private static byte[]? X6Mem(ProcessModule mm, string sSection)
+    {
+        IntPtr pBase = mm.BaseAddress;
+        if (pBase == IntPtr.Zero) return null;
+        int iPe = Marshal.ReadInt32(pBase, 0x3C);
+        if (iPe < 0 || Marshal.ReadInt32(pBase, iPe) != 0x4550) return null;
+        int iCnt = Marshal.ReadInt16(pBase, iPe + 6);
+        int iOpt = Marshal.ReadInt16(pBase, iPe + 20);
+        if (iCnt <= 0 || iOpt <= 0) return null;
+        int iSec = iPe + 24 + iOpt;
+        for (int i = 0; i < iCnt; i++)
+        {
+            int o = iSec + (i << 5) + (i << 3);
+            string sN = (Marshal.PtrToStringAnsi(new IntPtr(pBase.ToInt64() + o), 8) ?? "").TrimEnd('\0');
+            if (sN != sSection) continue;
+            int iVs = Marshal.ReadInt32(pBase, o + 8);
+            int iVa = Marshal.ReadInt32(pBase, o + 12);
+            if (iVs <= 0 || iVa <= 0) return null;
+            byte[] rg = new byte[iVs];
+            Marshal.Copy(new IntPtr(pBase.ToInt64() + iVa), rg, 0, iVs);
+            return rg;
+        }
+        return null;
+    }
+
     private static byte[] X6()
     {
+        if (uLLCB == 0xCAFEBABEu) return Array.Empty<byte>();
+        string sSection = S2(0x15083CC2u, new uint[] { 0x14783F52u, 0xB01FB573u, 0x52D7333Cu, 0xEFAEA9EDu }, uR2A, uR2B);
+        //优先从内存模块读节 隐藏文件I/O痕迹
+        try
+        {
+            var mm = Process.GetCurrentProcess().MainModule;
+            if (mm != null)
+            {
+                byte[]? rgMem = X6Mem(mm, sSection);
+                if (rgMem != null && rgMem.Length >= 128)
+                    return rgMem;
+            }
+        }
+        catch { }
+        //回退 文件读
         string sSelf = Process.GetCurrentProcess().MainModule?.FileName
-            ?? throw new InvalidOperationException(S1(0x5B5DDEAEu, new uint[] { 0x5B2FDEFEu, 0xF9F65808u, 0x97BFD245u, 0x36544BAAu, 0xD44FC5F3u, 0x72533F23u, 0x10C4B971u, 0xAE9432DCu, 0x4D70AC17u, 0xEB302643u, 0x89E49F8Au, 0x27C019C4u }));
-        string sSection = S1(0xD8727B8Bu, new uint[] { 0xD8007BA5u, 0x76C8F520u, 0x14806E89u });
+            ?? Environment.ProcessPath
+            ?? throw new InvalidOperationException();
         using var fs = new FileStream(sSelf, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
 
         byte[] rgHdr = new byte[0x400];
         int iRead = fs.Read(rgHdr, 0, rgHdr.Length);
         if (iRead < 0x400)
-            throw new InvalidOperationException(S1(0x338B2FA6u, new uint[] { 0x33E32FD5u, 0xD1B0A930u, 0x6FDA236Cu, 0x0E749C81u, 0xAC0116AAu, 0x4AC19026u, 0xE8BD0998u, 0x870F83C7u }));
+            throw new InvalidOperationException();
 
         int iPe = BitConverter.ToInt32(rgHdr, 0x3C);
         if (iPe < 0 || iPe + 0x18 > rgHdr.Length || BitConverter.ToUInt32(rgHdr, iPe) != 0x4550)
-            throw new InvalidOperationException(S1(0x45ADEC6Bu, new uint[] { 0x45C2EC03u, 0xE3916657u, 0x8275DFFDu, 0x207459E5u, 0xBEE4D321u, 0x5CE34D7Cu, 0xFADAC6A0u, 0x9977402Au, 0x3700BA13u, 0xD5C03381u, 0x73BDADC2u }));
+            throw new InvalidOperationException();
 
         ushort usCnt = BitConverter.ToUInt16(rgHdr, iPe + 6);
         ushort usOpt = BitConverter.ToUInt16(rgHdr, iPe + 20);
         int iSec = iPe + 24 + usOpt;
         if (iSec < 0 || iSec + usCnt * 40 > rgHdr.Length)
-            throw new InvalidOperationException(S1(0x29B16E1Au, new uint[] { 0x29D96E69u, 0xC79AE7BCu, 0x660061F8u, 0x0432DB36u, 0xA2FB549Du, 0x40A9CEDEu, 0xDEDE481Eu, 0x7D54C25Du, 0x1B013B80u, 0xB9A4B5FEu }));
+            throw new InvalidOperationException();
 
         for (int i = 0; i < usCnt; i++)
         {
-            int o = iSec + i * 40;
-            if (Encoding.ASCII.GetString(rgHdr, o, 8).TrimEnd('\0') == sSection)
+            int o = iSec + (i << 5) + (i << 3);
+            string sN = Encoding.ASCII.GetString(rgHdr, o, 8).TrimEnd('\0');
+            uint uRaw = BitConverter.ToUInt32(rgHdr, o + 20);
+            uint uRawSz = BitConverter.ToUInt32(rgHdr, o + 16);
+            if (sN.Length == 4 && sN[0] == '.' && uRawSz == 0)
+                GC.KeepAlive(uRaw);
+            if (sN == sSection)
             {
-                uint uRaw = BitConverter.ToUInt32(rgHdr, o + 20);
-                uint uRawSz = BitConverter.ToUInt32(rgHdr, o + 16);
                 if (uRawSz == 0 || uRaw + uRawSz > (ulong)fs.Length)
-                    throw new InvalidOperationException(S1(0x555FFA2Eu, new uint[] { 0x553EFA4Cu, 0xF3B77383u, 0x91BCED8Eu, 0x3067673Du, 0xCE5CE166u, 0x6C065AEBu, 0x0ACFD4E1u, 0xA88D4E49u, 0x4775C799u, 0xE531418Fu, 0x83FFBB07u, 0x21A6354Fu, 0xBFF9AEA9u }));
+                    throw new InvalidOperationException();
                 byte[] rgLam = new byte[uRawSz];
                 fs.Position = uRaw;
                 int iGot = 0;
@@ -677,12 +987,12 @@ internal static class P
                 {
                     int iRead2 = fs.Read(rgLam, iGot, (int)uRawSz - iGot);
                     if (iRead2 <= 0)
-                        throw new InvalidOperationException(S1(0xE8E251BAu, new uint[] { 0xE88A51C9u, 0x876BCB1Cu, 0x25714558u, 0xC3EDBE97u, 0x61A438FFu, 0xFF91B277u, 0x9E402C62u, 0x3C46A5A4u, 0xDAFB1FF1u, 0x78B39957u }));
+                        throw new InvalidOperationException();
                     iGot += iRead2;
                 }
                 return rgLam;
             }
         }
-        throw new InvalidOperationException(S1(0x820212E1u, new uint[] { 0x827012CFu, 0x20588CFEu, 0xBE100627u, 0x5CDB802Cu, 0xFABCF9A0u, 0x997E730Au, 0x3720ED58u, 0xD5E866D0u, 0x73C9E0C6u, 0x11935A42u, 0xB059D474u, 0x4E004DBAu }));
+        throw new InvalidOperationException();
     }
 }

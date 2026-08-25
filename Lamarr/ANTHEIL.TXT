@@ -7,11 +7,12 @@
 
   George Antheil（1900-1959）的《机械芭蕾》（Ballet Mécanique，1923-25）配器里
   有16台自动钢琴、飞机螺旋桨、电铃和警笛等。自动钢琴由打孔纸卷（piano roll）驱动：
-  纸带上的孔位决定击键时刻，乐谱被转录成孔位之后，演奏完全交给机械。这件事的本质，
-  是把乐谱"编译"成机器指令。
+  纸带上的孔位决定击键时刻，乐谱被转录成孔位之后，演奏完全交给机械。这跟把乐谱"编译"
+  成机器指令是一回事。
 
-  全篇围绕一个设计：程序在磁盘为密文，运行时在JIT层现场解密，条目体系里混入诱饵。
-  三者共同的效果是——静态分析得到噪音，动态分析费时费力、变得不值得破。
+  纸卷上的孔位不是音乐，但机器读得懂。这篇文章里，磁盘上的密文也不是IL，但JIT读得懂。
+  程序在磁盘是密文，运行时在JIT层现场解密，条目体系里混入诱饵。静态分析拿到的是噪音，
+  动态分析要过的坎比黑箱反推多。
 
 
 ------------------------------------------------------------------------------
@@ -44,8 +45,8 @@
 
     方法体在磁盘是IL字节码，首次调用时由JIT编译成机器码。编译的必经入口是
     ICorJitInfo::compileMethod。但还有"提前偷看"的路径：内联分析（canInline）、
-    Tier1预编译、OSR（栈上替换）。它们不经过compileMethod，直接读方法体——这一
-    事实决定了jithook必须多守一道门。
+    Tier1预编译、OSR（栈上替换）。它们不经过compileMethod，直接读方法体——所以
+    jithook必须多守一道门：canInline这个入口也得拦。
 
 
   1.4  方法表示法：MethodDesc与方法体头
@@ -102,9 +103,9 @@
       - 内联 / Tier1 / OSR提前读方法体 -> 读到密文 -> 拦下
       - 内存里解密过的IL是临时的，编译完即弃
 
-    这个决定把"加密"从存储问题变成了JIT层的运行时问题——于是就有了jithook
+    所以加密不能只在打包时做，还得在JIT编译时解密——jithook就是干这个的。
 
-      1. 方法体加密    MethodBodyEncryptor：写密文 + CRC32签名表
+      1. 方法体加密    MethodEncryptor：写密文 + CRC32签名表
       2. JIT解密      jithook：compileMethod解密 + canInline门禁
       3. 条目伪装      真解码器 vs 蜜罐 + 随机诱饵
 
@@ -131,7 +132,8 @@
       内存态：BootAntheil解出主程序IL（已解密）交给JIT
       JIT态 ：jithook现场解密方法体，编译成机器码执行
 
-      防线 = 磁盘密文 + JIT门禁 + 条目混淆。
+      这套东西防不住认真逆向的高手团队，但静态分析基本失效，动态分析每走一步
+      都得先过jithook和反调试。
 
 
   组件与职责
@@ -141,7 +143,7 @@
       antlion_deco.asm        z0.dll蜜罐（假gzip解码器）
       jithook.asm             JIT钩子（compileMethod + canInline）
       BootAntheil             托管引导：解析/解密/装钩子
-      MethodBodyEncryptor.cs  方法体加密器
+      MethodEncryptor.cs      方法体加密器
       build_asm.ps1           汇编编译 + 调打包器
 
 
@@ -151,19 +153,19 @@
 
   4.1  条目清单
 
-    bundle里实际是七类东西（即打包顺序）：
+    bundle里放的是这些东西，按打包顺序：
 
       BootAntheil    主程序条目，替换原主程序
-      依赖dll         托管依赖，方法体已加密
-      真解码器      antheil_paged.asm（4KB页解码，导出Iamdec）
-      jithook       jithook.dll
-      签名表        CRC32签名表，每方法4字节
-      蜜罐          假gzip解码器（z0.dll / antlion_deco.asm）
+      依赖dll        托管依赖，方法体已加密
+      真解码器        antheil_paged.asm（4KB页解码，导出Iamdec）
+      jithook        jithook.dll
+      签名表         CRC32签名表，每方法4字节
+      蜜罐           假gzip解码器（z0.dll / antlion_deco.asm）
       *decoy*        4个随机命名/随机数据条目
 
-     名字区写入时，解码器/钩子/签名表/蜜罐这4个特殊条目换成随机假名（和
-     诱饵名同款的小写串），运行时按表索引定位——产物里没有特殊条目名，
-     也没有加密特征，名字区只有主程序名、依赖名和一堆随机小写串。
+    名字区写入时，解码器/钩子/签名表/蜜罐这4个特殊条目换成随机假名（和
+    诱饵名同款的小写串），运行时按表索引定位——产物里没有特殊条目名，
+    也没有加密特征，名字区只有主程序名、依赖名和一堆随机小写串。
 
 
   4.2  .lamapp区
@@ -172,7 +174,7 @@
 
       0    64B    BSJB伪头（#~ / #Strings指向诱饵区）
       64   32B    seed，ASCII，存时与KSeed异或
-      96   4B     payload FNV-1a哈希（selftest用）
+      96   4B     payload FNV-1a哈希（打包期校验，运行不依赖）
       100  16B    bundle头：count/cbOrigTotal/dataOff/decoyCount
       116  20N    条目表：nameLen/rawLen/compLen/compOff
       ...  ...    名字区（UTF-8，4对齐）+ 数据区
@@ -296,7 +298,7 @@
      |-- anthel_stub.asm：找hostfxr -> hostfxr_main_bundle
      |-- CLR加载bundle主程序（= BootAntheil）
      |-- BootAntheil.Main
-     |       |-- AD()             反调试三查
+     |       |-- AD()             多维反调试
      |       |-- X0()             伪造MethodDesc
      |       |-- X1()             解析.lamapp（seed -> key -> 表）
      |       |-- EnsureDecoder()  按索引取解码器 -> LoadBare
@@ -308,10 +310,12 @@
 
   5.3  AD：反调试
 
-    调试器是最直接的观察者，attach上来内存明文一目了然。三种手段轮着查：
-    IsDebuggerPresent（本地）、CheckRemoteDebuggerPresent（远程）、
-    还有NtQueryInformationProcess查调试端口。任何一种命中直接
-    Environment.FailFast(null)。尽管拦不住高手，但把"随手attach"的代价抬高了。
+    调试器是最直接的观察者，attach上来内存明文一目了然。多种手段轮着查：
+    IsDebuggerPresent、CheckRemoteDebuggerPresent、NtQueryInformationProcess
+    查调试端口、PEB.BeingDebugged直读、硬件断点寄存器、模块名单扫描，还有
+    profiler环境变量检测。任何一种命中直接Environment.FailFast(null)。
+    其中PEB直读绕过对API的hook，profiler检测封住ICorProfiler注入路径。
+    它们同样拦不住高手，但把"随手attach"和"profiler分析"的代价都抬高了。
 
 
   5.4  X0：伪造MethodDesc
@@ -364,7 +368,7 @@
 ------------------------------------------------------------------------------
 
     方法体在磁盘是密文，所有要读方法体的路径都得经过解密。
-    但"所有路径"这句话，是踩完坑才成立的。
+    但"所有路径"这句话，是踩完坑才确认、成立的。
 
     最初只钩compileMethod——编译的必经入口，在这里把IL异或回来交给JIT。
     程序能跑但跑不稳：同样的输入，有时正常，有时0x02345678，有时FailFast，
@@ -417,10 +421,9 @@
     dataSize上限，杜绝越界。
 
 
-  6.4  三条"提前读IL"的路径
+  6.4  还有几条不经过compileMethod的路径
 
-    compileMethod是明面上的门，但有三条路径会绕过它直接读
-    方法体：
+    compileMethod是明面上的门，但还有几条路径不经过它，也会读方法体：
 
       1. 内联分析（canInline）：编译调用方前先读被内联方法的IL。
           拦截：canInline对加密方法返回INLINE_NEVER。
@@ -459,7 +462,7 @@
       - 启动总开销：线性、一次性，不随运行时间增长。
 
 
-  6.6  MethodBodyEncryptor（打包侧）
+  6.6  MethodEncryptor（打包侧）
 
     对每个托管dll：
       for每个方法:
@@ -467,7 +470,9 @@
           计算code size（含局部变量签名、EH区位置）
           方法体字节XOR jit_key          //磁盘写密文
           记录CRC32(method) 到签名表     //供jithook匹配
-    签名表作为独立条目进lamapp；密钥jit_key打包与运行时同一派生（Fnv1a(KSeed)）。
+    签名表作为独立条目进lamapp；密钥jit_key打包与运行时同一派生
+    ——Fnv1a(SeedKey(seed))，seed在打包时提前生成、运行时由X1还原，
+    这样解密链闭环，难以从常量静态推导。
 
     为什么用CRC32：它是"指纹"不是"密钥"。jithook在编译现场只有
     MethodDesc，用指纹快速判断"这个方法被加密过没有"——查表在解密之前，
@@ -476,7 +481,7 @@
 
   6.7  诊断
 
-    GetJitHookDecryptCount返回解密次数，用来确认钩子真的工作：selftest跑一遍
+    GetJitHookDecryptCount返回解密次数，用来确认钩子真的工作：正常启动跑一遍
     后计数应当大于0，且解密数量与打包时输出的一致（encrypted N method bodies）。
 
 
@@ -577,8 +582,7 @@
 
   8.4  验证
 
-      --lamarr-selftest  解析lamapp -> 取解码器 -> 解主程序 
-                          -> FNV对比，返回0通过
+      GUI主流程          完整跑通X6读节 -> X1解析 -> 解码器 -> jithook -> 主程序 
       EhTestE            大EH表（11个catch）：验fat EH拷
       EhTestS            单线程：基础链路
       EhTestM            8线程并发：并发编译/解密稳定性
@@ -613,8 +617,8 @@
   9.1  攻击面
 
       静态：bundle条目dump、.lamapp解析、Iamdec dll提取
-      动态：内存dump（解密后IL）、attach、绕过反调试
-      逻辑：让canInline放行（程序自崩）、伪造签名表
+      动态：内存dump（解密后IL）、attach、profiler注入、页错误捕获
+      profiler注入已被环境变量检测封住；页错误捕获是OS层能力，无解。
 
 
   9.2  防御-绕过对照
@@ -623,21 +627,19 @@
       方法体密文           dump磁盘      密文，反编译失败
       反调试FailFast       attach        进程自杀
       canInline门禁       放行内联       JIT读密文 -> 自崩
-      条目假名化       找解码器       名字全是随机串
+      条目假名化           找解码器       名字全是随机串
 
 
   9.3  已知弱点
 
-      - 反调试可被"先禁用再启动"绕过
+      - 反调试可被"先禁用再启动"绕过，但SelfCheck方法体hash检查使patch失效
       - 解密后的IL短暂存在于内存，窗口极小但存在
       - jithook依赖vtable槽位号，CLR大版本可能变动
+      - 页错误捕获/内存密钥提取是OS层能力，连VM壳也没法完全防
+      - jit_key依赖运行时seed，可它需要走完整解密链才能静态推导
 
     没有不可破解，只有让破解成本大于收益。目标是让静态分析基本失效、
     动态分析费时费力、大部分逆向者走三次弯路后就放弃了。
 
 
 ------------------------------------------------------------------------------
-
-  George Antheil把音乐编成纸卷，交给机械演奏
-  我们用jithook把代码编成密文，交给JIT解密
-  纸卷不是音乐，密文不是代码，但机器都懂

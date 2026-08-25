@@ -2,6 +2,9 @@ using Lamarr;
 using System.Text;
 using System.IO.Compression;
 using System.Text.Json;
+using System.Reflection.Metadata;
+using System.Reflection.Metadata.Ecma335;
+using System.Reflection.PortableExecutable;
 
 namespace Lamarr.NativePack;
 
@@ -36,6 +39,7 @@ internal class PeWriterAntheil
     private readonly HashSet<string> rgStripDeps = new(StringComparer.OrdinalIgnoreCase);
 
     private byte[] rgBoot = null!;
+    private List<uint> rgBootCrcs = new();
     private byte[] rgLamApp = null!;
     private uint uLamAppRaw, uLamAppRawSize;
     private int iMainEntry = -1;
@@ -63,6 +67,9 @@ internal class PeWriterAntheil
         0x10,0x00,0x02,0x80,0x28,0x01,0x90,0xEB,
         0xC3,0x00,0x10,0x02,0x01,0x80,0x28,0x90
     };
+
+    //打包seed 提前生成 供方法体加密key派生（jit_key依赖seed 形成解密链闭环）
+    private string sSeed = "";
 
     //lamapp区 BSJB头+seed payload布局
     private const int iBsjbLen = 64;
@@ -164,11 +171,30 @@ internal class PeWriterAntheil
 
     public void LoadBoot(string sPath)
     {
+        sSeed = MakeSeed();
         byte[] rg = File.ReadAllBytes(sPath);
         int iPe = BitConverter.ToInt32(rg, 0x3C);
         if (iPe + 0x18 > rg.Length || BitConverter.ToUInt32(rg, iPe) != 0x4550)
             throw new InvalidOperationException($"Bootstrapper is not a PE: {sPath}");
-        rgBoot = rg;
+        //jithook安装后才运行的方法(W1/X4/X5)才能加密 先加密(按原名找token)再重命名 顺序反了就找不到
+        rgBootCrcs = MethodEncryptor.EncryptAll(rg, Fnv1a(SeedKey(Encoding.ASCII.GetBytes(sSeed))), BootTokens(rg));
+        rgBoot = BootRenamer.Rename(rg);
+    }
+
+    private static List<uint> BootTokens(byte[] rgD)
+    {
+        var rg = new List<uint>();
+        using var ms = new MemoryStream(rgD, writable: false);
+        using var per = new PEReader(ms);
+        var mr = per.GetMetadataReader();
+        foreach (var h in mr.MethodDefinitions)
+        {
+            var md = mr.GetMethodDefinition(h);
+            string sName = mr.GetString(md.Name);
+            if (sName == "W1" || sName == "X4" || sName == "X5" || sName == "TCheck" || sName == "X2")
+                rg.Add(0x06000000u | (uint)MetadataTokens.GetRowNumber(mr, h));
+        }
+        return rg;
     }
 
     public void LoadDecoder(string sPath)
@@ -186,8 +212,7 @@ internal class PeWriterAntheil
         if (rgDecoder == null || rgDecoder.Length == 0)
             throw new InvalidOperationException("Decoder not loaded (--decoder required)");
 
-        //生成seed并重建bundle条目
-        string sSeed = MakeSeed();
+        //seed已提前生成 重建bundle条目
         RebuildBundle(sSeed);
 
         ComputeLayout();
@@ -356,15 +381,16 @@ internal class PeWriterAntheil
 
         if (rgJitHook != null)
         {
-            uint uJitKey = Fnv1a(rgKSeed);
+            uint uJitKey = Fnv1a(SeedKey(Encoding.ASCII.GetBytes(sSeed)));
             var rgAllCrcs = new List<uint>();
             int iNEncMethods = 0;
             for (int i = 0; i < rgRaw.Count - 1; i++)//对每个托管dll加密方法体
             {
-                var rgCrcs = MethodBodyEncryptor.EncryptAll(rgRaw[i], uJitKey);
+                var rgCrcs = MethodEncryptor.EncryptAll(rgRaw[i], uJitKey);
                 rgAllCrcs.AddRange(rgCrcs);
                 iNEncMethods += rgCrcs.Count;
             }
+            rgAllCrcs.AddRange(rgBootCrcs);//B后半方法(W1/X4/X5)密文指纹 一并进签名表供jithook识别
             Console.WriteLine($"[jithook] encrypted {iNEncMethods} method bodies -> {rgAllCrcs.Count} sigs");
             var rgSigBytes = new byte[rgAllCrcs.Count * 4];
             for (int i = 0; i < rgAllCrcs.Count; i++)
@@ -427,13 +453,14 @@ internal class PeWriterAntheil
         var rgCompLen = new uint[iCount];
         var rgCompOff = new uint[iCount];
         byte[] rgSeedKey = SeedKey(Encoding.ASCII.GetBytes(sSeed));   // XOR key derived from seed
+        uint uAdj = MixAdj(rgSeedKey);
         for (int i = 0; i < iCount; i++)
         {
             rgRawLen[i] = (uint)rgRaw[i].Length;
             if (i == iDecIdx || i == iJitIdx || i == iSigIdx || i == iHoneyIdx)
             {
                 rgCompLen[i] = rgRawLen[i];
-                rgBlocks[i] = XorBytes(rgRaw[i], rgSeedKey);
+                rgBlocks[i] = XorBytes(rgRaw[i], rgSeedKey, uAdj);
             }
             else
             {
@@ -670,6 +697,14 @@ internal class PeWriterAntheil
         return uH;
     }
 
+    private static uint MixAdj(byte[] rgKey)
+    {
+        uint uA = rgKey[0] | ((uint)rgKey[1] << 8) | ((uint)rgKey[2] << 16) | ((uint)rgKey[3] << 24);
+        uint uB = rgKey[4] | ((uint)rgKey[5] << 8) | ((uint)rgKey[6] << 16) | ((uint)rgKey[7] << 24);
+        uint uM = uA ^ uB ^ 0x811C9DC5u;
+        return uM != 0 ? uM : 0x811C9DC5u;
+    }
+
     private static byte[] SeedKey(byte[] rgSeed)
     {
         byte[] rgKey = new byte[16];
@@ -684,10 +719,10 @@ internal class PeWriterAntheil
         return rgKey;
     }
 
-    private static byte[] XorBytes(byte[] rgD, byte[] rgKey)
+    private static byte[] XorBytes(byte[] rgD, byte[] rgKey, uint uAdj)
     {
         byte[] rgR = new byte[rgD.Length];
-        for (int i = 0; i < rgD.Length; i++) rgR[i] = (byte)(rgD[i] ^ rgKey[i % rgKey.Length]);
+        for (int i = 0; i < rgD.Length; i++) rgR[i] = (byte)(rgD[i] ^ rgKey[i % rgKey.Length] ^ (byte)(uAdj >> (8 * (i % 4))));
         return rgR;
     }
 
