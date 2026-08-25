@@ -1,5 +1,6 @@
 using Lamarr;
 using System.Text;
+using System.IO.Compression;
 using System.Text.Json;
 
 namespace Lamarr.NativePack;
@@ -395,11 +396,13 @@ internal class PeWriterAntheil
             rgDecName[i] = new byte[iNl];
             for (int j = 0; j < iNl; j++)
                 rgDecName[i][j] = (byte)('a' + rng.Next(26));
-            int iDl = rng.Next(64, 512);
-            rgDecData[i] = new byte[iDl];
-            rng.NextBytes(rgDecData[i]);
+            byte[] rgPlain = GenRandomX64(rng, 64, 512);
+            using var ms = new MemoryStream();
+            using (var gz = new GZipStream(ms, CompressionLevel.SmallestSize, true))
+                gz.Write(rgPlain, 0, rgPlain.Length);
+            rgDecData[i] = ms.ToArray();
             rgDecoyOff[i] = uDecoyLen;
-            uDecoyLen += (uint)iDl;
+            uDecoyLen += (uint)rgDecData[i].Length;
         }
 
         var rgNameBytes = new byte[iCount + iDecoys][];
@@ -539,6 +542,40 @@ internal class PeWriterAntheil
         byte[] rgNs = Encoding.ASCII.GetBytes("#Strings");
         Array.Copy(rgNs, 0, rgB, 52, rgNs.Length);
         return rgB;
+    }
+
+    private static byte[] GenRandomX64(Random rng, int cbMin, int cbMax)
+    {
+        int cbTarget = rng.Next(cbMin, cbMax);
+        using var ms = new MemoryStream();
+        while (ms.Length < cbTarget)
+        {
+            byte[] b = X64Insn(rng);
+            ms.Write(b, 0, b.Length);
+        }
+        return ms.ToArray();
+    }
+
+    private static byte[] X64Insn(Random rng)
+    {
+        switch (rng.Next(10))
+        {
+            case 0: return new byte[] { 0x90 };                                  //nop
+            case 1: return new byte[] { (byte)(0x50 + rng.Next(8)) };            //push rX
+            case 2: return new byte[] { (byte)(0x58 + rng.Next(8)) };            //pop rX
+            case 3: return new byte[] { 0x31, (byte)(0xC0 + rng.Next(8)) };      //xor rX,rAX
+            case 4: return new byte[] { 0x48, 0x8B, (byte)(0xC0 + rng.Next(8)) };//mov rAX,rX
+            case 5: { var b = new byte[10]; b[0] = 0x48; b[1] = 0xB8;            //mov rAX,imm64
+                    BitConverter.GetBytes(((ulong)(uint)rng.Next() << 32) | (uint)rng.Next()).CopyTo(b, 2);
+                    return b; }
+            case 6: return new byte[] { 0x48, 0x83, (byte)(0xC0 + rng.Next(8)), (byte)rng.Next(256) };//add rX,imm8
+            case 7: return new byte[] { 0xEB, (byte)rng.Next(256) };             //jmp rel8
+            case 8: { var b = new byte[7]; b[0] = 0x48; b[1] = 0x8D;             //lea rX,[rAX+disp32]
+                    b[2] = (byte)(0x80 + rng.Next(8));
+                    BitConverter.GetBytes(rng.Next()).CopyTo(b, 3);
+                    return b; }
+            default: return new byte[] { 0xC3 };                                 //ret
+        }
     }
 
     private static uint Fnv1a(byte[] rgD)
