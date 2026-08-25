@@ -257,7 +257,7 @@
     The underlying LZMAT compression algorithm was designed by
     Vitaly Evseenko. The Lamarr encoder / decoder source is a clean
     room reimplementation - no third party code, no dependencies
-    beyond .NET 5.0 to 10.0, released under WTFPL too :))) 
+    beyond .NET 5.0 to 10.0, released under WTFPL compatible :))) 
 
 ==============================================================================
   0B. LAMARR NATIVE PACKER
