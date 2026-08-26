@@ -472,7 +472,7 @@ internal static class P
         //防patch反调试/解密逻辑
         if (MethodHash(_ad) != (uHs ^ 0x56185926u)) Environment.FailFast(null);
         if (MethodHash(_x1) != (uHs ^ 0x12928B5Du)) Environment.FailFast(null);
-        if (MethodHash(_x3) != (uHs ^ 0x31C27E0Eu)) Environment.FailFast(null);
+        if (MethodHash(_x3) != (uHs ^ 0x50DED4E0u)) Environment.FailFast(null);
         if (MethodHash(_x6) != (uHs ^ 0x1C8DC383u)) Environment.FailFast(null);
         _uX1H = MethodHash(_x1);
     }
@@ -919,8 +919,13 @@ internal static class P
                     iDoff = (int)entry.Item4;
                     uRawLen = entry.Item2;
                     iCompLen = (int)entry.Item3;
+                    if (uRawLen == 0x7FFFFFFFu) { iSt = 4; continue; }
                     iSt = (iCompLen == (int)uRawLen) ? 1 : 2;
                     continue;
+                case 4:
+                    byte[] rgPlain = new byte[iCompLen];
+                    Array.Copy(rgG, iDoff, rgPlain, 0, iCompLen);
+                    return rgPlain;
                 case 1:
                     if (uRawLen == 0x7FFFFFFF) return rgG;
                     rgRaw = new byte[uRawLen];

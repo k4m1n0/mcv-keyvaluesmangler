@@ -175,15 +175,16 @@
       0    64B    BSJB伪头（#~ / #Strings指向诱饵区）
       64   32B    seed，ASCII，存时与KSeed异或
       96   4B     payload FNV-1a哈希（打包期校验，运行不依赖）
-      100  16B    bundle头：count/cbOrigTotal/dataOff/decoyCount
+      100  20B    bundle头：count/cbOrigTotal/dataOff/decoyCount/flags
       116  20N    条目表：nameLen/rawLen/compLen/compOff
       ...  ...    名字区（UTF-8，4对齐）+ 数据区
 
     开头64字节是假metadata：伪造 #~ 和 #Strings两个stream，偏移指向诱饵区，按标准
     格式解析的工具会顺着 #~ 走进假数据。seed每次打包随机（Guid "N" 格式），两次产物
-    互不相同——重打包等于整体换钥匙。bundle头四个u32都与派生key异或，直接读是噪音。
-    数据区：真实条目、诱饵、垃圾块按随机顺序物理排列，核心被穿插打散；gzip永远靠后，
-    每个前后都夹着垃圾块；表里的compOff指向实际位置。
+    互不相同——重打包等于整体换钥匙。bundle头五个u32都与派生key异或，直接读是噪音，
+    其中flags让运行时不必依赖固定布局就能定位解码器与jithook。数据区的真实条目、
+    诱饵、垃圾块按随机顺序物理排列，核心被穿插打散；gzip永远靠后，每个前后都夹着
+    垃圾块；表里的compOff指向实际位置。
 
 
   4.3  BSJB伪头逐字节
@@ -229,8 +230,10 @@
       K3    = 逐槽key：K3(k, i)，每行独立
       LamKey / LamPerm / LamSlot是打包侧的对应实现
 
-    配合方式：seed由打包器随机生成并XOR KSeed存盘，运行时还原出真seed
-    再派生全部key——所以重打包就是换钥匙，旧产物难以复用分析结论。
+    配合方式：seed由打包器随机生成并XOR KSeed存盘，运行时还原出真seed再派生
+    全部key——所以重打包就是换钥匙，旧产物难以复用分析结论。派生出的种子密钥
+    不整体留在内存，分片存于_skA.._skD，用时由Sk()重组、用完清零，内存里找不到
+    连续16字节的密钥。
 
 
   4.5  设计权衡：为什么XOR不是AES
@@ -247,8 +250,9 @@
 
   4.6  解码规则
 
-      compLen == rawLen  原样：XOR KSeed还原
-      compLen < rawLen  压缩：按4KB页逐页调Iamdec
+      条目在表头有三个判定：rawLen为0x7FFFFFFF是明文条目，直接取compOff处
+      compLen字节——依赖默认明文存储，CompressDeps开启后才压缩；compLen等于
+      rawLen是原样XOR KSeed还原；compLen小于rawLen是压缩，按4KB页逐页调Iamdec。
 
 
   Iamdec接口签名
@@ -314,8 +318,12 @@
     IsDebuggerPresent、CheckRemoteDebuggerPresent、NtQueryInformationProcess
     查调试端口、PEB.BeingDebugged直读、硬件断点寄存器、模块名单扫描，还有
     profiler环境变量检测。任何一种命中直接Environment.FailFast(null)。
-    其中PEB直读绕过对API的hook，profiler检测封住ICorProfiler注入路径。
-    它们同样拦不住高手，但把"随手attach"和"profiler分析"的代价都抬高了。
+    PEB直读绕过对API的hook，profiler检测封住ICorProfiler注入路径。检测不只在
+    启动时做一次：后台反调试线程持续运转，时间戳校验让单步调试的线程因拖慢而
+    超时自毁，线程本身用NtSetInformationThread对调试器隐藏，jithook的.text还
+    定时校验防运行时patch。另有一条窗口枚举路径（WndScan）恒返回false，只在
+    反调试判定里出现，纯粹为了让分析者误以为存在窗口级检测。它们同样拦不住高手，
+    但把"随手attach"、单步跟踪和"profiler分析"的代价都抬高了。
 
 
   5.4  X0：伪造MethodDesc
@@ -348,8 +356,9 @@
 
   5.7  X3：解出主程序
 
-      compLen == rawLen    没压缩：直接XOR KSeed还原
-      compLen < rawLen     压缩：按4KB一页逐页调Iamdec
+    条目有三种形态：rawLen为0x7FFFFFFF是明文，直接取字节（依赖默认明文，
+    主程序始终压缩）；compLen等于rawLen是没压缩，直接XOR KSeed还原；compLen
+    小于rawLen是压缩，按4KB一页逐页调Iamdec。
     分页解码器接口固定：state（0x38字节工作区）、hist（0x80000字节历史窗）、
     page（0x1000字节输出页）、src（压缩源）。最后一页不足4KB按实际长度收尾。
     解出来是完整托管IL，但它还要依赖别的dll。
@@ -519,8 +528,10 @@
 
     打包器额外生成4个随机条目混进表里，名字4~16个小写字母。第一个是完整伪PE
     （MZ + DOS stub + PE签名 + 伪造节表 + 随机x64代码），明文存放，PE工具会
-    识别为合法dll，提取或加载即失败；其余3个是gzip流（压缩随机x64指令）。真实
-    条目压缩流里残留的MZ片段也故意不清理，作为额外的伪PE痕迹。
+    识别为合法dll，提取或加载即失败。其余3个是gzip流：其中一个解压后是一套完整的
+    假VM壳——IL指令被生硬翻译成PPC字节码，旁边配着dispatch循环、handler表和翻译
+    映射表，分析者看到的是一台被保护的虚拟机的全部零件；另外两个只是随机x64指令。
+    真实条目压缩流里残留的MZ片段也故意不清理，作为额外的伪PE痕迹。
 
     Pheropod是bundle层诱饵的代号，包含假解码器蜜罐和gzip诱饵，
     它不试图挡住分析者，而是让其在错误目标上浪费时间。
@@ -555,8 +566,8 @@
       -OutDir              产物目录（out/）
       -Packer              antheil | native（决定编译哪些stub）
       -Pack                是否继续调打包器
-      -InputPath / -Output / -Boot / -Decoder / -JitHook /
-        Pheropod / -Mode    pack参数
+      -InputPath / -Output / -Boot / -Decoder / -JitHook / Pheropod 
+       / -Mode / -AppName / -PackerTfm / -CompressDeps   pack参数
 
     csproj的NativeStubPack里，编译与打包合成一个Exec调用。
 

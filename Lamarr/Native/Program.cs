@@ -43,6 +43,8 @@ internal static class Program
                 if (sDecoder != null) pe.LoadDecoder(sDecoder);
                 if (sJitHook != null) pe.LoadJitHook(sJitHook);
                 if (sPheropod != null) pe.LoadPheropod(sPheropod);
+                  if (Array.Exists(rgArgs, a => a.Equals("--compress-deps", StringComparison.OrdinalIgnoreCase)))
+                      pe.SetCompressDeps(true);
                 pe.LoadPayload(sInput);
                 pe.Pack(sOutput);
             }

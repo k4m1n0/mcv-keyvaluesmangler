@@ -104,7 +104,10 @@ internal class PeWriterAntheil
             throw new InvalidOperationException($"Pheropod not found: {sPath}");
         rgPheropod = File.ReadAllBytes(sPath);
     }
+
+    public void SetCompressDeps(bool b) => _bCompressDeps = b;
     private string sDecoderPath = "";
+    private bool _bCompressDeps = false;
 
     #endregion
     #region 入口
@@ -359,7 +362,7 @@ internal class PeWriterAntheil
     {
         var rgRaw = new List<byte[]>();
         var rgNames = new List<string>();
-        int iDecIdx = -1, iJitIdx = -1, iSigIdx = -1, iHoneyIdx = -1;
+        int iDecIdx = -1, iJitIdx = -1, iSigIdx = -1, iPheropodIdx = -1;
         var rng = new Random(Environment.TickCount ^ (int)(DateTime.UtcNow.Ticks & 0x7FFFFFFF));
         string RandName() => new string(Enumerable.Range(0, rng.Next(4, 16)).Select(_ => (char)('a' + rng.Next(26))).ToArray());
 
@@ -404,7 +407,7 @@ internal class PeWriterAntheil
         //附加jithook钩子与诱饵
         if (rgPheropod != null)
         {
-            iHoneyIdx = rgRaw.Count;
+            iPheropodIdx = rgRaw.Count;
             rgRaw.Add(rgPheropod); rgNames.Add(RandName());
             Console.WriteLine($"[pheropod] gzip decoy: {rgPheropod.Length} bytes");
         }
@@ -460,15 +463,20 @@ internal class PeWriterAntheil
         var rgRawLen = new uint[iCount];
         var rgCompLen = new uint[iCount];
         var rgCompOff = new uint[iCount];
-        byte[] rgSeedKey = SeedKey(Encoding.ASCII.GetBytes(sSeed));   // XOR key derived from seed
+        byte[] rgSeedKey = SeedKey(Encoding.ASCII.GetBytes(sSeed));
         uint uAdj = MixAdj(rgSeedKey);
         for (int i = 0; i < iCount; i++)
         {
             rgRawLen[i] = (uint)rgRaw[i].Length;
-            if (i == iDecIdx || i == iJitIdx || i == iSigIdx || i == iHoneyIdx)
+            if (i == iDecIdx || i == iJitIdx || i == iSigIdx || i == iPheropodIdx)
             {
                 rgCompLen[i] = rgRawLen[i];
                 rgBlocks[i] = XorBytes(rgRaw[i], rgSeedKey, uAdj);
+            }
+            else if (i > 0 && !_bCompressDeps)
+            {
+                rgCompLen[i] = rgRawLen[i];//依赖明文存储 默认不压缩依赖
+                rgBlocks[i] = rgRaw[i];
             }
             else
             {
@@ -544,9 +552,10 @@ internal class PeWriterAntheil
             uint[] rgF = new uint[4];
             if (i < iCount)
             {
+                bool bPlain = i > 0 && i != iDecIdx && i != iJitIdx && i != iSigIdx && i != iPheropodIdx && !_bCompressDeps;
                 rgF[0] = (uint)rgNameBytes[i].Length;
-                rgF[1] = rgRawLen[i];
-                rgF[2] = rgCompLen[i];
+                rgF[1] = bPlain ? 0x7FFFFFFFu : rgRawLen[i];
+                rgF[2] = bPlain ? rgRawLen[i] : rgCompLen[i];
                 rgF[3] = rgCompOff[i];
             }
             else
