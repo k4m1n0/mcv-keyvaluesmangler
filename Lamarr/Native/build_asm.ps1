@@ -118,6 +118,7 @@ if ($Pack)
 
     $RETRY_LOG = Join-Path $env:TEMP 'lamarr_pack_retry.log'
     $EXIT_CODE = 1
+    # MSBuild Exec force me
     for ($i = 0; $i -lt 3; $i++) {
         & $PACKER_EXE @PACK_ARGS *> $RETRY_LOG
         $EXIT_CODE = $LASTEXITCODE
