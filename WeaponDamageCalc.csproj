@@ -39,6 +39,7 @@
     <Packer Condition="'$(Packer)' == ''">managed</Packer>
     <BootName Condition="'$(BootName)' == ''">WeaponDamageCalc.Boot</BootName>
     <BootTfm Condition="'$(BootTfm)' == ''">net8.0-windows</BootTfm>
+    <NativeTfm Condition="'$(NativeTfm)' == ''">net8.0-windows</NativeTfm>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(SelfContained)' == '' And ('$(Packer)' == 'native' Or '$(Packer)' == 'antheil')">
@@ -51,21 +52,21 @@
   </Target>
 
   <Target Name="LamarrPack" AfterTargets="Publish" Condition="'$(Packer)' == 'managed' And '$(SelfContained)' != 'true' And '$(Configuration)' != 'Debug'">
-    <Exec Command="&quot;$(ProjectDir)Lamarr\Packer\bin\$(Configuration)\net8.0-windows\LamarrPacker.exe&quot; --stub &quot;$(PublishDir)Lamarr.exe&quot; --input &quot;$(ProjectDir)bin\$(Configuration)\$(TargetFramework)\win-x64\WeaponDamageCalc.dll&quot; --output &quot;$(PublishDir)WeaponDamageCalc_packed.exe&quot;" />
-    <Copy SourceFiles="$(PublishDir)WeaponDamageCalc_packed.exe" DestinationFiles="$(PublishDir)WeaponDamageCalc.exe" OverwriteReadOnlyFiles="true" />
-    <Delete Files="$(PublishDir)WeaponDamageCalc_packed.exe" />
+    <Exec Command="&quot;$(ProjectDir)Lamarr\Packer\bin\$(Configuration)\net8.0-windows\LamarrPacker.exe&quot; --stub &quot;$(PublishDir)Lamarr.exe&quot; --input &quot;$(ProjectDir)bin\$(Configuration)\$(TargetFramework)\win-x64\$(AssemblyName).dll&quot; --output &quot;$(PublishDir)$(AssemblyName)_packed.exe&quot;" />
+    <Copy SourceFiles="$(PublishDir)$(AssemblyName)_packed.exe" DestinationFiles="$(PublishDir)$(AssemblyName).exe" OverwriteReadOnlyFiles="true" />
+    <Delete Files="$(PublishDir)$(AssemblyName)_packed.exe" />
   </Target>
 
   <Target Name="NativeStubPack" AfterTargets="Publish" Condition="'$(Packer)' == 'native' Or '$(Packer)' == 'antheil'">
-    <Delete Files="$(PublishDir)WeaponDamageCalc.exe" />
+    <Delete Files="$(PublishDir)$(AssemblyName).exe" />
     <Exec Command="dotnet publish &quot;$(ProjectDir)WeaponDamageCalc.csproj&quot; -c $(Configuration) -r $(RuntimeIdentifier) --no-self-contained -p:PublishSingleFile=true -p:Packer=none -o &quot;$(PublishDir)&quot;" Condition="'$(SelfContained)' != 'true'" />
     <Exec Command="dotnet build &quot;$(ProjectDir)Lamarr\Native\Native.csproj&quot; -c Release -v q" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)Lamarr\Native\build_boot.ps1&quot; -Build -BootName $(BootName) -BootTfm $(BootTfm)" Condition="'$(Packer)' == 'antheil'" />
     <Exec Command="dotnet build &quot;$(ProjectDir)Lamarr\Native\Boot\Boot.csproj&quot; -c Release -v q" Condition="'$(Packer)' == 'native'" />
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)Lamarr\Native\build_asm.ps1&quot; -AsmDir &quot;$(ProjectDir)Lamarr\Native&quot; -OutDir &quot;$(ProjectDir)Lamarr\Native\out&quot; -Packer antheil -Pack -InputPath &quot;$(PublishDir)WeaponDamageCalc.exe&quot; -Output &quot;$(PublishDir)WeaponDamageCalc_packed.exe&quot; -Boot &quot;$(ProjectDir)Lamarr\Native\BootAntheil\bin\Release\$(BootTfm)\$(BootName).dll&quot; -Decoder &quot;$(ProjectDir)Lamarr\Native\out\Iamdec.dll&quot; -JitHook &quot;$(ProjectDir)Lamarr\Native\out\jithook.dll&quot; -Pheropod &quot;$(ProjectDir)Lamarr\Native\out\z0.dll&quot; -Mode antheil" Condition="'$(Packer)' == 'antheil'" />
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)Lamarr\Native\build_asm.ps1&quot; -AsmDir &quot;$(ProjectDir)Lamarr\Native&quot; -OutDir &quot;$(ProjectDir)Lamarr\Native\out&quot; -Packer native -Pack -InputPath &quot;$(PublishDir)WeaponDamageCalc.exe&quot; -Output &quot;$(PublishDir)WeaponDamageCalc_packed.exe&quot; -Boot &quot;$(ProjectDir)Lamarr\Native\Boot\bin\Release\net8.0-windows\LamarrBoot.dll&quot; -Mode clean" Condition="'$(Packer)' == 'native'" />
-    <Copy SourceFiles="$(PublishDir)WeaponDamageCalc_packed.exe" DestinationFiles="$(PublishDir)WeaponDamageCalc.exe" OverwriteReadOnlyFiles="true" />
-    <Delete Files="$(PublishDir)WeaponDamageCalc_packed.exe" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)Lamarr\Native\build_asm.ps1&quot; -AsmDir &quot;$(ProjectDir)Lamarr\Native&quot; -OutDir &quot;$(ProjectDir)Lamarr\Native\out&quot; -Packer antheil -Pack -InputPath &quot;$(PublishDir)$(AssemblyName).exe&quot; -Output &quot;$(PublishDir)$(AssemblyName)_packed.exe&quot; -Boot &quot;$(ProjectDir)Lamarr\Native\BootAntheil\bin\Release\$(BootTfm)\$(BootName).dll&quot; -Decoder &quot;$(ProjectDir)Lamarr\Native\out\Iamdec.dll&quot; -JitHook &quot;$(ProjectDir)Lamarr\Native\out\jithook.dll&quot; -Pheropod &quot;$(ProjectDir)Lamarr\Native\out\z0.dll&quot; -AppName $(AssemblyName) -PackerTfm $(NativeTfm) -Mode antheil" Condition="'$(Packer)' == 'antheil'" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)Lamarr\Native\build_asm.ps1&quot; -AsmDir &quot;$(ProjectDir)Lamarr\Native&quot; -OutDir &quot;$(ProjectDir)Lamarr\Native\out&quot; -Packer native -Pack -InputPath &quot;$(PublishDir)$(AssemblyName).exe&quot; -Output &quot;$(PublishDir)$(AssemblyName)_packed.exe&quot; -Boot &quot;$(ProjectDir)Lamarr\Native\Boot\bin\Release\$(BootTfm)\LamarrBoot.dll&quot; -Mode clean" Condition="'$(Packer)' == 'native'" />
+    <Copy SourceFiles="$(PublishDir)$(AssemblyName)_packed.exe" DestinationFiles="$(PublishDir)$(AssemblyName).exe" OverwriteReadOnlyFiles="true" />
+    <Delete Files="$(PublishDir)$(AssemblyName)_packed.exe" />
   </Target>
 
   <ItemGroup>

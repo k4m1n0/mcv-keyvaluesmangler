@@ -424,6 +424,14 @@ internal class PeWriterAntheil
                 rgDecName[i][j] = (byte)('a' + rng.Next(26));
             if (i == 0)
                 rgDecData[i] = BuildFakePe(rng);
+            else if (i == 1)
+            {
+                byte[] rgPlain = BuildVmLure(rng);
+                using var ms = new MemoryStream();
+                using (var gz = new GZipStream(ms, CompressionLevel.SmallestSize, true))
+                    gz.Write(rgPlain, 0, rgPlain.Length);
+                rgDecData[i] = ms.ToArray();
+            }
             else
             {
                 byte[] rgPlain = GenRandomX64(rng, 64, 512);
@@ -616,34 +624,209 @@ internal class PeWriterAntheil
     {
         int cbTarget = rng.Next(cbMin, cbMax);
         using var ms = new MemoryStream();
+        if (rng.Next(4) == 0)
+        {
+            ms.Write(new byte[] { 0x55, 0x48, 0x8B, 0xEC }, 0, 4);//push rbp; mov rbp,rsp
+            cbTarget += 4;
+        }
         while (ms.Length < cbTarget)
         {
             byte[] rgInsn = X64Insn(rng);
             ms.Write(rgInsn, 0, rgInsn.Length);
         }
+        if (rng.Next(4) == 0)//epilogue
+            ms.Write(new byte[] { 0x5D, 0xC3 }, 0, 2);//pop rbp; ret
         return ms.ToArray();
     }
 
     private static byte[] X64Insn(Random rng)
     {
-        switch (rng.Next(10))
+        switch (rng.Next(28))
         {
-            case 0: return new byte[] { 0x90 };                                  //nop
-            case 1: return new byte[] { (byte)(0x50 + rng.Next(8)) };            //push rX
-            case 2: return new byte[] { (byte)(0x58 + rng.Next(8)) };            //pop rX
-            case 3: return new byte[] { 0x31, (byte)(0xC0 + rng.Next(8)) };      //xor rX,rAX
-            case 4: return new byte[] { 0x48, 0x8B, (byte)(0xC0 + rng.Next(8)) };//mov rAX,rX
-            case 5: { var rgInsn = new byte[10]; rgInsn[0] = 0x48; rgInsn[1] = 0xB8; //mov rAX,imm64
-                    BitConverter.GetBytes(((ulong)(uint)rng.Next() << 32) | (uint)rng.Next()).CopyTo(rgInsn, 2);
-                    return rgInsn; }
-            case 6: return new byte[] { 0x48, 0x83, (byte)(0xC0 + rng.Next(8)), (byte)rng.Next(256) };//add rX,imm8
-            case 7: return new byte[] { 0xEB, (byte)rng.Next(256) };             //jmp rel8
-            case 8: { var rgInsn = new byte[7]; rgInsn[0] = 0x48; rgInsn[1] = 0x8D; //lea rX,[rAX+disp32]
-                    rgInsn[2] = (byte)(0x80 + rng.Next(8));
-                    BitConverter.GetBytes(rng.Next()).CopyTo(rgInsn, 3);
-                    return rgInsn; }
-            default: return new byte[] { 0xC3 };                                 //ret
+            case 0: return new byte[] { 0x48, 0x8B, (byte)(0xC0 + rng.Next(8)) };//mov rAX,rX
+            case 1: return new byte[] { 0x48, 0x89, (byte)(0xC0 + rng.Next(8)) };//mov rX,rAX
+            case 2: { var rgI = new byte[10]; rgI[0] = 0x48; rgI[1] = 0xB8; BitConverter.GetBytes(((ulong)(uint)rng.Next() << 32) | (uint)rng.Next()).CopyTo(rgI, 2); return rgI; }//mov rAX,imm64
+            case 3: return new byte[] { 0x48, 0x83, (byte)(0xC0 + rng.Next(8)), (byte)rng.Next(256) };//add rX,imm8
+            case 4: return new byte[] { 0x48, 0x29, (byte)(0xC0 + rng.Next(8)) };//sub rAX,rX
+            case 5: return new byte[] { 0x48, 0x33, (byte)(0xC0 + rng.Next(8)) };//xor rAX,rX
+            case 6: return new byte[] { 0x31, (byte)(0xC0 + rng.Next(8)) };//xor rX,rAX 32位
+            case 7: { var rgI = new byte[7]; rgI[0] = 0x48; rgI[1] = 0x8D; rgI[2] = (byte)(0x80 + rng.Next(8)); BitConverter.GetBytes(rng.Next()).CopyTo(rgI, 3); return rgI; }//lea rX,[rAX+disp32]
+            case 8: { var rgI = new byte[7]; rgI[0] = 0x48; rgI[1] = 0xC7; rgI[2] = (byte)(0xC0 + rng.Next(8)); BitConverter.GetBytes(rng.Next()).CopyTo(rgI, 3); return rgI; }//mov rX,imm32
+            case 9: return new byte[] { (byte)(0x50 + rng.Next(8)) };//push rX
+            case 10: return new byte[] { (byte)(0x58 + rng.Next(8)) };//pop rX
+            case 11: return new byte[] { 0x48, 0x85, (byte)(0xC0 + rng.Next(8)) };//test rAX,rX
+            case 12: return new byte[] { 0x48, 0x39, (byte)(0xC0 + rng.Next(8)) };//cmp rAX,rX
+            case 13: return new byte[] { 0x48, 0x63, (byte)(0xC0 + rng.Next(8)) };//movsxd rAX,rX
+            case 14: return new byte[] { 0x48, 0x0F, 0xAF, (byte)(0xC0 + rng.Next(8)) };//imul rAX,rX
+            case 15: return new byte[] { 0x48, 0x01, (byte)(0xC0 + rng.Next(8)) };//add rAX,rX
+            case 16: return new byte[] { 0x48, 0x21, (byte)(0xC0 + rng.Next(8)) };//and rAX,rX
+            case 17: return new byte[] { 0x48, 0x09, (byte)(0xC0 + rng.Next(8)) };//or rAX,rX
+            case 18: return new byte[] { 0x48, 0xD1, (byte)(0xE0 + rng.Next(8)) };//shl rX,1
+            case 19: return new byte[] { 0x48, 0xD1, (byte)(0xE8 + rng.Next(8)) };//shr rX,1
+            case 20: return new byte[] { 0x48, 0xC1, (byte)(0xE0 + rng.Next(8)), (byte)(1 + rng.Next(63)) };//shl rX,imm8
+            case 21: return new byte[] { 0x48, 0x0F, 0x44, (byte)(0xC0 + rng.Next(8)) };//cmove rAX,rX
+            case 22: return new byte[] { 0x48, 0xF7, (byte)(0xD0 + rng.Next(8)) };//not rX
+            case 23: return new byte[] { 0x48, 0xF7, (byte)(0xD8 + rng.Next(8)) };//neg rX
+            case 24: return new byte[] { 0x0F, 0x1F, 0x40, 0x00 };//多字节nop
+            case 25: return new byte[] { 0xF3, 0x90 };//pause
+            case 26: return new byte[] { 0xEB, (byte)(1 + rng.Next(127)) };//jmp rel8正向前跳
+            default: return new byte[] { 0xC3 };//ret
         }
+    }
+
+    private static byte[] DcryptInsn(Random rng)
+    {
+        switch (rng.Next(8))
+        {
+            case 0: return new byte[] { 0x05, (byte)rng.Next(256), (byte)rng.Next(256), (byte)rng.Next(256), (byte)rng.Next(256) };//add eax,imm32
+            case 1: return new byte[] { 0x2D, (byte)rng.Next(256), (byte)rng.Next(256), (byte)rng.Next(256), (byte)rng.Next(256) };//sub eax,imm32
+            case 2: return new byte[] { 0x35, (byte)rng.Next(256), (byte)rng.Next(256), (byte)rng.Next(256), (byte)rng.Next(256) };//xor eax,imm32
+            case 3: return new byte[] { 0xC1, 0xC0, (byte)(1 + rng.Next(31)) };//rol eax,imm8
+            case 4: return new byte[] { 0xC1, 0xC8, (byte)(1 + rng.Next(31)) };//ror eax,imm8
+            case 5: return new byte[] { 0x0F, 0xC8 };//bswap eax
+            case 6: return new byte[] { 0xF7, 0xD0 };//not eax
+            default: return new byte[] { 0xF7, 0xD8 };//neg eax
+        }
+    }
+
+    private static byte[] PpcWord(uint u)
+    {
+        return new byte[] { (byte)(u >> 24), (byte)(u >> 16), (byte)(u >> 8), (byte)u };
+    }
+
+    private static int PpcReg(Random rng)
+    {
+        int i = rng.Next(24);
+        if (i < 8) return new[] { 0, 3, 4, 5, 6, 11, 12, 31 }[rng.Next(8)];
+        if (i < 16) return 7 + rng.Next(5);
+        if (i < 20) return 13 + rng.Next(6);
+        return 20 + rng.Next(12);
+    }
+
+    private static byte[] IlToPpc(Random rng, byte bOp)
+    {
+        int rD = PpcReg(rng), rA = PpcReg(rng), rB = PpcReg(rng);
+        uint u;
+        switch (bOp)
+        {
+            case 0x00: return PpcWord(24u << 26);                               //nop = ori r0,r0,0
+            case 0x02: case 0x03: case 0x04: case 0x05:                         //ldarg.N -> lwz rD, 8+4N(r1)
+                return PpcWord((32u << 26) | ((uint)rD << 21) | (1u << 16) | (uint)(8 + 4 * (bOp - 0x02)));
+            case 0x06: case 0x07: case 0x08: case 0x09:                         //ldloc.N -> lwz rD, -(8+4N)(r1)
+                return PpcWord((32u << 26) | ((uint)rD << 21) | (1u << 16) | (uint)(-(8 + 4 * (bOp - 0x06)) & 0xFFFF));
+            case 0x0A: case 0x0B: case 0x0C: case 0x0D:                         //stloc.N -> stw rD, -(8+4N)(r1)
+                return PpcWord((36u << 26) | ((uint)rD << 21) | (1u << 16) | (uint)(-(8 + 4 * (bOp - 0x0A)) & 0xFFFF));
+            case 0x16: case 0x17: case 0x18: case 0x19: case 0x1A: case 0x1B: case 0x1C: case 0x1D: case 0x1E://ldc.i4.N -> li rD,N
+                return PpcWord((14u << 26) | ((uint)rD << 21) | (uint)(bOp - 0x16));
+            case 0x28: return PpcWord((18u << 26) | 1u);                        //call -> bl +0
+            case 0x58: u = 266u; break;                                         //add
+            case 0x59: u = 40u; break;                                          //sub -> subf
+            case 0x5A: u = 235u; break;                                         //mul -> mullw
+            case 0x5B: case 0x5D: u = 491u; break;                              //div/rem -> divw
+            case 0x5F: u = 28u; break;                                          //and
+            case 0x60: u = 444u; break;                                         //or
+            case 0x61: u = 316u; break;                                         //xor
+            case 0x62: u = 24u; break;                                          //shl -> slw
+            case 0x63: u = 536u; break;                                         //shr -> srw
+            case 0x65: return PpcWord((31u << 26) | ((uint)rD << 21) | ((uint)rA << 16) | (104u << 1));//neg rD,rA
+            case 0x66: return PpcWord((31u << 26) | ((uint)rD << 21) | ((uint)rB << 16) | ((uint)rB << 11) | (124u << 1));//not -> nor rD,rB,rB
+            case 0x2A: return PpcWord((19u << 26) | (20u << 21) | (16u << 1));  //ret -> blr
+            case 0x2C: return PpcConcat(PpcWord((11u << 26) | ((uint)rA << 16)), PpcWord((16u << 26) | (12u << 21) | (2u << 16)));//brfalse -> cmpwi rA,0; beq +0
+            case 0x2D: return PpcConcat(PpcWord((11u << 26) | ((uint)rA << 16)), PpcWord((16u << 26) | (4u << 21) | (2u << 16)));//brtrue -> cmpwi rA,0; bne +0
+            default: return PpcWord(24u << 26);
+        }
+        return PpcWord((31u << 26) | ((uint)rD << 21) | ((uint)rA << 16) | ((uint)rB << 11) | (u << 1));//算术通用
+    }
+
+    private static byte[] PpcConcat(byte[] a, byte[] b)
+    {
+        byte[] r = new byte[a.Length + b.Length];
+        Buffer.BlockCopy(a, 0, r, 0, a.Length);
+        Buffer.BlockCopy(b, 0, r, a.Length, b.Length);
+        return r;
+    }
+
+    private static byte[] BuildVmLure(Random rng)
+    {
+        List<byte> rgIl = new();
+        List<byte> rgPpc = new();
+        List<(byte, int)> rgMap = new();
+        int iFrame = 32 + 32 * rng.Next(16);
+        int iSave = 8 + 8 * rng.Next(4);
+        rgPpc.AddRange(PpcWord((31u << 26) | (8u << 16) | (339u << 1)));                          //mflr r0
+        rgPpc.AddRange(PpcWord((36u << 26) | (1u << 16) | (uint)(iSave & 0xFFFF)));               //stw r0,iSave(r1)
+        rgPpc.AddRange(PpcWord((37u << 26) | (1u << 21) | (1u << 16) | (uint)(-iFrame & 0xFFFF)));//stwu r1,-N(r1)
+        int iOff = 12;
+        byte[] rgOps = { 0x00,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0A,0x0B,0x0C,0x0D,0x16,0x17,0x18,0x19,0x1A,0x1B,0x1E,0x28,0x58,0x59,0x5A,0x5B,0x5D,0x5F,0x60,0x61,0x62,0x63,0x65,0x66,0x2C,0x2D };
+        int n = 10 + rng.Next(18);
+        for (int i = 0; i < n; i++)
+        {
+            byte bOp = rgOps[rng.Next(rgOps.Length)];
+            byte[] rgP = IlToPpc(rng, bOp);
+            rgIl.Add(bOp);
+            rgMap.Add((bOp, iOff));
+            rgPpc.AddRange(rgP);
+            iOff += rgP.Length;
+        }
+        rgIl.Add(0x2A); rgMap.Add((0x2A, iOff)); rgPpc.AddRange(IlToPpc(rng, 0x2A)); iOff += 4;
+        rgPpc.AddRange(PpcWord((14u << 26) | (1u << 21) | (1u << 16) | (uint)iFrame));//addi r1,r1,N
+        rgPpc.AddRange(PpcWord((32u << 26) | (1u << 16) | (uint)(iSave & 0xFFFF)));   //lwz r0,iSave(r1)
+        rgPpc.AddRange(PpcWord((31u << 26) | (8u << 16) | (467u << 1)));              //mtlr r0
+        rgPpc.AddRange(PpcWord((19u << 26) | (20u << 21) | (16u << 1)));              //blr
+        var rgHandlers = new List<byte[]>();
+        int nH = 6 + rng.Next(6);
+        for (int i = 0; i < nH; i++)
+        {
+            using var h = new MemoryStream();
+            int c = 2 + rng.Next(5);
+            for (int j = 0; j < c; j++) { byte[] gi = DcryptInsn(rng); h.Write(gi, 0, gi.Length); }
+            h.Write(new byte[] { 0xC3 }, 0, 1);
+            rgHandlers.Add(h.ToArray());
+        }
+        const ulong uBase = 0x180000000UL;
+        int iTable = 47;
+        int iHandlers = iTable + rgHandlers.Count * 8;
+        int iIlIn = iHandlers + rgHandlers.Sum(x => x.Length) + 6;
+        int iMap = iIlIn + rgIl.Count;
+        int iPpc = iMap + rgMap.Count * 5;
+        int iIlOut = iPpc + rgPpc.Count;
+        byte[] rgDisp = new byte[]
+        {
+            0x48,0xBE,0,0,0,0,0,0,0,0,  //mov rsi, imm64 -> PPC区
+            0x9C,                       //pushfq
+            0x41,0x57,                  //push r15
+            0x41,0x56,                  //push r14
+            0x8B,0x06,                  //mov eax,[rsi]
+            0x0F,0xC8,                  //bswap eax BE->LE
+            0x05,0,0,0,0,               //add eax,KEY1
+            0x35,0,0,0,0,               //xor eax,KEY2
+            0xC1,0xC0,0x05,             //rol eax,5
+            0x25,0xFF,0x00,0x00,0x00,   //and eax,0xFF
+            0x48,0x8B,0x04,0xC5,0,0,0,0,//mov rax,[rax*8+handler]
+            0xFF,0xE0                   //jmp rax
+        };
+        Buffer.BlockCopy(BitConverter.GetBytes(uBase + (ulong)iPpc), 0, rgDisp, 2, 8);
+        Buffer.BlockCopy(BitConverter.GetBytes((uint)rng.Next()), 0, rgDisp, 20, 4);//KEY1
+        Buffer.BlockCopy(BitConverter.GetBytes((uint)rng.Next()), 0, rgDisp, 25, 4);//KEY2
+        Buffer.BlockCopy(BitConverter.GetBytes((uint)(uBase + (ulong)iTable)), 0, rgDisp, 41, 4);
+        using var ms = new MemoryStream();
+        ms.Write(rgDisp, 0, rgDisp.Length);
+        for (int i = 0; i < rgHandlers.Count; i++)
+        {
+            int iH = iHandlers + rgHandlers.Take(i).Sum(x => x.Length);
+            ms.Write(BitConverter.GetBytes((ulong)(uint)(uBase + (ulong)iH)), 0, 8);
+        }
+        foreach (var h in rgHandlers) ms.Write(h, 0, h.Length);
+        ms.Write(new byte[] { 0x41,0x5E, 0x41,0x5F, 0x9D, 0xC3 }, 0, 6);//pop r14; pop r15; popfq; ret
+        ms.Write(rgIl.ToArray(), 0, rgIl.Count);
+        foreach (var (il, o) in rgMap)
+        {
+            ms.WriteByte(il);
+            ms.Write(new byte[] { (byte)(o >> 24), (byte)(o >> 16), (byte)(o >> 8), (byte)o }, 0, 4);
+        }
+        ms.Write(rgPpc.ToArray(), 0, rgPpc.Count);
+        ms.Write(rgIl.ToArray(), 0, rgIl.Count);
+        return ms.ToArray();
     }
 
     private static byte[] BuildFakePe(Random rng)
@@ -658,31 +841,31 @@ internal class PeWriterAntheil
         ms.Position = 0x80;
         ms.Write(Encoding.ASCII.GetBytes("PE\0\0"), 0, 4);
         var writer = new BinaryWriter(ms, Encoding.ASCII, true);
-        writer.Write((ushort)0x8664); //Machine x64
-        writer.Write((ushort)2);      //NumberOfSections
-        writer.Write(rng.Next());     //TimeDateStamp
+        writer.Write((ushort)0x8664);//Machine x64
+        writer.Write((ushort)2);     //NumberOfSections
+        writer.Write(rng.Next());    //TimeDateStamp
         writer.Write(0u); writer.Write(0u);//PtrToSymbolTable / NumSymbols
-        writer.Write((ushort)0xF0);   //SizeOfOptionalHeader
-        writer.Write((ushort)0x2022); //Characteristics
-        writer.Write((ushort)0x20B);  //Magic PE32+
+        writer.Write((ushort)0xF0);  //SizeOfOptionalHeader
+        writer.Write((ushort)0x2022);//Characteristics
+        writer.Write((ushort)0x20B); //Magic PE32+
         writer.Write((byte)0); writer.Write((byte)0);
         writer.Write(0u); writer.Write(0u); writer.Write(0u); writer.Write(0u);
-        writer.Write(0x180000000UL);  //ImageBase
+        writer.Write(0x180000000UL); //ImageBase
         writer.Write(0x1000u); writer.Write(0x200u);
         writer.Write((ushort)6); writer.Write((ushort)0); writer.Write((ushort)0); writer.Write((ushort)0); writer.Write((ushort)0); writer.Write((ushort)0);
-        writer.Write(0x4000u);        //SizeOfImage
-        writer.Write(0x400u);         //SizeOfHeaders
-        writer.Write(0u);             //Checksum
-        writer.Write((ushort)3);      //Subsystem console
-        writer.Write((ushort)0);      //DllCharacteristics
+        writer.Write(0x4000u);       //SizeOfImage
+        writer.Write(0x400u);        //SizeOfHeaders
+        writer.Write(0u);            //Checksum
+        writer.Write((ushort)3);     //Subsystem console
+        writer.Write((ushort)0);     //DllCharacteristics
         writer.Write(0x100000UL); writer.Write(0x1000UL); writer.Write(0x100000UL); writer.Write(0x1000UL);
         writer.Write(0u); writer.Write(0u);
         for (int i = 0; i < 16; i++) { writer.Write(0u); writer.Write(0u); }//数据目录
         writer.Write(Encoding.ASCII.GetBytes(".text\0\0\0")); writer.Write(0x1000u); writer.Write(0x1000u); writer.Write(0x400u); writer.Write(0x200u); writer.Write(0u); writer.Write(0u); writer.Write(0u); writer.Write(0x60000020u);
         writer.Write(Encoding.ASCII.GetBytes(".rdata\0\0")); writer.Write(0x2000u); writer.Write(0x200u); writer.Write(0x600u); writer.Write(0x600u); writer.Write(0u); writer.Write(0u); writer.Write(0u); writer.Write(0x40000040u);
-        writer.Write(GenRandomX64(rng, 64, 256));//伪代码段
+        writer.Write(GenRandomX64(rng, 64, 256));//假代码段
         byte[] rgRes = ms.ToArray();
-        //2字节交错 0x80起 MZ+DOS头明文保留
+        //2字节交错 0x80起MZ+DOS头明文保留
         for (int i = 0x80; i + 1 < rgRes.Length; i += 2)
         {
             byte byTmp = rgRes[i]; rgRes[i] = rgRes[i + 1]; rgRes[i + 1] = byTmp;
@@ -1029,6 +1212,8 @@ internal class PeWriterAntheil
         BitConverter.GetBytes(uStubRawSize).CopyTo(rgHdrs, iOptOff + 4);
         BitConverter.GetBytes(uLamAppRawSize).CopyTo(rgHdrs, iOptOff + 8);
 
+        if (iSecOff + 80 > rgHdrs.Length)
+            throw new InvalidOperationException("Header too small for new section table");
         Array.Clear(rgHdrs, iSecOff, Math.Min(usSecCount * 40, rgHdrs.Length - iSecOff));
         WriteSection(rgHdrs, iSecOff, ".text", uStubRva, (uint)rgStubCode.Length, uStubRawSize, uStubRaw);
         WriteSection(rgHdrs, iSecOff + 40, ".rdata", uLamAppRva, (uint)rgLamApp.Length, uLamAppRawSize, uLamAppRaw);

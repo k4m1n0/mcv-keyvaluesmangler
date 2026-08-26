@@ -382,9 +382,9 @@ ch_ss_ok:
 
 
     ; !! hook ICorJitInfo vtable slot6 (canInline) on first compile
-    ;    JIT inline analysis reads callee IL from raw image (ciphertext)
-    ;    -> parses garbage -> broken codegen -> crash
-    ;    return INLINE_NEVER(-2) for encrypted callee to block inline IL reads
+    ; JIT inline analysis reads callee IL from raw image (ciphertext)
+    ; -> parses garbage -> broken codegen -> crash
+    ; return INLINE_NEVER(-2) for encrypted callee to block inline IL reads
     mov rax, [r12]                      ; ICorJitInfo vtable
     test rax, rax
     jz gmi_skip
@@ -460,7 +460,7 @@ ch_payload:
     call XorDecrypt
     call RdtscCheck
     ; !! fat methods with more-sections (EH table): copy raw-image EH to scratch+ilSize
-    ;    JIT getEHinfo locates EH by ILCode+ILCodeSize; without this it reads OOB
+    ; JIT getEHinfo locates EH by ILCode+ILCodeSize; without this it reads OOB
     mov al, byte ptr [rsi-1]            ; header byte0
     and al, 3
     cmp al, 2                           ; tiny? tiny has no EH
