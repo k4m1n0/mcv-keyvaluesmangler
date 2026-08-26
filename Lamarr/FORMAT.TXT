@@ -567,7 +567,7 @@ Appendix B.  Implementation Notes
     own match-search heuristics, so compressed output MAY differ
     between implementations anywhere in the stream, not just at
     the end. For example, the Lamarr C# encoder limits hash-chain
-    traversal to 4096 entries while the original C reference
+    traversal to 4096 entries while the original reference
     implementation does not; on inputs with long hash chains this
     yields different (but equally valid) compressed output.
     Decompression is unaffected by such differences.
