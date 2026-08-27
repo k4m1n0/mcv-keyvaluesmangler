@@ -94,7 +94,7 @@
       MethodDesc     CLR内部的方法表示（compileMethod的ftn指向）
       COR_ILMETHOD   方法体头：CodeSize/MaxStack/EH区
       AppHost        .NET单文件的原生引导壳
-      hostfxr        运行时定位与加载器（dotnet host）
+      hostfxr        运行时定位与加载器（.NET host）
 
 
 ------------------------------------------------------------------------
@@ -337,10 +337,10 @@
   6.1 AppHost与hostfxr：exe是怎么启动的
 
     .NET单文件exe的最外层是apphost——一个原生壳，不是托管代码。
-    它做的事：读runtimeconfig.json定位runtime版本，加载hostfxr（dotnet的
+    它做的事：读runtimeconfig.json定位runtime版本，加载hostfxr（.NET的
     hosting入口），由hostfxr加载coreclr并传入托管入口。antheil_stub.asm
-    手写复刻的正是这一套：遍历PEB找kernel32，解析API，找dotnet root
-     （DOTNET_ROOT环境变量 -> 注册表 -> ProgramFiles），选hostfxr，最后调
+    手写复刻的正是这一套：遍历PEB找kernel32，解析API，找.NET root
+    （DOTNET_ROOT环境变量 -> 注册表 -> ProgramFiles），选hostfxr，最后调
     hostfxr_main_bundle_startupinfo。区别是antheil_stub没有导入表，
     一切API都靠运行时解析。
 

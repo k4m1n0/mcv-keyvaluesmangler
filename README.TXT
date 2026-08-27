@@ -280,7 +280,7 @@
   HOW IT WORKS
     The FDD single file is rebuilt into two PE sections: .stub and .lamapp.
     .stub is a position-independent asm loader with no imports. It walks the
-    PEB for kernel32/ntdll, finds the dotnet root (DOTNET_ROOT env -> HKLM
+    PEB for kernel32/ntdll, finds the .NET root (DOTNET_ROOT env -> HKLM
     registry -> Program Files), picks the best hostfxr in <root>\host\fxr
     (payload runtime major preferred, else highest), and calls
     hostfxr_main_bundle_startupinfo with this exe as host_path
@@ -300,8 +300,8 @@
     -RtcVersion 5.0.0. Dependencies stripped from deps.json are reloaded from
     .lamapp via AssemblyLoadContext.Resolving. TieredCompilation stays on for
     native; only antheil disables it (--rtc-tiered) because its its JIT hook
-    conflicts with the .NET 10 Tier-1 background recompile (net10 JIT bug, 
-    fixed in 10.0.13, not my bad)
+    conflicts with the .NET 10 Tier-1 background recompile (.NET 10 JIT bug 
+    #132480, fixed in 10.0.13, not my bad, really)
 
   EXTRA BUILD REQUIREMENTS
     - MSVC x64 toolchain (ml64/link). Locator: Lamarr/Native/build_asm.ps1

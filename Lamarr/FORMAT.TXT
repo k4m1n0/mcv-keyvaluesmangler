@@ -393,8 +393,9 @@ Abstract
 
     6.1.  Managed stub (single-file bundle container)
 
-        The stub is a .NET single-file executable (Lamarr.dll,
-        deps.json, runtimeconfig.json embedded by dotnet publish).
+        The stub is a .NET single-file executable produced by dotnet
+        publish (its bundle embeds deps.json and runtimeconfig.json);
+        the packer replaces the main-assembly entry with Lamarr.dll.
         The  container is inserted directly before the bundle header.
         The bundle marker is a 40-octet structure:  an 8-octet u64 LE
         header offset followed by a 32-octet signature. The packer
@@ -438,13 +439,7 @@ Abstract
         WinForms) resolve a compatible runtime. The packer rewrites
         the embedded runtimeconfig.json: framework version defaults
         to 5.0.0 (overridable via --rtc-version), rollForward is
-        set to LatestMajor. TieredCompilation is forced off
-        (System.Runtime.TieredCompilation=false) ONLY in antheil
-        mode: the jithook CompileHook conflicts with the .NET 10
-        background Tier-1 recompile on exit (net10 JIT bug, fixed in
-        10.0.13; workaround for older 10.0.x). native/managed keep
-        the runtime default.
-        --rtc-tiered off | default overrides per pack.
+        set to LatestMajor.
 
     6.2.  Native Pack (PE sections)
 
@@ -458,7 +453,7 @@ Abstract
         and .lamapp. The file ends with the bundle header.
 
         .stub   native loader section (lamarr_stub.asm). It locates the
-                dotnet root (DOTNET_ROOT env -> HKLM registry -> 
+                .NET root (DOTNET_ROOT env -> HKLM registry ->
                 Program Files), selects the hostfxr in <root>\host\fxr
                 (payload runtime major preferred, else highest) and
                 calls hostfxr_main_bundle_startupinfo with this exe as
@@ -488,12 +483,13 @@ Abstract
         whether each entry carries a compressedSize field.
 
         An antheil variant extends this layout with method-body
-        encryption and an extended entry set (e.g. decoder, jithook,
-        signature table). Dependencies are stored as Lamarr-compressed
-        plaintext by default (no jithook pass-through); private
-        dependencies can be opted into method-body encryption
-        explicitly (-EncryptDeps). The signature table covers only
-        the main assembly (and any opted-in dependencies).
+        encryption and an extended entry set (decoder, jithook,
+        signature table). Dependencies stay Lamarr-compressed plaintext
+        by default (no jithook pass-through); private dependencies can
+        be opted in with -EncryptDeps. The signature table covers only
+        the main assembly and opted-in dependencies. TieredCompilation
+        is disabled (.NET 10 JIT bug #132480, fixed in 10.0.13;
+        workaround for older 10.0.x).
 
     6.3.  Host Compatibility
 
