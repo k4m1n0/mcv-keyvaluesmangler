@@ -27,8 +27,6 @@ internal class PeWriter
     private byte[] rgNewHeader = null!;
     private long lBundleDataLen;
     private long[] rgBundleOffsets = null!;
-    private long[] rgBundleCsz = null!;
-    private long[] rgBundleSz = null!;
     private int[] rgEntryOffPos = null!;
     private int iHeaderDepsPos = -1, iHeaderRtcPos = -1;
     private int iIdxDeps = -1, iIdxRtc = -1;

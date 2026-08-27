@@ -15,7 +15,7 @@ param(
     [string]$PackerTfm = 'net8.0-windows',
     [string]$CompressDeps = 'false',
     [string]$EncryptDeps = '',
-    [string]$RtcVersion = '5.0.0'
+    [string]$RtcVersion = '5.0.0',
     [string]$RtcTiered = ''
 )
 $ErrorActionPreference = 'Stop'
