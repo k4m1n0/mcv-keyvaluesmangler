@@ -90,7 +90,7 @@ if ($Packer -eq 'antheil')
     & $ML64_EXE /nologo /c ("/Fo" + $JIT_OBJ) $JIT_ASM
     if ($LASTEXITCODE -ne 0) { throw "ml64(jithook.asm) failed ($LASTEXITCODE)" }
     & $LINK_EXE /nologo /dll /noentry /machine:x64 /subsystem:console `
-        /export:InstallJitHook /export:SetJitHookKey /export:AddPayloadSig /export:GetJitHookDecryptCount `
+        /export:InstallJitHook /export:SetJitHookKey /export:AddPayloadSig /export:GetJitHookDecryptCount /export:VerifyJitHook /export:SetAntiDebugFlag `
         /nodefaultlib ("/out:" + $JIT_DLL) $JIT_OBJ
     if ($LASTEXITCODE -ne 0) { throw "link(jithook.dll) failed ($LASTEXITCODE)" }
     Write-Host "[build-asm] STATUS built: $JIT_DLL"

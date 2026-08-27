@@ -1,32 +1,9 @@
-.DATA
-
-g_orig          dq 0                    ; original compileMethod
-g_key           dd 0                    ; stream cipher key
-g_sigCount      dd 0
-g_decryptCount  dd 0
-g_rdtsc_start   dd 0
-ALIGN 8
-g_sigs          dd 4096 dup(0)          ; CRC32 table of encrypted method bodies
-
-g_pVirtualAlloc     dq 0
-g_pVirtualFree      dq 0
-g_pVirtualProtect   dq 0
-g_origGMA           dq 0                ; original ICorJitInfo::getMethodAttribs (slot1)
-g_origCanInline     dq 0                ; original ICorJitInfo::canInline (slot6)
-g_compLock          dd 0                ; compile serialization lock (reserved, unused)
-
-.CODE
+.code
 
 PUBLIC g_orig, g_key, g_sigs, g_sigCount, g_decryptCount
-PUBLIC InstallJitHook, SetJitHookKey, AddPayloadSig, GetJitHookDecryptCount
+PUBLIC InstallJitHook, SetJitHookKey, AddPayloadSig, GetJitHookDecryptCount, VerifyJitHook, SetAntiDebugFlag
 
-szVirtualAlloc     db 'VirtualAlloc',0
-szVirtualFree      db 'VirtualFree',0
-szVirtualProtect   db 'VirtualProtect',0
-szClrJit           db 'clrjit',0
-szGetJit           db 'getJit',0
-
-; ResolveApi: rcx=ansi apiName -> rax=addr (kernel32, handles forwarders)
+; rcx=ansi apiName -> rax=addr (kernel32, handles forwarders)
 ResolveApi PROC
     push rbx
     push rsi
@@ -64,7 +41,7 @@ ra_got:
     mov rdx, [rax+20h]                  ; DllBase (kernel32)
     mov rdi, r13
 ra_exp:
-    ; shared export lookup: rdx=module base, rdi=name (ansi)
+    ; rdx=module base, rdi=name (ansi)
     mov eax, [rdx+3Ch]
     lea r8, [rdx+rax]
     mov eax, [r8+88h]
@@ -107,7 +84,7 @@ ra_mok:
     mov ecx, [r8+1Ch]
     add rcx, rdx
     mov eax, [rcx+rax*4]
-; forwarder check
+    ; forwarder check
     mov r9d, [rdx+3Ch]
     lea r9, [rdx+r9+18h+70h]
     mov r10d, [r9]
@@ -117,7 +94,7 @@ ra_mok:
     add r9d, r10d
     cmp eax, r9d
     ja rfok
-; forwarder "DLL.Func"
+    ; forwarder "DLL.Func"
     lea rdi, [rdx+rax]
     mov rsi, rdi
 fw_fd:
@@ -174,7 +151,8 @@ ra_ret:
     pop rbx
     ret
 ResolveApi ENDP
-; Crc32Fn: rcx=ptr rdx=len -> eax
+
+; rcx=ptr rdx=len -> eax
 Crc32Fn PROC
     mov eax, 0FFFFFFFFh                 ; crc=~0
     test rdx, rdx
@@ -201,7 +179,7 @@ crc_done:
     ret
 Crc32Fn ENDP
 
-; XorDecrypt: rcx=dst rdx=src r8d=len, uses g_key
+; rcx=dst rdx=src r8d=len, uses g_key
 ; !! length-preserving stream cipher, matches EncryptTool: s=s*0x9E3779B1+0x9747B28C take s>>24
 XorDecrypt PROC
     test r8d, r8d
@@ -234,6 +212,7 @@ RdtscStart PROC
     pop rax
     ret
 RdtscStart ENDP
+
 RdtscCheck PROC
     push rax
     push rdx
@@ -248,7 +227,7 @@ rc_ok:
     ret
 RdtscCheck ENDP
 
-; FindClrJit: -> rax = clrjit DllBase or 0 (PEB walk)
+; -> rax = clrjit DllBase or 0 (PEB walk)
 FindClrJit PROC
     push rbx
     push rsi
@@ -265,7 +244,7 @@ fc_loop:
     mov r13, rax
     mov rsi, [rax+50h]
     mov r10, 006A0072006C0063h          ; "clrj" wide LE
-    mov r11, 00740069h                  ; "it"  wide LE
+    mov r11, 00740069h                  ; "it" wide LE
     cmp qword ptr [rsi], r10
     jne fc_next
     cmp dword ptr [rsi+8], r11d
@@ -287,7 +266,7 @@ fc_ret:
     ret
 FindClrJit ENDP
 
-; FindExportInModule: rcx=base rdx=ansiName -> rax=addr or 0
+; rcx=base rdx=ansiName -> rax=addr or 0
 FindExportInModule PROC
     push rbx
     push rsi
@@ -351,7 +330,7 @@ fe_ret:
     ret
 FindExportInModule ENDP
 
-; CompileHook: vtable slot0 replacement
+; vtable slot0 replacement
 ; !! virtual slot call, so has self: rcx=self rdx=comp r8=info r9d=flags
 ; nativeEntry/nativeSize untouched on [rsp+28]/[rsp+30]
 CompileHook PROC
@@ -365,7 +344,6 @@ CompileHook PROC
     push r14
     push r15
     sub rsp, 60h
-
     ; single-step (TF) detection
     pushfq
     pop rax
@@ -373,7 +351,10 @@ CompileHook PROC
     jz ch_ss_ok
     ud2
 ch_ss_ok:
-
+    cmp dword ptr [g_adFlag], 0         ; set by BootAntheil after AD
+    jnz ch_ad_ok
+    ud2
+ch_ad_ok:
     xor r15, r15                        ; scratch=0
     mov rbx, rcx                        ; self
     mov r12, rdx                        ; comp
@@ -381,10 +362,10 @@ ch_ss_ok:
     mov r14d, r9d                       ; flags
 
 
-    ; !! hook ICorJitInfo vtable slot6 (canInline) on first compile
-    ; JIT inline analysis reads callee IL from raw image (ciphertext)
-    ; -> parses garbage -> broken codegen -> crash
-    ; return INLINE_NEVER(-2) for encrypted callee to block inline IL reads
+; !! hook ICorJitInfo vtable slot6 (canInline) on first compile
+; JIT inline analysis reads callee IL from raw image (ciphertext)
+; -> parses garbage -> broken codegen -> crash
+; return INLINE_NEVER(-2) for encrypted callee to block inline IL reads
     mov rax, [r12]                      ; ICorJitInfo vtable
     test rax, rax
     jz gmi_skip
@@ -417,19 +398,18 @@ ch_ss_ok:
     lea r9, [rbp-30h]
     call rax
 gmi_skip:
-
     mov rsi, [r13+10h]                  ; ilCode
     mov edi, dword ptr [r13+18h]        ; ilSize
     test rsi, rsi
     jz ch_orig
     test rdi, rdi
     jz ch_orig
-
     mov rcx, rsi
     mov rdx, rdi
     call Crc32Fn
     mov ecx, eax                        ; ciphertext CRC
     lea rax, g_sigs                     ; sig table
+    xor ecx, 9E3779B9h                    ; sig stored as crc^const
     xor edx, edx                        ; i=0
 ch_sig:
     cmp edx, dword ptr [g_sigCount]
@@ -496,9 +476,7 @@ ch_cpyeh:
     jmp ch_cpyeh
 ch_set_il:
     mov [r13+10h], r15                  ; !! info->ILCode=scratch, rest filled by CLR, only patch pointer
-
 ch_orig:
-
     mov rax, [g_orig]                   ; original compileMethod
     test rax, rax
     jz ch_done
@@ -517,7 +495,6 @@ ch_orig:
     pop rbp
     jmp rax                             ; tail-jump original, args untouched
 ch_done:
-
     xor eax, eax
     add rsp, 60h
     pop r15
@@ -531,7 +508,7 @@ ch_done:
     ret
 CompileHook ENDP
 
-; GetCanInlineHook: ICorJitInfo vtable slot6 replacement
+; ICorJitInfo vtable slot6 replacement
 ; rcx=this rdx=callerHnd r8=calleeHnd -> eax (CorInfoInline)
 ; JIT inline analysis reads callee IL (raw ciphertext) -> garbage -> broken codegen
 ; return INLINE_NEVER(-2) for encrypted callee to block inline IL reads
@@ -586,6 +563,7 @@ GetCanInlineHook PROC
     call Crc32Fn
     mov ecx, eax
     lea rax, g_sigs
+    xor ecx, 9E3779B9h                  ; sig stored as crc^const
     xor edx, edx
 gci_sig:
     cmp edx, dword ptr [g_sigCount]
@@ -611,7 +589,7 @@ gci_done:
     ret
 GetCanInlineHook ENDP
 
-; InstallJitHook: PEB find clrjit, getJit, replace vtable slot0
+; PEB find clrjit, getJit, replace vtable slot0
 InstallJitHook PROC
     push rbp
     mov rbp, rsp
@@ -630,8 +608,8 @@ InstallJitHook PROC
     test rax, 100h
     jz ih_ss_ok
     ud2
-ih_ss_ok:
 
+ih_ss_ok:
     lea rcx, szVirtualAlloc
     call ResolveApi
     mov [g_pVirtualAlloc], rax
@@ -660,6 +638,7 @@ ih_ss_ok:
     jz ih_e4
     mov r13, rax                        ; ICorJitCompiler*
     mov r14, [r13]                      ; vtable
+    mov [g_vtable], r14                 ; save vtable for VerifyJitHook
     test r14, r14
     jz ih_e5
     mov rax, [r14]                      ; original compileMethod
@@ -736,5 +715,61 @@ GetJitHookDecryptCount PROC
     mov eax, dword ptr [g_decryptCount]
     ret
 GetJitHookDecryptCount ENDP
+
+; vtable[0] still our hook (not restored)
+VerifyJitHook PROC
+    mov rax, [g_vtable]
+    test rax, rax
+    jz vj_fail
+    mov rdx, [rax]                      ; vtable[0]
+    mov rcx, [g_orig]                   ; original compileMethod
+    test rcx, rcx
+    jz vj_fail
+    cmp rdx, rcx                        ; vtable[0] == original -> restored
+    je vj_fail
+    xor eax, eax
+    ret
+vj_fail:
+    mov eax, 1
+    ret
+VerifyJitHook ENDP
+
+; set by BootAntheil once AD() passes
+SetAntiDebugFlag PROC
+    mov dword ptr [g_adFlag], ecx
+    ret
+SetAntiDebugFlag ENDP
+
+.data
+
+szVirtualAlloc    db "VirtualAlloc",0
+szVirtualFree     db "VirtualFree",0
+szVirtualProtect  db "VirtualProtect",0
+szClrJit          db "clrjit",0
+szGetJit          db "getJit",0
+
+    align 8
+
+g_orig          dq 0                    ; original compileMethod
+g_key           dd 0                    ; stream cipher key
+g_sigCount      dd 0
+g_decryptCount  dd 0
+g_rdtsc_start   dd 0
+
+    align 8
+
+g_sigs          dd 4096 dup(0)          ; CRC32 table of encrypted method bodies
+
+g_pVirtualAlloc    dq 0
+g_pVirtualFree     dq 0
+g_pVirtualProtect  dq 0
+g_origGMA          dq 0                 ; original ICorJitInfo::getMethodAttribs (slot1)
+g_origCanInline    dq 0                 ; original ICorJitInfo::canInline (slot6)
+g_compLock         dd 0                 ; compile serialization lock
+
+    align 8
+
+g_vtable           dq 0                 ; vtable for VerifyJitHook
+g_adFlag           dd 0                 ; set by BootAntheil after AD passes
 
 END

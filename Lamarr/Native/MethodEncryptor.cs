@@ -43,7 +43,7 @@ public static class MethodEncryptor
                 int iIlStart = ((rgD[iOff] & 3) == 2) ? iOff + 1 : iOff + 12;//tiny头1字节 fat头12字节
                 int iEb = EncryptBody(rgD, iOff, uKey);
                 if (iEb > 0)
-                    rgCrcs.Add(Crc32(rgD, iIlStart, iEb));//密文CRC jithook用其判定payload
+                    rgCrcs.Add(Crc32(rgD, iIlStart, iEb) ^ 0x9E3779B9u);//密文CRC^常量 防签名表直接dump匹配
             }
         }
         return rgCrcs;
@@ -96,7 +96,6 @@ public static class MethodEncryptor
         }
     }
 
-    //标准CRC32
     internal static uint Crc32(byte[] rgD, int iOff, int iLen)
     {
         uint uCrc = 0xFFFFFFFFu;

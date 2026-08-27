@@ -1152,7 +1152,7 @@ fll_sec_done:
     ror eax, 15
     add eax, 9E3779B9h                  ; golden ratio round constant
     ; ?? if checksum does not match key, fail silently
-    cmp eax, r11d                      ; r11d still holds encoded size
+    cmp eax, r11d                       ; r11d still holds encoded size
     jne fll_fail
     ; ?? forge a MethodDesc from .lamapp fields
     ; MethodDesc layout (fake, CoreCLRish):
@@ -1481,25 +1481,25 @@ szDefaultRootW   dw 'C',':','\','P','r','o','g','r','a','m',' ','F','i','l','e',
 
     align 8
 
-gDotnetRootW  db 520 dup(0)            ; dotnet root (wide)
-gHostfxrPathW db 520 dup(0)            ; hostfxr.dll full path (wide)
-gHostfxrA     db 520 dup(0)            ; ANSI for LoadLibraryA
-gFxrDirW      db 520 dup(0)            ; <root>\host
-gFxrSearchW   db 520 dup(0)            ; <root>\host\fxr\*
-gFindData     db 640 dup(0)            ; WIN32_FIND_DATAW
-gFall         db 12 dup(0), 520 dup(0) ; fallback: maj,min,pat + name
-gBest         db 12 dup(0), 520 dup(0) ; pref matched: maj,min,pat + name
-gPadBuf       db 256 dup(0)            ; ?? fake decryption padding
-gC2Buf        db 256 dup(0)            ; ?? fake c2 beacon buffer
+gDotnetRootW  db 520 dup(0)             ; dotnet root (wide)
+gHostfxrPathW db 520 dup(0)             ; hostfxr.dll full path (wide)
+gHostfxrA     db 520 dup(0)             ; ANSI for LoadLibraryA
+gFxrDirW      db 520 dup(0)             ; <root>\host
+gFxrSearchW   db 520 dup(0)             ; <root>\host\fxr\*
+gFindData     db 640 dup(0)             ; WIN32_FIND_DATAW
+gFall         db 12 dup(0), 520 dup(0)  ; fallback: maj,min,pat + name
+gBest         db 12 dup(0), 520 dup(0)  ; pref matched: maj,min,pat + name
+gPadBuf       db 256 dup(0)             ; ?? fake decryption padding
+gC2Buf        db 256 dup(0)             ; ?? fake c2 beacon buffer
 
     align 8
 
-gAppPathW     db 520 dup(0)              ; app.dll path, built at runtime = <host dir>\<app name>
+gAppPathW     db 520 dup(0)             ; app.dll path, built at runtime = <host dir>\<app name>
 gKBsjb  db 00h,00h,5Ah,0A5h,4Bh,42h,0Fh,0F0h
         db 0A5h,5Ah,0Fh,0Fh,5Ah,0A5h,0F0h,0Fh
         db 0Fh,0F0h,0A5h,5Ah,0F0h,0Fh,5Ah,0A5h
         db 0A5h,0Fh,0F0h,5Ah,0Fh,5Ah,0A5h,0F0h
-gAppNameW     db "##APPNAME##",0         ; main DLL file name (packer patches)
+gAppNameW     db "##APPNAME##",0        ; main DLL file name (packer patches)
               db 256 dup(0)
 
     align 8

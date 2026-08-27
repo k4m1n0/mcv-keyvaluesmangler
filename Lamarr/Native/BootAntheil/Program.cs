@@ -56,6 +56,9 @@ internal static class P
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate void JitAddSig(uint crc);
     private delegate bool X1D(byte[] rgG, out List<(string, uint, uint, uint)> rgEntries);
+  private delegate int JitVerifyHook();
+  private delegate void JitSetAdFlag(uint f);
+  private delegate uint JitGetCount();
 
     [StructLayout(LayoutKind.Sequential)]
     private struct CONTEXT
@@ -92,6 +95,10 @@ internal static class P
     private static JitInstall _fnJitInstall = null!;
     private static JitSetKey _fnJitSetKey = null!;
     private static JitAddSig _fnJitAddSig = null!;
+  private static JitVerifyHook _fnJitVerifyHook = null!;
+  private static JitSetAdFlag _fnJitSetAdFlag = null!;
+  private static JitGetCount _fnJitGetCount = null!;
+  private static int _tBoot;
 
     //常量拆解 XOR对 运行时派生防静态识别
     private static readonly uint uQ1A = 0x12345678, uQ1B = 0xB7F1F3DD;//0xA5A5A5A5
@@ -255,10 +262,11 @@ internal static class P
 
             AD();
             _llT = T0();
+  _tBoot = Environment.TickCount;
             var th = new Thread(() =>
             {
                 try { IntPtr hTh = OpenThread(0x0040u, false, GetCurrentThreadId()); if (hTh != IntPtr.Zero) { NtSetInformationThread(hTh, 0x11, IntPtr.Zero, 0); CloseHandle(hTh); } } catch { }
-                for (; ; ) { try { AD(); TCheck(_llT, 10000L); _llT = T0(); if ((_uAdCt & 0x3Fu) == 0) JitVerify(); } catch { } Thread.Sleep(120); }
+        for (; ; ) { try { AD(); TCheck(_llT, 10000L); _llT = T0(); if ((_uAdCt & 0x3Fu) == 0) JitVerify(); if ((_uAdCt & 0x3Fu) == 0 && _fnJitVerifyHook != null && _fnJitVerifyHook() != 0) Environment.FailFast(null); if ((_uAdCt & 0xFFu) == 0 && Environment.TickCount - _tBoot > 30000 && _fnJitGetCount != null && _fnJitGetCount() == 0) Environment.FailFast(null); } catch { } Thread.Sleep(120); }
             }) { IsBackground = true };
             th.Start();
             SelfCheck();
@@ -295,6 +303,7 @@ internal static class P
                 byte[] rgJk = Sk();
                 _fnJitSetKey(K1(rgJk));
                 Array.Clear(rgJk, 0, rgJk.Length);
+                if (_fnJitSetAdFlag != null) _fnJitSetAdFlag(0x13579BDFu);
                 _fnJitInstall();
             }
             if ((RuntimeSeed() & 0x10000000u) == 0)
@@ -470,10 +479,10 @@ internal static class P
         if ((uLK0A ^ uLK0B) != 0x811C9DC5u) Environment.FailFast(null);
         if ((uLK1A ^ uLK1B) != 0x000001B3u) Environment.FailFast(null);
         //防patch反调试/解密逻辑
-        if (MethodHash(_ad) != (uHs ^ 0x56185926u)) Environment.FailFast(null);
+        if (MethodHash(_ad) != (uHs ^ 0x5E51BD7Au)) Environment.FailFast(null);
         if (MethodHash(_x1) != (uHs ^ 0x12928B5Du)) Environment.FailFast(null);
-        if (MethodHash(_x3) != (uHs ^ 0x50DED4E0u)) Environment.FailFast(null);
-        if (MethodHash(_x6) != (uHs ^ 0x1C8DC383u)) Environment.FailFast(null);
+        if (MethodHash(_x3) != (uHs ^ 0xE6BE461Au)) Environment.FailFast(null);
+        if (MethodHash(_x6) != (uHs ^ 0x81BE17D1u)) Environment.FailFast(null);
         _uX1H = MethodHash(_x1);
     }
 
@@ -866,6 +875,9 @@ internal static class P
             _fnJitInstall = Mk<JitInstall>(rgExports[S2(0x7579CA59u, new uint[] { 0x7731C929u, 0x102947B2u, 0xB2E0BEABu, 0x534035D4u, 0xED1FB29Du, 0x8ECF298Eu, 0x29BEA7F7u, 0xC8FE1E68u }, uR2A, uR2B)]);
             _fnJitSetKey = Mk<JitSetKey>(rgExports[S2(0x234E5F7Eu, new uint[] { 0x21D65C56u, 0xC225DB67u, 0x5CF55150u, 0xFFB4CFD1u, 0x9F54453Au, 0x383BC333u, 0xDB5339D4u }, uR2A, uR2B)]);
             _fnJitAddSig = Mk<JitAddSig>(rgExports[S2(0x29CE007Au, new uint[] { 0x2BC6035Au, 0xCB2578B3u, 0x6534F024u, 0x07146EDDu, 0xA1A3E47Eu, 0x427B625Fu, 0xDC22DAD0u }, uR2A, uR2B)]);
+              if (rgExports.TryGetValue("VerifyJitHook", out uint uVj)) _fnJitVerifyHook = Mk<JitVerifyHook>(uVj);
+              if (rgExports.TryGetValue("SetAntiDebugFlag", out uint uAd)) _fnJitSetAdFlag = Mk<JitSetAdFlag>(uAd);
+              if (rgExports.TryGetValue("GetJitHookDecryptCount", out uint uGc)) _fnJitGetCount = Mk<JitGetCount>(uGc);
             Array.Clear(rgDll, 0, rgDll.Length);
         }
     }
