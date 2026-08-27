@@ -74,9 +74,9 @@ Abstract
 
     For writing, the encoder toggles nib on U4, LE12, and LE20 write
     operations. U8 and LE16 writes do not toggle nib. Consecutive
-    nibble-aligned writes share output octets: the first write occupies
-    the low nibble of an octet and the second occupies the high nibble,
-    at which point the cursor advances to the next octet.
+    nibble-aligned writes share output octets: the first write
+    occupies the low nibble of an octet and the second occupies the 
+    high nibble, at which point the cursor advances to the next octet.
 
     The encoder write primitives are specified in Section
     5.3. The nibble toggle behaviour of each primitive is specified
@@ -193,27 +193,27 @@ Abstract
 4.1.1.  Short Distance  (outPos < 0x881)
 
         cflag(0) = 0:
-            d := ((cflag >> 1) & 0x7F)  + 1          // [1, 128]
+            d := ((cflag >> 1) & 0x7F)  + 1         // [1, 128]
 
         cflag(0) = 1:
-            d := ((cflag >> 1) & 0x7FF) + 0x81       // [129, 2176]
+            d := ((cflag >> 1) & 0x7FF) + 0x81      // [129, 2176]
             Cursor += nib; nib ^= 1.
 
 4.1.2.  Long Distance  (outPos >= 0x881)
 
         cflag(1:0) = 00:
-            d := ((cflag >> 2) & 0x3F)    + 1        // [1, 64]
+            d := ((cflag >> 2) & 0x3F)    + 1       // [1, 64]
 
         cflag(1:0) = 01:
-            d := ((cflag >> 2) & 0x3FF)   + 0x41     // [65, 1088]
+            d := ((cflag >> 2) & 0x3FF)   + 0x41    // [65, 1088]
             Cursor += nib; nib ^= 1.
 
         cflag(1:0) = 10:
-            d := ((cflag >> 2) & 0x3FFF)  + 0x441    // [1089, 17472]
+            d := ((cflag >> 2) & 0x3FFF)  + 0x441   // [1089, 17472]
             Cursor += 1.
 
         cflag(1:0) = 11:
-            d := ((cflag >> 2) & 0x3FFFF) + 0x4441   // [17473, 279616]
+            d := ((cflag >> 2) & 0x3FFFF) + 0x4441  // [17473, 279616]
             Cursor += 1 + nib; nib ^= 1.
 
     The fourth bucket requires L >= 4. If an encoder finds a match
@@ -231,18 +231,18 @@ Abstract
     sub-cases:
 
         (u12 & 0xF) != 0xF:
-            L := (u12 & 0xF) + 3                      // [3, 17]
+            L := (u12 & 0xF) + 3                     // [3, 17]
 
         (u12 & 0xF) == 0xF:
             Cursor += 1.
 
             u12 != 0xFFF:
-                L := (u12 >> 4) + 0x12                // [18, 272]
+                L := (u12 >> 4) + 0x12               // [18, 272]
 
             u12 == 0xFFF:
                 Read E as u16 (Section 2.2).
                 Cursor += 2.
-                L := E + 0x111.                       // [273, 0x1010F]
+                L := E + 0x111.                      // [273, 0x1010F]
 
     The value E = 0xFFFF produces L = uCnt2Byte (0x10110), which is
     a sentinel triggering a Copy Chunk (Section 4.3) instead of a
@@ -294,11 +294,11 @@ Abstract
 5.1.1.  RLE Fast Path
 
     When cbIn - inPtr >= 4 AND
-         (*(u32 *)(inPtr - 1)) == (*(u32 *)(inPtr)):
-        matchLen := 4
-        while remaining > 0 AND inPtr[matchLen] == inPtr[matchLen - 1]:
-            matchLen++
-        return matchLen
+       (*(u32 *)(inPtr - 1)) == (*(u32 *)(inPtr)):
+      matchLen := 4
+      while remaining > 0 AND inPtr[matchLen] == inPtr[matchLen - 1]:
+          matchLen++
+      return matchLen
 
 5.2.  Match Selection
 
@@ -324,7 +324,7 @@ Abstract
     Toggle column indicates whether the primitive modifies the nibble
     cursor.
 
-    SET_U8(out, pos, nib, v)                              // toggle: NO
+    SET_U8(out, pos, nib, v)                            // toggle: NO
 
         if nib != 0:
             out[pos] := out[pos] OR (u8)(v << 4)   ; pos := pos + 1
@@ -332,7 +332,7 @@ Abstract
         else:
             out[pos] := (u8)v                       ; pos := pos + 1
 
-    SET_U4(out, pos, nib, v)                              // toggle: YES
+    SET_U4(out, pos, nib, v)                            // toggle: YES
 
         nib := nib XOR 1
         if nib = 1:
@@ -340,7 +340,7 @@ Abstract
         else:
             out[pos] := out[pos] OR (u8)(v << 4)   ; pos := pos + 1
 
-    SET_LE12(out, pos, nib, v)                            // toggle: YES
+    SET_LE12(out, pos, nib, v)                          // toggle: YES
 
         nib := nib XOR 1
         if nib = 1:
@@ -350,7 +350,7 @@ Abstract
             out[pos] := out[pos] OR (u8)(v << 4)   ; pos := pos + 1
             out[pos] := (u8)(v >> 4)                ; pos := pos + 1
 
-    SET_LE16(out, pos, nib, v)                            // toggle: NO
+    SET_LE16(out, pos, nib, v)                          // toggle: NO
 
         if nib != 0:
             out[pos] := out[pos] OR (u8)(v << 4)   ; pos := pos + 1
@@ -360,7 +360,7 @@ Abstract
             out[pos] := (u8)v                       ; pos := pos + 1
             out[pos] := (u8)(v >> 8)                ; pos := pos + 1
 
-    SET_LE20(out, pos, nib, v)                            // toggle: YES
+    SET_LE20(out, pos, nib, v)                          // toggle: YES
 
         nib := nib XOR 1
         if nib = 1:
@@ -388,17 +388,18 @@ Abstract
 
     The reference implementations define two containers for shipping a
     compressed payload beside its stub. Both embed a conforming LZMAT-
-    compatible bitstream per Sections 1 through 5; other implementations
-    MAY use a different container.
+    compatible bitstream per Sections 1 through 5; other
+    implementations MAY use a different container.
 
     6.1.  Managed stub (single-file bundle container)
 
-        The stub is a .NET single-file executable (Lamarr.dll, deps.json,
-        runtimeconfig.json embedded by dotnet publish). The container is
-        inserted directly before the bundle header. The bundle marker is
-        a 40-octet structure:  an 8-octet u64 LE header offset followed
-        by a 32-octet signature. The packer patches the marker's header
-        offset so the bundle header stays addressable:
+        The stub is a .NET single-file executable (Lamarr.dll,
+        deps.json, runtimeconfig.json embedded by dotnet publish).
+        The  container is inserted directly before the bundle header.
+        The bundle marker is a 40-octet structure:  an 8-octet u64 LE
+        header offset followed by a 32-octet signature. The packer
+        patches the marker's header offset so the bundle header stays
+        addressable:
 
         [stub data .. header_off] [Lamarr container] [bundle header]
 
@@ -444,14 +445,14 @@ Abstract
             [PE headers] [.stub] [bundle marker] [.lamapp]
             [bundle data] [bundle header]
 
-        The 40-octet bundle marker (layout as 6.1) sits between .stub and
-        .lamapp. The file ends with the bundle header.
+        The 40-octet bundle marker (layout as 6.1) sits between .stub
+        and .lamapp. The file ends with the bundle header.
 
         .stub   native loader section (lamarr_stub.asm). It locates the
-                dotnet root (DOTNET_ROOT env -> HKLM registry -> Program
-                Files), selects the hostfxr in <root>\host\fxr (payload
-                runtime major preferred, else highest) and calls
-                hostfxr_main_bundle_startupinfo with this exe as
+                dotnet root (DOTNET_ROOT env -> HKLM registry -> 
+                Program Files), selects the hostfxr in <root>\host\fxr
+                (payload runtime major preferred, else highest) and
+                calls hostfxr_main_bundle_startupinfo with this exe as
                 host_path and the bundle header offset.
 
         .lamapp Lamarr-compressed payload (main managed DLL plus all
@@ -465,9 +466,9 @@ Abstract
                 LamarrBoot. Managed dependencies are moved out of the
                 bundle into .lamapp; the bundle keeps LamarrBoot,
                 deps.json, runtimeconfig.json and non-managed files.
-                The packer rebuilds the bundle header at end-of-file and
-                rewrites the deps.json / runtimeconfig.json location
-                fields (bundle version >= 2).
+                The packer rebuilds the bundle header at end-of-file 
+                and rewrites the deps.json / runtimeconfig.json
+                location fields (bundle version >= 2).
 
         .NET version compatibility: payloads targeting .NET 5-10 are
         supported. LamarrBoot defaults to net8.0-windows (Boot.csproj
@@ -476,8 +477,9 @@ Abstract
         major >= 6 (net6+, compressedSize and a runtimeconfig hash
         field).
 
-        An antheil variant extends this layout with method-body encryption
-        and an extended entry set (e.g. decoder, jithook, signature table).
+        An antheil variant extends this layout with method-body
+        encryption and an extended entry set (e.g. decoder, jithook,
+        signature table).
 
     6.3.  Host Compatibility
 
@@ -492,7 +494,8 @@ Abstract
 
         RegOpenKeyExW / RegQueryValueExW come from advapi32.dll,
         CommandLineToArgvW from shell32.dll, and
-        hostfxr_main_bundle_startupinfo via GetProcAddress on hostfxr.dll.
+        hostfxr_main_bundle_startupinfo via GetProcAddress
+        on hostfxr.dll.
 
         Hardware-enforced CET (shadow stack / indirect branch tracking)
         is not handled: a system enforcing CET on non-ENDBR64 targets

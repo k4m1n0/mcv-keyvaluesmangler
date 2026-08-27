@@ -1,61 +1,65 @@
 在.NET单文件分发之上做方法体加密、JIT层解密与条目混淆
 前置：.NET单文件 / PE / JIT基本概念
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
   〇  George Antheil与《机械芭蕾》
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
-  George Antheil（1900-1959）的《机械芭蕾》（Ballet Mécanique，1923-25）配器里
-  有16台自动钢琴、飞机螺旋桨、电铃和警笛等。自动钢琴由打孔纸卷（piano roll）驱动：
-  纸带上的孔位决定击键时刻，乐谱被转录成孔位之后，演奏完全交给机械。这跟把乐谱"编译"
-  成机器指令是一回事。
+  George Antheil（1900-1959）的《机械芭蕾》（Ballet Mécanique1923-25）
+  配器里有16台自动钢琴、飞机螺旋桨、电铃和警笛等。自动钢琴由打孔纸卷
+  （piano roll）驱动：纸带上的孔位决定击键时刻，乐谱被转录成孔位之后，演奏
+  完全交给机械。这跟把乐谱"编译"成机器指令是一回事。
 
-  纸卷上的孔位不是音乐，但机器读得懂。这篇文章里，磁盘上的密文也不是IL，但JIT读得懂。
-  程序在磁盘是密文，运行时在JIT层现场解密，条目体系里混入诱饵。静态分析拿到的是噪音，
-  动态分析要过的坎比黑箱反推多。
+  纸卷上的孔位不是音乐，但机器读得懂。这篇文章里，磁盘上的密文也不是IL，
+  但JIT读得懂。程序在磁盘是密文，运行时在JIT层现场解密，条目体系里混入诱饵。
+  静态分析拿到的是噪音，动态分析要过的坎比黑箱反推多。
 
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
   一  前置知识
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
   三个概念：.NET单文件怎么组织、PE怎么分节、JIT在哪里读方法体。
 
 
   1.1  单文件与bundle
 
-    dotnet publish -p:PublishSingleFile=true把主程序、依赖dll、deps.json、
-    runtimeconfig.json一起塞进一个exe。内部结构是"AppHost壳 + 一串条目"。
-    文件末尾有一段bundle header，记录每个条目的名字、偏移、大小、类型；入口通过
-    40字节的marker（签名）从文件尾往前扫描定位。条目数据是明文的，谁都能拆出来
-    ——这是后面所有加密的出发点。
+    dotnet publish -p:PublishSingleFile=true把主程序、依赖dll、
+    deps.json、runtimeconfig.json一起塞进一个exe。内部结构是"AppHost壳 +
+    一串条目"。文件末尾有一段bundle header，记录每个条目的名字、偏移、大小、
+    类型；入口通过40字节的marker（签名）从文件尾往前扫描定位。条目数据是
+    明文的，谁都能拆出来——这是后面所有加密的出发点。
 
-    另外，bundle header有版本差异：major 2（net5时代，条目没有压缩大小字段）；
+    另外，bundle header有版本差异：major 2（net5时代条目没压缩大小字段）；
     major 6+（net6+，每条目带压缩大小和runtimeconfig哈希）。
 
 
   1.2  PE与节区
 
-    可执行文件按节组织：.text（代码）、.rdata（只读数据）、.data（可写数据）等。
-    文件里的raw offset和内存里的RVA是两套坐标，手工装载时按节映射。Antheil的
-    Iamdec是个"裸dll"，靠手工映射加载。
+    可执行文件按节组织：.text（代码）、.rdata（只读数据）、.data（可写数据）
+    等。文件里的raw offset和内存里的RVA是两套坐标，手工装载时按节映射。
+    Antheil的Iamdec是个"裸dll"，靠手工映射加载。
 
 
   1.3  JIT与compileMethod
 
-    方法体在磁盘是IL字节码，首次调用时由JIT编译成机器码。编译的必经入口是
-    ICorJitInfo::compileMethod。但还有"提前偷看"的路径：内联分析（canInline）、
-    Tier1预编译、OSR（栈上替换）。它们不经过compileMethod，直接读方法体——所以
-    jithook必须多守一道门：canInline这个入口也得拦。
+    一个方法在编译后是一段IL字节。首次调用才编译（懒编译）：方法开头放一个
+    "桩"（stub），桩里藏着这个方法的内部句柄（MethodDesc）。第一次调用走进
+    桩，桩解出MethodDesc、保存现场，然后触发JIT编译，编译完把桩改写成跳转
+    编译结果——第二次调用直接执行机器码。所有方法编译都过
+    ICorJitInfo::compileMethod这道门。但还有"提前偷看"的路径：内联分析
+    （canInline）、Tier1预编译、OSR（栈上替换）。它们不经过compileMethod，
+    直接读方法体——所以jithook必须多守一道门：canInline这个入口也得拦。
 
 
-  1.4  方法表示法：MethodDesc与方法体头
+  1.4  方法表示法：MethodDesc与方法体
 
-    CLR内部用MethodDesc表示一个方法，compileMethod拿到的ftn（方法令牌）指向的
-    就是MethodDesc。方法体在内存/磁盘上的布局由COR_ILMETHOD头描述：FatHeader
-    开头的标志、CodeSize（IL字节数）、MaxStack、局部变量签名令牌，以及EH区的偏移。
-    jithook解析方法体就是先读FatHeader，按CodeSize和EH区信息把方法体完整拿下来，
-    解密后原样交回——6.3讲的就是EH区的两种形态。
+    JIT编译时从桩里解出的MethodDesc就是compileMethod收到的ftn——CLR内部
+    给每个方法分配的内部句柄，靠它拿方法体。方法体在磁盘是一段字节：
+    COR_ILMETHOD头（FatHeader开头的标志、CodeSize、MaxStack、局部变量
+    签名令牌）加IL加EH表，JIT前端的Importer就是读这段字节转成内部树。
+    jithook解析方法体先读FatHeader，按CodeSize和EH区信息把方法体完整
+    拿下来，解密后原样交回——6.3讲的就是EH区的两种形态。
 
     而X0伪造的假方法（5.4），本质就是MethodDesc。
 
@@ -80,9 +84,9 @@
       hostfxr        运行时定位与加载器（dotnet host）
 
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
   二  为什么需要Antheil
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
     单文件解决了分发，但留下两个问题：体积和明文。体积由Lamarr压缩解决，
     明文则由Antheil解决。
@@ -97,8 +101,9 @@
 
   2.2  思路：让明文不存在
 
-    与其压缩明文，不如让IL明文不存在。方法体在磁盘上直接加密，JIT编译时现场解密。
-    于是：
+    与其压缩明文，不如让IL明文不存在。方法体在磁盘上直接加密，JIT编译时
+    现场解密。于是：
+
       - 静态dump文件 -> 全是密文，反编译失败
       - 内联 / Tier1 / OSR提前读方法体 -> 读到密文 -> 拦下
       - 内存里解密过的IL是临时的，编译完即弃
@@ -112,16 +117,16 @@
     如此，逆向者能拿到的完整明文只有以万行计的机器码。
 
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
   三  宏观架构
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
   3.1  产物布局
 
       PE头
       .text       anthel_stub.asm入口壳（找hostfxr）
       marker 40B  8B header偏移 + 32B签名
-      .rdata      .lamapp：seed/头/表/名称/数据区（解码器/钩子/签名表/蜜罐/诱饵）
+      .rdata     .lamapp：seed/头/表/名称/数据区（解码器/钩子/签名表/诱饵）
       bundle数据  BootAntheil + deps.json + runtimeconfig（CLR需要真名）
       bundle头    重建的.NET bundle header（文件尾）
 
@@ -147,9 +152,9 @@
       build_asm.ps1           汇编编译 + 调打包器
 
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
   四  容器与条目体系
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
   4.1  条目清单
 
@@ -179,12 +184,12 @@
       116  20N    条目表：nameLen/rawLen/compLen/compOff
       ...  ...    名字区（UTF-8，4对齐）+ 数据区
 
-    开头64字节是假metadata：伪造 #~ 和 #Strings两个stream，偏移指向诱饵区，按标准
-    格式解析的工具会顺着 #~ 走进假数据。seed每次打包随机（Guid "N" 格式），两次产物
-    互不相同——重打包等于整体换钥匙。bundle头五个u32都与派生key异或，直接读是噪音，
-    其中flags让运行时不必依赖固定布局就能定位解码器与jithook。数据区的真实条目、
-    诱饵、垃圾块按随机顺序物理排列，核心被穿插打散；gzip永远靠后，每个前后都夹着
-    垃圾块；表里的compOff指向实际位置。
+    开头64字节是假metadata：伪造 #~ 和 #Strings两个stream，偏移指向诱饵区，
+    按标准格式解析的工具会顺着 #~ 走进假数据。seed每次打包随机（Guid "N"
+    格式），两次产物互不相同——重打包等于整体换钥匙。bundle头五个u32都与派生
+    key异或，直接读是噪音，其中flags让运行时不必依赖固定布局就能定位解码器
+    与jithook。数据区的真实条目、诱饵、垃圾块按随机顺序物理排列，核心被穿插
+    打散；gzip永远靠后，每个前后都夹着垃圾块；表里的compOff指向实际位置。
 
 
   4.3  BSJB伪头逐字节
@@ -197,7 +202,7 @@
       8     00 00 00 00                 保留
       12    0C                          version字符串长度 = 12
       13    00 00 00                    保留
-      16    76 34 2E 30 2E 33 30 33 31 39    "v4.0.30319"（12字节，到27）
+      16    76 34 2E 30 2E 33 30 33 31 39    "v4.0.30319"（12字节）
       28    00 00                       保留
       30    02                          声明2个stream
       31    00                          保留
@@ -211,13 +216,13 @@
       60    00 00 00 00                 保留
 
     关键点：偏移32和44这两个字段，指向的不是真metadata，而是诱饵区（#~ 指向
-    解码器假数据、#Strings指向名字区）。标准解析器走到这里，拿到的是一份"看起来
-    合法、读起来是垃圾"的表。为什么这一套能骗过标准解析器：.NET工具读程序集元数据，
-    第一步就是找MetadataRoot，然后按#~和#Strings两个stream的偏移去读表和字符串。
-    伪头给出的是合法格式的偏移和长度，但#~指向的数据是解码器假数据（解析出来是
-    乱码表），#Strings指向的名字区也不是真正的元数据字符串堆。工具按偏移读完，
-    要么解析失败，要么得到垃圾——但不会因为"结构不合法"直接报错。于是逆向者得到的
-    是困惑，而不是明确的失败。
+    解码器假数据、#Strings指向名字区）。标准解析器走到这里，拿到的是一份"
+    看起来合法、读起来是垃圾"的表。为什么这一套能骗过标准解析器：.NET工具读
+    程序集元数据，第一步就是找MetadataRoot，然后按#~和#Strings两个stream的
+    偏移去读表和字符串。伪头给出的是合法格式的偏移和长度，但#~指向的数据是
+    解码器假数据（解析出来是乱码表），#Strings指向的名字区也不是真正的元数据
+    字符串堆。工具按偏移读完，要么解析失败，要么得到垃圾——但不会因为"结构
+    不合法"直接报错。于是逆向者得到的是困惑，而不是明确的失败。
 
 
   4.4  密钥派生
@@ -232,8 +237,8 @@
 
     配合方式：seed由打包器随机生成并XOR KSeed存盘，运行时还原出真seed再派生
     全部key——所以重打包就是换钥匙，旧产物难以复用分析结论。派生出的种子密钥
-    不整体留在内存，分片存于_skA.._skD，用时由Sk()重组、用完清零，内存里找不到
-    连续16字节的密钥。
+    不整体留在内存，分片存于_skA.._skD，用时由Sk()重组、用完清零，内存里
+    找不到连续16字节的密钥。
 
 
   4.5  设计权衡：为什么XOR不是AES
@@ -251,8 +256,9 @@
   4.6  解码规则
 
       条目在表头有三个判定：rawLen为0x7FFFFFFF是明文条目，直接取compOff处
-      compLen字节——依赖默认明文存储，CompressDeps开启后才压缩；compLen等于
-      rawLen是原样XOR KSeed还原；compLen小于rawLen是压缩，按4KB页逐页调Iamdec。
+      compLen字节——依赖默认明文存储，CompressDeps开启后才压缩；compLen
+      等于rawLen是原样XOR KSeed还原；compLen小于rawLen是压缩，按4KB页
+      逐页调Iamdec。
 
 
   Iamdec接口签名
@@ -260,12 +266,13 @@
       返回0成功；逐页调用，state / hist跨页保持。
 
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
   五  BootAntheil：加载链
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
-  双击exe之后：antheil_stub.asm找hostfxr启动CLR，随后按单文件机制加载主程序——
-  而主程序条目里装的是BootAntheil。加载链从BootAntheil.Main开始，共六步：
+  双击exe之后：antheil_stub.asm找hostfxr启动CLR，随后按单文件机制加载
+  主程序——而主程序条目里装的是BootAntheil。加载链从BootAntheil.Main开始，
+  共六步：
 
       AD()              反调试：先确认环境干净
       X0()              伪造MethodDesc：给CLR一个假方法
@@ -279,58 +286,62 @@
   5.1  AppHost与hostfxr：exe是怎么启动的
 
     .NET单文件exe的最外层是apphost——一个原生壳，不是托管代码。
-    它做的事：读runtimeconfig.json定位runtime版本，加载hostfxr（dotnet的hosting
-    入口），由hostfxr加载coreclr并传入托管入口。anthel_stub.asm手写复刻的正是
-    这一套：遍历PEB找kernel32，解析API，找dotnet root（DOTNET_ROOT环境变量 ->
-    注册表 -> ProgramFiles），选hostfxr，最后调hostfxr_main_bundle_startupinfo。
-    区别是anthel_stub没有导入表，一切API都靠运行时解析。
+    它做的事：读runtimeconfig.json定位runtime版本，加载hostfxr（dotnet的
+    hosting入口），由hostfxr加载coreclr并传入托管入口。anthel_stub.asm
+    手写复刻的正是这一套：遍历PEB找kernel32，解析API，找dotnet root
+    （DOTNET_ROOT环境变量 ->注册表 -> ProgramFiles），选hostfxr，最后调
+    hostfxr_main_bundle_startupinfo。区别是anthel_stub没有导入表，
+    一切API都靠运行时解析。
 
     它怎么在"无导入表"下调用API？三件事：
 
       1. 从PEB（进程环境块）出发，沿PEB_LDR_DATA的InMemoryOrderModuleList
           找kernel32/ntdll基址。
-      2. 在模块导出表（Export Directory）里按名字找函数，ResolveApi就是这段逻辑。
+      2. 在模块导出表（Export Directory）里按名字找函数，ResolveApi
+          就是这段逻辑。
       3. 跨模块再查用ResolveApiIn（指定模块）。
 
-    这是shellcode的基本功：位置无关代码不依赖链接器补导入表，一切API地址运行时现找。
-    LoadBare加载Iamdec是同一思路——裸dll不需要导入表，因为压根没有导入。
+    这是shellcode的基本功：位置无关代码不依赖链接器补导入表，一切API地址
+    运行时现找。LoadBare加载Iamdec是同一思路——裸dll不需要导入表，
+    因为压根没有导入。
 
 
   5.2  整体时序
 
-   exe启动
-     |-- anthel_stub.asm：找hostfxr -> hostfxr_main_bundle
-     |-- CLR加载bundle主程序（= BootAntheil）
-     |-- BootAntheil.Main
-     |       |-- AD()             多维反调试
-     |       |-- X0()             伪造MethodDesc
-     |       |-- X1()             解析.lamapp（seed -> key -> 表）
-     |       |-- EnsureDecoder()  按索引取解码器 -> LoadBare
-     |       |-- X3()             解主程序（XOR / 按页Iamdec）
-     |       |-- W1()             写元数据 + 注册Resolving
-     |       -- invoke            主程序Main
-     -- 主程序运行（依赖按需从bundle解出）
+    exe启动
+      |-- anthel_stub.asm：找hostfxr -> hostfxr_main_bundle
+      |-- CLR加载bundle主程序（= BootAntheil）
+      |-- BootAntheil.Main
+      |       |-- AD()             多维反调试
+      |       |-- X0()             伪造MethodDesc
+      |       |-- X1()             解析.lamapp（seed -> key -> 表）
+      |       |-- EnsureDecoder()  按索引取解码器 -> LoadBare
+      |       |-- X3()             解主程序（XOR / 按页Iamdec）
+      |       |-- W1()             写元数据 + 注册Resolving
+      |       -- invoke            主程序Main
+      -- 主程序运行（依赖按需从bundle解出）
 
 
   5.3  AD：反调试
 
     调试器是最直接的观察者，attach上来内存明文一目了然。多种手段轮着查：
-    IsDebuggerPresent、CheckRemoteDebuggerPresent、NtQueryInformationProcess
-    查调试端口、PEB.BeingDebugged直读、硬件断点寄存器、模块名单扫描，还有
-    profiler环境变量检测。任何一种命中直接Environment.FailFast(null)。
-    PEB直读绕过对API的hook，profiler检测封住ICorProfiler注入路径。检测不只在
-    启动时做一次：后台反调试线程持续运转，时间戳校验让单步调试的线程因拖慢而
-    超时自毁，线程本身用NtSetInformationThread对调试器隐藏，jithook的.text还
-    定时校验防运行时patch。另有一条窗口枚举路径（WndScan）恒返回false，只在
-    反调试判定里出现，纯粹为了让分析者误以为存在窗口级检测。它们同样拦不住高手，
-    但把"随手attach"、单步跟踪和"profiler分析"的代价都抬高了。
+    IsDebuggerPresent、CheckRemoteDebuggerPresent、
+    NtQueryInformationProcess查调试端口、PEB.BeingDebugged直读、硬件断点
+    寄存器、模块名单扫描，还有profiler环境变量检测。任何一种命中直接
+    Environment.FailFast(null)。PEB直读绕过对API的hook，profiler检测封住
+    ICorProfiler注入路径。检测不只在启动时做一次：后台反调试线程持续运转，
+    时间戳校验让单步调试的线程因拖慢而超时自毁，线程本身用
+    NtSetInformationThread对调试器隐藏，jithook的.text还定时校验防运行时
+    patch。另有条窗口枚举路径（WndScan）恒返回false，只在反调试判定里出现，
+    纯粹为了让分析者误以为存在窗口级检测。它们同样拦不住高手，但把
+    "随手attach"、单步跟踪和"profiler分析"的代价都抬高了。
 
 
   5.4  X0：伪造MethodDesc
 
     CoreCLR解析bundle时会调用主程序预设的方法入口。X0在内存拼一个最小的
-    MethodDesc：栈上放几条指令（90 90 90 90 EB 00 C3 = nop*4 + jmp+0 + ret），
-    再补全必要头字段，让CLR能成功调过去。它不干活，只让CLR以为这里有个方法。
+    MethodDesc：栈上放几条指令（nop*4 + jmp+0 + ret），再补全必要头字段，
+    让CLR能成功调过去。它不干活，只让CLR以为这里有个方法。
 
 
   5.5  X1：解析.lamapp
@@ -342,23 +353,24 @@
 
   5.6  EnsureDecoder与LoadBare
 
-    EnsureDecoder按表索引取解码器条目，取出dll字节异或KSeed还原，LoadBare映射
-    进内存。解码器固定排在真条目末尾，索引在X1解析时就定了。LoadBare之所以能这么
-    "裸"，全靠Iamdec：无导入表、无重定位、最重要的是位置无关。映射只需三步：
+    EnsureDecoder按表索引取解码器条目，取出dll字节异或KSeed还原，LoadBare
+    映射进内存。解码器固定排在真条目末尾，索引在X1解析时就定了。LoadBare
+    之所以能这么"裸"，全靠Iamdec：无导入表、无重定位、最重要的是位置无关。
+    映射只需三步：
 
       - 读PE头，找.text / .rdata两个节
       - VirtualAlloc一块RWX
       - .text拷到基址，.rdata按RVA摆到偏移处
 
-    返回基址直接当函数指针用。位置无关的关键：antheil_paged.asm内部只用基址相对寻址，
-    不依赖任何外部符号，所以免去商业壳常见的导入表修复和重定位。
+    返回基址直接当函数指针用。位置无关的关键：antheil_paged.asm内部只用
+    基址相对寻址，不依赖任何外部符号，所以免去商业壳常见的导入表修复和重定位。
 
 
   5.7  X3：解出主程序
 
     条目有三种形态：rawLen为0x7FFFFFFF是明文，直接取字节（依赖默认明文，
-    主程序始终压缩）；compLen等于rawLen是没压缩，直接XOR KSeed还原；compLen
-    小于rawLen是压缩，按4KB一页逐页调Iamdec。
+    主程序始终压缩）；compLen等于rawLen是没压缩，直接XOR KSeed还原；
+    compLen小于rawLen是压缩，按4KB一页逐页调Iamdec。
     分页解码器接口固定：state（0x38字节工作区）、hist（0x80000字节历史窗）、
     page（0x1000字节输出页）、src（压缩源）。最后一页不足4KB按实际长度收尾。
     解出来是完整托管IL，但它还要依赖别的dll。
@@ -366,15 +378,15 @@
 
   5.8  W1：依赖与元数据
 
-    CoreCLR单文件机制只认deps.json / runtimeconfig.json。W1做两件事：把必要
-    元数据写进内存里的bundle结构让解析器认账；注册AssemblyLoadContext.Resolving
-    ——CLR缺哪个依赖就从bundle解出哪个（XOR或按页解码），LoadFromStream喂回去。
-    之后控制权交给真正的主程序入口。
+    CoreCLR单文件机制只认deps.json / runtimeconfig.json。W1做两件事：
+    把必要元数据写进内存里的bundle结构让解析器认账；注册
+    AssemblyLoadContext.Resolving——CLR缺哪个依赖就从bundle解出哪个（XOR
+    或按页解码），LoadFromStream喂回去。之后控制权交给真正的主程序入口。
 
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
   六  jithook：JIT层解密与内联拦截
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
     方法体在磁盘是密文，所有要读方法体的路径都得经过解密。
     但"所有路径"这句话，是踩完坑才确认、成立的。
@@ -384,26 +396,32 @@
     有时访问违例。五花八门，明显指向同一个问题——还有别的路径在提前读方法体。
 
     顺着崩溃栈查，读者是内联分析。编译一个方法前，JIT会问"它能不能内联进来"，
-    问话过程会读取被内联方法的IL——不经过compileMethod，直接从原始image拿字节，
-    拿到的是密文。密文按指令解析全是垃圾，编译结果自然是错的，于是崩溃。
+    问话过程会读取被内联方法的IL——不经过compileMethod，直接从原始image拿
+    字节，拿到的是密文。密文按指令解析全是垃圾，编译结果自然是错的，于是崩溃。
 
-    解法是同时钩住canInline（ICorJitInfo vtable slot 6），对加密方法直接返回
-    INLINE_NEVER：内联分析拿不到方法体，也就不会去读密文。钩完之后随机崩溃消失。
+    解法是同时钩住canInline（ICorJitInfo vtable slot 6），对加密方法直接
+    返回INLINE_NEVER：内联分析拿不到方法体，也就不会去读密文。钩完之后随机
+    崩溃消失。
 
 
   6.1  ICorJitInfo vtable与原子安装
 
-    JIT通过接口指针调用我们：ICorJitInfo的vtable是一张函数指针表，compileMethod
-    和canInline都有固定槽位。InstallJitHook做两件事：
+    JIT通过接口指针调用我们：ICorJitInfo的vtable是一张函数指针表，
+    compileMethod和canInline都有固定槽位。InstallJitHook做两件事：
 
       1. 保存原槽位指针（解密后要调回原compileMethod）
       2. 用lock cmpxchg原子替换新指针
 
     原子安装不是洁癖：多线程并发编译时，如果替换写了一半就被另一个线程读到，
-    vtable就是坏的，程序在启动阶段就崩。cmpxchg保证替换要么完整发生、要么没发生。
+    vtable就是坏的，程序在启动阶段就崩。cmpxchg保证替换要么完整发生、
+    要么没发生。
 
 
   6.2  compileMethod解密流程
+
+    compileMethod收到的ftn就是桩里解出的MethodDesc。jithook按它读方法体
+    字节、算CRC32查签名表——命中即加密方法，进入下面的解密。查表发生在解密
+    之前，所以签名表不必保密，可以公开放在bundle里。
 
       compileMethod(ftn, ...)
         sig = 查签名表(ftn)              //CRC32指纹
@@ -423,8 +441,9 @@
   6.3  EH表：small与fat
 
     方法体后面跟的异常处理数据分两种：small布局只有一个节，fat布局带
-    more sections计数，后面跟一整块多节数据。第一版只按small拷贝，fat方法编译时
-    JIT顺着more sections去读后面的EH表——那部分根本没拷进临时缓冲，直接越界读。
+    more sections计数，后面跟一整块多节数据。第一版只按small拷贝，fat方法
+    编译时JIT顺着more sections去读后面的EH表——那部分根本没拷进临时缓冲，
+    直接越界读。
 
     修复是区分small/fat：fat按more sections数量整块拷，并对拷贝长度加
     dataSize上限，杜绝越界。
@@ -441,23 +460,28 @@
       3. OSR（栈上替换）：长循环的栈上替换需要重新编译，最终还是走编译入口，
           被compileMethod的门拦住。
 
-    三者只要有一个拿到密文IL，编译结果就是垃圾——这就是早期"症状五花八门"的根源。
+    三者只要有一个拿到密文IL，编译结果就是垃圾——这就是早期"症状五花八门"
+    的根源。
 
 
   6.5  JIT编译生命周期
 
-    多数人以为方法只编译一次，实际上TieredCompilation会让一个方法被编译两遍：
+    多数人以为方法只编译一次，实际上TieredCompilation会让一个方法
+    被编译两遍：
+
       Tier0  快速JIT：首调时不做优化直接编译，图启动快
       Tier1  后台优化：方法变热后重新优化编译并替换机器码
-      OSR    栈上替换：长循环在Tier0栈帧上原地升级为Tier1版，触发一次额外重编译
+      OSR    栈上替换：长循环在Tier0栈帧上原地升级为Tier1版，触发一次额外
+              重编译
 
-    对jithook的含义很直接：方法体解密可能被请求两次（Tier0一次、Tier1一次）。
-    解密必须是幂等的——每次从密文XOR，不能解过一次就标记"已解密"然后放明文，
-    否则第二次编译读到的是已经损坏的中间态。
+    这对jithook的含义很直接：方法体解密可能被请求两次（Tier0一次、Tier1
+    一次）。解密必须是幂等的——每次从密文XOR，不能解过一次就标记"已解密"然后
+    放明文，否则第二次编译读到的是已经损坏的中间态。
 
-    还有一个前提：R2R（ReadyToRun）。如果程序集带R2R预编译的native映像，JIT根本
-    不编译该方法——方法体加密就绕过了。Antheil是安全的，因为打包的是普通FDD单文件，
-    不生成R2R；加密方法体时也没有R2R版本可走。这一点是"磁盘密文"成立的前提。
+    还有一个前提：R2R（ReadyToRun）。发布时可以把方法预编译成native映像，
+    运行时JIT见到已有映像就不再编译——加密的方法体没人解密，加密形同虚设。
+    Antheil的打包链路不产生R2R映像，所有加密方法都必然走到JIT编译这一步、
+    被jithook拦下，"磁盘密文"才成立。
 
     附：DOTNET_TieredCompilation=0可关闭分层编译。对逆向者来说这会让
     编译路径变简单（只有一次编译），但也说明jithook的拦截点无论分层开关如何
@@ -488,16 +512,17 @@
 
   6.7  诊断
 
-    GetJitHookDecryptCount返回解密次数，用来确认钩子真的工作：正常启动跑一遍
-    后计数应当大于0，且解密数量与打包时输出的一致（encrypted N method bodies）。
+    GetJitHookDecryptCount返回解密次数，用来确认钩子真的工作：正常启动
+    跑一遍后计数应当大于0，且解密数量与打包时输出的一致
+    （encrypted N method bodies）。
 
 
   6.8  调试器与JIT的交互
 
-    调试器也读IL：请求IL代码体（GetILCodeBody）、在方法上下断点（patch IL）。
-    这些请求走的是调试器的通道，不经过compileMethod的解密。所以逆向者调试
-    加密方法时，拿到的IL还是密文——断点打在密文上没有任何意义。这是反调试之外，
-    动态分析还要过的最后一关。
+    调试器也读IL：请求IL代码体（GetILCodeBody）、在方法下断点
+    （patch IL）。这些请求走的是调试器的通道，不经过compileMethod的解密。
+    所以逆向者调试加密方法时，拿到的IL还是密文——断点打在密文上没有任何意义。
+    这是反调试之外，动态分析还要过的最后一关。
 
 
   jithook.dll导出
@@ -507,39 +532,42 @@
       GetJitHookDecryptCount    解密计数（诊断）
 
   崩溃码族
-      0x02345678 / 0x80000003 / FailFast / AV -> 内联读密文，或EH fat表漏拷
+      0x02345678 / 0x80000003 / FailFast / AV -> 内联读密文，
+       或EH fat表漏拷
 
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
   七  伪装与诱饵
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
-  逆向者的第一步通常是找解码器——在bundle条目里翻名字：既然这步可被预测，就让它走错。
+  逆向者的第一步通常是找解码器——在bundle条目里翻名字：既然这步可被预测，
+  就让它走错。
 
 
   7.1  两个解码器
 
-     真解码器（antheil_paged.asm）：仅400行，名字区是随机假名，运行时按表索引取。
-     蜜罐（z0.dll = antlion_deco.asm）：长达1500行，装的却是假gzip解码器，导出
-     z0_init / z0_read / z0_align / z0_size。
+     真解码器（antheil_paged.asm）：仅400行，名字区是随机假名，运行时按表
+     索引取。蜜罐（z0.dll = antlion_deco.asm）：长达1500行，装的却是假
+     gzip解码器，导出z0_init / z0_read / z0_align / z0_size。
 
 
   7.2  随机诱饵
 
     打包器额外生成4个随机条目混进表里，名字4~16个小写字母。第一个是完整伪PE
-    （MZ + DOS stub + PE签名 + 伪造节表 + 随机x64代码），明文存放，PE工具会
-    识别为合法dll，提取或加载即失败。其余3个是gzip流：其中一个解压后是一套完整的
-    假VM壳——IL指令被生硬翻译成PPC字节码，旁边配着dispatch循环、handler表和翻译
-    映射表，分析者看到的是一台被保护的虚拟机的全部零件；另外两个只是随机x64指令。
-    真实条目压缩流里残留的MZ片段也故意不清理，作为额外的伪PE痕迹。
+    （MZ + DOS stub + PE签名 + 伪造节表 + 随机x64代码），明文存放，PE工具
+    会识别为合法dll，提取或加载即失败。其余3个是gzip流：其中一个解压后是
+    一套完整的假VM壳——IL指令被生硬翻译成PPC字节码，旁边配着dispatch循环、
+    handler表和翻译映射表，分析者看到的是一台被保护的虚拟机的全部零件；
+    另外两个只是随机x64指令。真实条目压缩流里残留的MZ片段也故意不清理，
+    作为额外的伪PE痕迹。
 
     Pheropod是bundle层诱饵的代号，包含假解码器蜜罐和gzip诱饵，
     它不试图挡住分析者，而是让其在错误目标上浪费时间。
 
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
   八  构建与验证
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
   8.1  示例项目构建
 
@@ -557,9 +585,10 @@
 
   8.2  build_asm.ps1
 
-    一个脚本管到底：工具链查找（vswhere -> VCToolsInstallDir -> PATH，定位
-    ml64 / link）-> 编译lamarr_stub（antheil模式为anthel_stub / Iamdec / z0
-    三个stub）-> 编译jithook -> 带 -Pack时继续调LamarrNativePack打包
+    一个脚本管到底：工具链查找（vswhere -> VCToolsInstallDir -> PATH，
+    定位ml64 / link）-> 编译lamarr_stub（antheil模式为anthel_stub / 
+    Iamdec /z0三个stub）-> 编译jithook -> 带 -Pack时继续调
+    LamarrNativePack打包。
 
     参数：
       -AsmDir              汇编源码目录
@@ -567,7 +596,7 @@
       -Packer              antheil | native（决定编译哪些stub）
       -Pack                是否继续调打包器
       -InputPath / -Output / -Boot / -Decoder / -JitHook / Pheropod 
-       / -Mode / -AppName / -PackerTfm / -CompressDeps   pack参数
+       / -Mode / -AppName / -PackerTfm / -CompressDeps  pack参数
 
     csproj的NativeStubPack里，编译与打包合成一个Exec调用。
 
@@ -582,7 +611,7 @@
       3. RebuildBundle：主程序换成BootAntheil，加密依赖方法体，组装条目
          （解码器/钩子/签名表/蜜罐/诱饵）
       4. ComputeLayout：按节对齐重算布局
-      5. PatchStubVars：替换stub模板标记（##APPNAME##等），写bundle头偏移
+      5. PatchStubVars：替换stub模板标记（##APPNAME##等）写bundle头偏移
       6. WriteFile：按布局写盘
 
     前文的时序图是它的"读镜像"——同一份布局，一端写、一端读。
@@ -590,7 +619,8 @@
 
   8.4  验证
 
-      GUI主流程          完整跑通X6读节 -> X1解析 -> 解码器 -> jithook -> 主程序 
+      GUI主流程          完整跑通X6读节 -> X1解析 -> 解码器 -> jithook
+                         -> 主程序 
       EhTestE            大EH表（11个catch）：验fat EH拷
       EhTestS            单线程：基础链路
       EhTestM            8线程并发：并发编译/解密稳定性
@@ -618,9 +648,9 @@
       ml64找不到             -> 缺VS Build Tools
 
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
   九  攻防分析
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
   9.1  攻击面
 
@@ -650,4 +680,4 @@
     动态分析费时费力、大部分逆向者走三次弯路后就放弃了。
 
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
