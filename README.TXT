@@ -184,8 +184,6 @@
    IF YOU ARE CRAZY:
       dotnet publish -c Release -r win-x64 --no-self-contained
       -o ./publish -p:Packer=native
-    -p:Packer=antheil      method-body encryption + JIT decryption
-                           (see Lamarr/ANTHEIL.TXT for details)
 
   Then grab the EXE from .\publish\ and do whatever you want with it
 
@@ -255,6 +253,11 @@
     | ...    | Bundle header (patched marker offset)|
     +--------+--------------------------------------+
 
+  CROSS VERSION
+    The stub is built against net5.0 (LamarrTfm) and rolls forward to
+    any installed .NET 5-10 runtime. Pick the stub TFM with
+    -p:LamarrTfm (defaults to the main project TargetFramework)
+
   CREDITS
     The underlying LZMAT compression algorithm was designed by
     Vitaly Evseenko. The Lamarr encoder / decoder source is a clean
@@ -289,6 +292,16 @@
     main DLL from memory, and resolves dependencies on demand
 
     No temp files. No console flash. Under 192 KiB. HELL YEAH! (again)
+
+  CROSS VERSION
+    Boot (LamarrBoot) and packer TFM are parameterized (BootTfm / PackerTfm),
+    defaulting to the main project TargetFramework; target any .NET 5-10
+    runtime by building boot with -p:BootTfm=net5.0 and packing with
+    -RtcVersion 5.0.0. Dependencies stripped from deps.json are reloaded from
+    .lamapp via AssemblyLoadContext.Resolving. TieredCompilation stays on for
+    native; only antheil disables it (--rtc-tiered) because its its JIT hook
+    conflicts with the .NET 10 Tier-1 background recompile (net10 JIT bug, 
+    fixed in 10.0.13, not my bad)
 
   EXTRA BUILD REQUIREMENTS
     - MSVC x64 toolchain (ml64/link). Locator: Lamarr/Native/build_asm.ps1

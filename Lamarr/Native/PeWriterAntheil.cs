@@ -37,6 +37,10 @@ internal class PeWriterAntheil
     private int iIdxRtc = -1;
     private int iEntryCount;
     private readonly HashSet<string> rgStripDeps = new(StringComparer.OrdinalIgnoreCase);
+    private string sRtcVersion = "5.0.0";
+    public void SetRtcVersion(string v) { sRtcVersion = v; }
+    private string sTiered = "off";
+    public void SetTiered(string m) { sTiered = m; }
 
     private byte[] rgBoot = null!;
     private List<uint> rgBootCrcs = new();
@@ -974,6 +978,7 @@ internal class PeWriterAntheil
 
         using var ms = new MemoryStream();
         long lDepsSzNew = lDepsSz;
+        long lRtcSzNew = lRtcSz;
         for (int k = 0; k < iM; k++)
         {
             int i = keepIdx[k];
@@ -990,11 +995,18 @@ internal class PeWriterAntheil
                     rgData = StripDepsDependencies(rgData);
                     lDepsSzNew = rgData.Length;
                 }
+                else if (rgName[i].EndsWith(".runtimeconfig.json", StringComparison.OrdinalIgnoreCase))
+                {
+                    rgData = RewriteRuntimeConfig(rgData);
+                    lRtcSzNew = rgData.Length;
+                }
             }
             rgBundleOffsets[k] = ms.Position;
             ms.Write(rgData, 0, rgData.Length);
             rgBundleCsz[k] = i == iMainEntry ? 0 : (rgCsz[i] > 0 ? rgData.Length : 0);
-            rgBundleSz[k] = i == iMainEntry || rgName[i].EndsWith(".deps.json", StringComparison.OrdinalIgnoreCase)
+            rgBundleSz[k] = i == iMainEntry
+                || rgName[i].EndsWith(".deps.json", StringComparison.OrdinalIgnoreCase)
+                || rgName[i].EndsWith(".runtimeconfig.json", StringComparison.OrdinalIgnoreCase)
                 ? rgData.Length : rgSz[i];
         }
         rgBundleData = ms.ToArray();
@@ -1009,8 +1021,9 @@ internal class PeWriterAntheil
             { iNewRtcIdx = k; break; }
         }
 
+        uint uOutMajor = uMajor >= 2 ? 2u : uMajor;
         using var hd = new MemoryStream();
-        WriteU32(hd, uMajor);
+        WriteU32(hd, uOutMajor);
         WriteU32(hd, 0);
         WriteI32(hd, iM);
         WriteStr(hd, sBundleId);
@@ -1026,7 +1039,7 @@ internal class PeWriterAntheil
             WriteI64(hd, iKDeps >= 0 ? lBundleStart + rgBundleOffsets[iKDeps] : 0);
             WriteI64(hd, lDepsSz);
             WriteI64(hd, iNewRtcIdx >= 0 ? lBundleStart + rgBundleOffsets[iNewRtcIdx] : 0);
-            WriteI64(hd, lRtcSz);
+            WriteI64(hd, lRtcSzNew);
             WriteI64(hd, lRtcHash);
         }
 
@@ -1034,12 +1047,83 @@ internal class PeWriterAntheil
         {
             WriteI64(hd, lBundleStart + rgBundleOffsets[k]);
             WriteI64(hd, rgBundleSz[k]);
-            if (uMajor >= 6)
+            if (uOutMajor >= 6)
                 WriteI64(hd, rgBundleCsz[k]);
             WriteU8(hd, rgType[keepIdx[k]]);
             WriteStr(hd, rgName[keepIdx[k]]);
         }
         rgNewHeader = hd.ToArray();
+    }
+
+    private byte[] RewriteRuntimeConfig(byte[] rgOrig)
+    {
+        using var doc = JsonDocument.Parse(rgOrig);
+        using var ms = new MemoryStream();
+        using (var w = new Utf8JsonWriter(ms))
+        {
+            w.WriteStartObject();
+            foreach (var p in doc.RootElement.EnumerateObject())
+            {
+                if (p.NameEquals("runtimeOptions") && p.Value.ValueKind == JsonValueKind.Object)
+                {
+                    w.WritePropertyName("runtimeOptions");
+                    w.WriteStartObject();
+                    bool bRoll = false;
+                    foreach (var op in p.Value.EnumerateObject())
+                    {
+                        if (op.NameEquals("frameworks") && op.Value.ValueKind == JsonValueKind.Array)
+                        {
+                            w.WritePropertyName("frameworks");
+                            w.WriteStartArray();
+                            foreach (var fw in op.Value.EnumerateArray())
+                            {
+                                w.WriteStartObject();
+                                foreach (var f in fw.EnumerateObject())
+                                {
+                                    if (f.NameEquals("version")) w.WriteString("version", sRtcVersion);
+                                    else f.WriteTo(w);
+                                }
+                                w.WriteEndObject();
+                            }
+                            w.WriteEndArray();
+                        }
+                        else if (op.NameEquals("framework") && op.Value.ValueKind == JsonValueKind.Object)
+                        {
+                            w.WritePropertyName("framework");
+                            w.WriteStartObject();
+                            foreach (var f in op.Value.EnumerateObject())
+                            {
+                                if (f.NameEquals("version")) w.WriteString("version", sRtcVersion);
+                                else f.WriteTo(w);
+                            }
+                            w.WriteEndObject();
+                        }
+                        else if (op.NameEquals("configProperties") && op.Value.ValueKind == JsonValueKind.Object)
+                        {
+                            w.WritePropertyName("configProperties");
+                            w.WriteStartObject();
+                            foreach (var cp in op.Value.EnumerateObject())
+                                cp.WriteTo(w);
+                            //net10的Tiered后台编译与jithook的compileMethod hook冲突(退出期GC崩溃)
+                            if (sTiered != "default") w.WriteBoolean("System.Runtime.TieredCompilation", false);
+                            w.WriteEndObject();
+                        }
+                        else if (op.NameEquals("rollForward"))
+                        {
+                            w.WriteString("rollForward", "LatestMajor");
+                            bRoll = true;
+                        }
+                        else op.WriteTo(w);
+                    }
+                    if (!bRoll) w.WriteString("rollForward", "LatestMajor");
+                    w.WriteEndObject();
+                }
+                else p.WriteTo(w);
+            }
+            w.WriteEndObject();
+            w.Flush();
+        }
+        return ms.ToArray();
     }
 
     //剔除依赖项 防hostpolicy加载已剥离的dll

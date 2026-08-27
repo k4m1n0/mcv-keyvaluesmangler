@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Loader;
@@ -97,7 +98,11 @@ internal static class Program
     private static byte[] ReadLamAppSection()
     {
         //读自身exe的.lamapp段 数据区在末尾
+#if NET6_0_OR_GREATER
         string sSelf = Environment.ProcessPath ?? throw new InvalidOperationException("ProcessPath unavailable");
+#else
+        string sSelf = Process.GetCurrentProcess().MainModule?.FileName ?? throw new InvalidOperationException("ProcessPath unavailable");
+#endif
         using var fs = new FileStream(sSelf, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
 
         byte[] rgHdr = new byte[0x400];
@@ -127,7 +132,17 @@ internal static class Program
                     throw new InvalidOperationException("bad .lamapp section bounds");
                 byte[] rg = new byte[uRawSz];
                 fs.Position = uRaw;
+#if NET7_0_OR_GREATER
                 fs.ReadExactly(rg, 0, (int)uRawSz);
+#else
+                int iGot = 0;
+                while (iGot < (int)uRawSz)
+                {
+                    int n = fs.Read(rg, iGot, (int)uRawSz - iGot);
+                    if (n <= 0) throw new EndOfStreamException("short read");
+                    iGot += n;
+                }
+#endif
                 return rg;
             }
         }

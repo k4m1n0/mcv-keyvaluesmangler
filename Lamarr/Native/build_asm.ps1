@@ -14,7 +14,9 @@ param(
     [string]$AppName = 'WeaponDamageCalc',
     [string]$PackerTfm = 'net8.0-windows',
     [string]$CompressDeps = 'false',
-    [string]$EncryptDeps = ''
+    [string]$EncryptDeps = '',
+    [string]$RtcVersion = '5.0.0'
+    [string]$RtcTiered = ''
 )
 $ErrorActionPreference = 'Stop'
 $ASM_DIR, $OUT_DIR = $AsmDir, $OutDir | ForEach-Object { $_.Trim().TrimEnd('\', '"') }
@@ -91,7 +93,7 @@ if ($Packer -eq 'antheil')
     & $ML64_EXE /nologo /c ("/Fo" + $JIT_OBJ) $JIT_ASM
     if ($LASTEXITCODE -ne 0) { throw "ml64(jithook.asm) failed ($LASTEXITCODE)" }
     & $LINK_EXE /nologo /dll /noentry /machine:x64 /subsystem:console `
-        /export:InstallJitHook /export:SetJitHookKey /export:AddPayloadSig /export:GetJitHookDecryptCount /export:VerifyJitHook /export:SetAntiDebugFlag `
+        /export:InstallJitHook /export:SetJitHookKey /export:AddPayloadSig /export:GetJitHookDecryptCount /export:VerifyJitHook /export:SetAntiDebugFlag /export:SetJitSlots `
         /nodefaultlib ("/out:" + $JIT_DLL) $JIT_OBJ
     if ($LASTEXITCODE -ne 0) { throw "link(jithook.dll) failed ($LASTEXITCODE)" }
     Write-Host "[build-asm] STATUS built: $JIT_DLL"
@@ -119,6 +121,8 @@ if ($Pack)
     if ($JitHook) { $PACK_ARGS += @('--jithook', $JitHook) }
     if ($Pheropod) { $PACK_ARGS += @('--pheropod', $Pheropod) }
     if ($Mode)    { $PACK_ARGS += @('--mode', $Mode) }
+    if ($RtcVersion) { $PACK_ARGS += @('--rtc-version', $RtcVersion) }
+if ($RtcTiered) { $PACK_ARGS += @('--rtc-tiered', $RtcTiered) }
 
     $RETRY_LOG = Join-Path $env:TEMP 'lamarr_pack_retry.log'
     $EXIT_CODE = 1

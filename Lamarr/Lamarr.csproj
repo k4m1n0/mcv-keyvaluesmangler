@@ -1,8 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <LamarrTfm Condition="'$(LamarrTfm)'==''">net8.0-windows</LamarrTfm>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>$(LamarrTfm)</TargetFramework>
     <LangVersion>latest</LangVersion>
     <CheckEolTargetFramework>false</CheckEolTargetFramework>
     <RollForward>LatestMajor</RollForward>

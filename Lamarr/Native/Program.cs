@@ -13,6 +13,8 @@ internal static class Program
         string? sPheropod = Opt(rgArgs, "--pheropod");
         string sMode = Opt(rgArgs, "--mode") ?? "clean";
         string? sEncryptDeps = Opt(rgArgs, "--encrypt-deps");
+        string? sRtcVersion = Opt(rgArgs, "--rtc-version");
+        string? sTiered = Opt(rgArgs, "--rtc-tiered");
         if (sStub == null || sInput == null || sOutput == null)
         {
             Console.Error.WriteLine("Usage: LamarrNativePack --stub <stub.dll> --input <input.exe> --output <output.exe> [--boot <bootstrapper.dll>] [--decoder <Iamdec.dll>] [--jithook <jithook.dll>] [--pheropod <gzip-decoder.dll>] [--mode clean|antheil]");
@@ -33,6 +35,8 @@ internal static class Program
                 var pe = new PeWriter();
                 pe.LoadStub(sStub);
                 if (sBoot != null) pe.LoadBoot(sBoot);
+                if (sRtcVersion != null) pe.SetRtcVersion(sRtcVersion);
+                if (sTiered != null) pe.SetTiered(sTiered);
                 pe.LoadPayload(sInput);
                 pe.Pack(sOutput);
             }
@@ -44,6 +48,8 @@ internal static class Program
                 if (sDecoder != null) pe.LoadDecoder(sDecoder);
                 if (sJitHook != null) pe.LoadJitHook(sJitHook);
                 if (sPheropod != null) pe.LoadPheropod(sPheropod);
+                if (sRtcVersion != null) pe.SetRtcVersion(sRtcVersion);
+                if (sTiered != null) pe.SetTiered(sTiered);
                   if (Array.Exists(rgArgs, a => a.Equals("--compress-deps", StringComparison.OrdinalIgnoreCase)))
                       pe.SetCompressDeps(true);
                   if (!string.IsNullOrEmpty(sEncryptDeps))

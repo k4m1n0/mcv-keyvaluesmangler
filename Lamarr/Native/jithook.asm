@@ -1,7 +1,7 @@
 .code
 
 PUBLIC g_orig, g_key, g_sigs, g_sigCount, g_decryptCount
-PUBLIC InstallJitHook, SetJitHookKey, AddPayloadSig, GetJitHookDecryptCount, VerifyJitHook, SetAntiDebugFlag
+PUBLIC InstallJitHook, SetJitHookKey, AddPayloadSig, GetJitHookDecryptCount, VerifyJitHook, SetAntiDebugFlag, SetJitSlots
 
 ; rcx=ansi apiName -> rax=addr (kernel32, handles forwarders)
 ResolveApi PROC
@@ -362,7 +362,7 @@ ch_ad_ok:
     mov r14d, r9d                       ; flags
 
 
-; !! hook ICorJitInfo vtable slot6 (canInline) on first compile
+; !! hook ICorJitInfo vtable canInline slot (offset per runtime version) on first compile
 ; JIT inline analysis reads callee IL from raw image (ciphertext)
 ; -> parses garbage -> broken codegen -> crash
 ; return INLINE_NEVER(-2) for encrypted callee to block inline IL reads
@@ -371,7 +371,8 @@ ch_ad_ok:
     jz gmi_skip
     cmp qword ptr [g_origCanInline], 0
     jne gmi_skip
-    mov rcx, [rax+30h]                  ; slot6 = canInline
+    mov r10d, [g_ciOff]                 ; canInline slot offset (version-dependent)
+    mov rcx, [rax+r10]                  ; vtable[canInlineSlot]
     xor eax, eax
     lock cmpxchg qword ptr [g_origCanInline], rcx
     test rax, rax
@@ -380,7 +381,8 @@ ch_ad_ok:
     test rax, rax
     jz gmi_skip
     mov rcx, [r12]
-    lea rcx, [rcx+30h]
+    mov r10d, [g_ciOff]
+    add rcx, r10
     mov edx, 8
     mov r8d, 4                          ; PAGE_READWRITE
     lea r9, [rbp-30h]
@@ -389,10 +391,12 @@ ch_ad_ok:
     jz gmi_skip
     mov rcx, [r12]
     lea rax, GetCanInlineHook
-    mov [rcx+30h], rax                  ; vtable[6]=GetCanInlineHook
+    mov r10d, [g_ciOff]
+    mov [rcx+r10], rax                  ; vtable[canInlineSlot]=GetCanInlineHook
     mov rax, [g_pVirtualProtect]
     mov rcx, [r12]
-    lea rcx, [rcx+30h]
+    mov r10d, [g_ciOff]
+    add rcx, r10
     mov edx, 8
     mov r8d, [rbp-30h]
     lea r9, [rbp-30h]
@@ -535,7 +539,8 @@ GetCanInlineHook PROC
     mov rax, [r12]
     test rax, rax
     jz gci_ret
-    mov rax, [rax+20h]                  ; slot4 getMethodInfo
+    mov r10d, [g_gmiOff]                ; getMethodInfo slot offset (version-dependent)
+    mov rax, [rax+r10]
     test rax, rax
     jz gci_ret
     lea rsi, [rbp-400h]                 ; CORINFO_METHOD_INFO slot
@@ -548,7 +553,8 @@ GetCanInlineHook PROC
     mov r8, rsi
     xor r9d, r9d                        ; context=NULL
     mov rax, [r12]
-    mov rax, [rax+20h]
+    mov r10d, [g_gmiOff]
+    mov rax, [rax+r10]
     call rax                            ; getMethodInfo -> bool
     test al, al
     jz gci_ret
@@ -740,6 +746,14 @@ SetAntiDebugFlag PROC
     ret
 SetAntiDebugFlag ENDP
 
+; set by BootAntheil: rcx = ICorStaticInfo.getMethodInfo slot offset,
+; rdx = canInline slot offset (per running coreclr version)
+SetJitSlots PROC
+    mov dword ptr [g_gmiOff], ecx
+    mov dword ptr [g_ciOff], edx
+    ret
+SetJitSlots ENDP
+
 .data
 
 szVirtualAlloc    db "VirtualAlloc",0
@@ -764,7 +778,9 @@ g_pVirtualAlloc    dq 0
 g_pVirtualFree     dq 0
 g_pVirtualProtect  dq 0
 g_origGMA          dq 0                 ; original ICorJitInfo::getMethodAttribs (slot1)
-g_origCanInline    dq 0                 ; original ICorJitInfo::canInline (slot6)
+g_origCanInline    dq 0                 ; original ICorJitInfo::canInline
+g_gmiOff           dd 20h               ; ICorStaticInfo.getMethodInfo slot offset (net8 default)
+g_ciOff            dd 30h               ; ICorStaticInfo.canInline slot offset (net8 default)
 g_compLock         dd 0                 ; compile serialization lock
 
     align 8

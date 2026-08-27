@@ -38,8 +38,8 @@
   <PropertyGroup>
     <Packer Condition="'$(Packer)' == ''">managed</Packer>
     <BootName Condition="'$(BootName)' == ''">WeaponDamageCalc.Boot</BootName>
-    <BootTfm Condition="'$(BootTfm)' == ''">net8.0-windows</BootTfm>
-    <NativeTfm Condition="'$(NativeTfm)' == ''">net8.0-windows</NativeTfm>
+    <BootTfm Condition="'$(BootTfm)' == ''">$(TargetFramework)</BootTfm>
+    <NativeTfm Condition="'$(NativeTfm)' == ''">$(TargetFramework)</NativeTfm>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(SelfContained)' == '' And ('$(Packer)' == 'native' Or '$(Packer)' == 'antheil')">
@@ -47,7 +47,7 @@
   </PropertyGroup>
 
   <Target Name="PublishStub" BeforeTargets="Publish" Condition="'$(Packer)' == 'managed' And '$(SelfContained)' != 'true' And '$(Configuration)' != 'Debug'">
-    <Exec Command="dotnet publish &quot;$(ProjectDir)Lamarr&quot; -c $(Configuration) -r $(RuntimeIdentifier) --no-self-contained -p:PublishSingleFile=true -p:DebugType=none -p:DebugSymbols=false -o &quot;$(PublishDir)&quot;" />
+    <Exec Command="dotnet publish &quot;$(ProjectDir)Lamarr&quot; -c $(Configuration) -r $(RuntimeIdentifier) --no-self-contained -p:PublishSingleFile=true -p:LamarrTfm=$(TargetFramework) -p:DebugType=none -p:DebugSymbols=false -o &quot;$(PublishDir)&quot;" />
     <Exec Command="dotnet build &quot;$(ProjectDir)Lamarr\Packer&quot; -c $(Configuration)" />
   </Target>
 

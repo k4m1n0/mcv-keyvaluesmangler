@@ -1,5 +1,6 @@
 using Lamarr;
 using System.Text;
+using System.Text.Json;
 
 namespace Lamarr.NativePack;
 
@@ -32,6 +33,11 @@ internal class PeWriter
     private int iHeaderDepsPos = -1, iHeaderRtcPos = -1;
     private int iIdxDeps = -1, iIdxRtc = -1;
     private long lOrigDepsLoc, lOrigRtcLoc;
+    private readonly HashSet<string> rgStripDeps = new(StringComparer.OrdinalIgnoreCase);
+    private string sRtcVersion = "5.0.0";
+    public void SetRtcVersion(string v) { sRtcVersion = v; }
+    private string sTiered = "default";
+    public void SetTiered(string m) { sTiered = m; }
     private int iEntryCount;
     private int iEntryStart = -1;
     private int iNewDeps = -1, iNewRtc = -1;
@@ -185,7 +191,9 @@ internal class PeWriter
         for (int i = 0; i < iN && i < 0x1000; i++)//防坏头
         {
             long lOff = ReadI64(rgB, ref iPos);
-            ReadI64(rgB, ref iPos); ReadI64(rgB, ref iPos);
+            ReadI64(rgB, ref iPos);
+            if (uMajor >= 6)
+                ReadI64(rgB, ref iPos);             // csz (major 6+ only)
             ReadU8(rgB, ref iPos);
             ReadStr(rgB, ref iPos);
             if (i == 0) lFirst = lOff;
@@ -227,7 +235,7 @@ internal class PeWriter
         {
             rgRel[i] = ReadI64(rgPayload, ref iPos) - iBundleDataStart;
             rgSz[i] = ReadI64(rgPayload, ref iPos);
-            rgCsz[i] = ReadI64(rgPayload, ref iPos);
+            rgCsz[i] = uMajor >= 6 ? ReadI64(rgPayload, ref iPos) : 0;
             rgType[i] = ReadU8(rgPayload, ref iPos);
             rgNames[i] = ReadStr(rgPayload, ref iPos);
             if (iMainEntry < 0 && rgNames[i].Equals(sMainName, StringComparison.OrdinalIgnoreCase))
@@ -254,6 +262,7 @@ internal class PeWriter
             {
                 rgLamNames.Add(rgNames[i]);
                 rgLamData.Add(ReadEntryBytes(rgRel[i], rgCsz[i], rgSz[i]));
+                rgStripDeps.Add(rgNames[i].Substring(0, rgNames[i].Length - 4));
             }
             else
             {
@@ -274,15 +283,183 @@ internal class PeWriter
             AddBundleEntry(ms, rgNewNames, rgNewSz, rgNewCsz, rgNewType, rgNames[i],
                 ReadEntryBytes(rgRel[i], rgCsz[i], rgSz[i]), rgSz[i], rgCsz[i], rgType[i]);
         if (iIdxDeps >= 0)
+        {
+            byte[] rgDeps = ReadEntryBytes(rgRel[iIdxDeps], rgCsz[iIdxDeps], rgSz[iIdxDeps]);
+            rgDeps = StripDepsDependencies(rgDeps);
             AddBundleEntry(ms, rgNewNames, rgNewSz, rgNewCsz, rgNewType, rgNames[iIdxDeps],
-                ReadEntryBytes(rgRel[iIdxDeps], rgCsz[iIdxDeps], rgSz[iIdxDeps]), rgSz[iIdxDeps], rgCsz[iIdxDeps], rgType[iIdxDeps]);
+                rgDeps, rgDeps.Length, 0, rgType[iIdxDeps]);
+        }
         if (iIdxRtc >= 0)
+        {
+            byte[] rgRtc = ReadEntryBytes(rgRel[iIdxRtc], rgCsz[iIdxRtc], rgSz[iIdxRtc]);
+            rgRtc = RewriteRuntimeConfig(rgRtc);
             AddBundleEntry(ms, rgNewNames, rgNewSz, rgNewCsz, rgNewType, rgNames[iIdxRtc],
-                ReadEntryBytes(rgRel[iIdxRtc], rgCsz[iIdxRtc], rgSz[iIdxRtc]), rgSz[iIdxRtc], rgCsz[iIdxRtc], rgType[iIdxRtc]);
+                rgRtc, rgRtc.Length, 0, rgType[iIdxRtc]);
+        }
         rgBundleData = ms.ToArray();
         lBundleDataLen = rgBundleData.Length;
 
         BuildNewBundleHeader(uMajor, iHbase, rgNewNames, rgNewSz, rgNewCsz, rgNewType);
+    }
+
+    private byte[] RewriteRuntimeConfig(byte[] rgOrig)
+    {
+        using var doc = JsonDocument.Parse(rgOrig);
+        using var ms = new MemoryStream();
+        using (var w = new Utf8JsonWriter(ms))
+        {
+            w.WriteStartObject();
+            foreach (var p in doc.RootElement.EnumerateObject())
+            {
+                if (p.NameEquals("runtimeOptions") && p.Value.ValueKind == JsonValueKind.Object)
+                {
+                    w.WritePropertyName("runtimeOptions");
+                    w.WriteStartObject();
+                    bool bRoll = false;
+                    foreach (var op in p.Value.EnumerateObject())
+                    {
+                        if (op.NameEquals("frameworks") && op.Value.ValueKind == JsonValueKind.Array)
+                        {
+                            w.WritePropertyName("frameworks");
+                            w.WriteStartArray();
+                            foreach (var fw in op.Value.EnumerateArray())
+                            {
+                                w.WriteStartObject();
+                                foreach (var f in fw.EnumerateObject())
+                                {
+                                    if (f.NameEquals("version")) w.WriteString("version", sRtcVersion);
+                                    else f.WriteTo(w);
+                                }
+                                w.WriteEndObject();
+                            }
+                            w.WriteEndArray();
+                        }
+                        else if (op.NameEquals("framework") && op.Value.ValueKind == JsonValueKind.Object)
+                        {
+                            w.WritePropertyName("framework");
+                            w.WriteStartObject();
+                            foreach (var f in op.Value.EnumerateObject())
+                            {
+                                if (f.NameEquals("version")) w.WriteString("version", sRtcVersion);
+                                else f.WriteTo(w);
+                            }
+                            w.WriteEndObject();
+                        }
+                        else if (op.NameEquals("configProperties") && op.Value.ValueKind == JsonValueKind.Object)
+                        {
+                            w.WritePropertyName("configProperties");
+                            w.WriteStartObject();
+                            foreach (var cp in op.Value.EnumerateObject())
+                                cp.WriteTo(w);
+                            //net10的Tiered后台编译与jithook的compileMethod hook冲突(退出期GC崩溃)
+                            if (sTiered != "default") w.WriteBoolean("System.Runtime.TieredCompilation", false);
+                            w.WriteEndObject();
+                        }
+                        else if (op.NameEquals("rollForward"))
+                        {
+                            w.WriteString("rollForward", "LatestMajor");
+                            bRoll = true;
+                        }
+                        else op.WriteTo(w);
+                    }
+                    if (!bRoll) w.WriteString("rollForward", "LatestMajor");
+                    w.WriteEndObject();
+                }
+                else p.WriteTo(w);
+            }
+            w.WriteEndObject();
+            w.Flush();
+        }
+        return ms.ToArray();
+    }
+
+    //剔除依赖项 防hostpolicy加载已剥离的dll
+    private byte[] StripDepsDependencies(byte[] rgDeps)
+    {
+        using var doc = JsonDocument.Parse(rgDeps);
+        var root = doc.RootElement;
+        var rgStripAll = new HashSet<string>(rgStripDeps, StringComparer.OrdinalIgnoreCase);
+
+        //剔除无runtime的依赖包
+        if (root.TryGetProperty("targets", out var rgTargets))
+            foreach (var tfm in rgTargets.EnumerateObject())
+                foreach (var pkg in tfm.Value.EnumerateObject())
+                {
+                    bool bHasRuntime = false;
+                    foreach (var iPos in pkg.Value.EnumerateObject())
+                        if (iPos.Name == "runtime" || iPos.Name == "runtimeTargets") { bHasRuntime = true; break; }
+                    if (!bHasRuntime)
+                        rgStripAll.Add(pkg.Name.Split('/')[0]);
+                }
+
+        using var ms = new MemoryStream();
+        using (var w = new Utf8JsonWriter(ms))
+        {
+            w.WriteStartObject();
+            foreach (var prop in root.EnumerateObject())
+            {
+                if (prop.Name == "targets")
+                {
+                    w.WritePropertyName("targets");
+                    w.WriteStartObject();
+                    foreach (var tfm in prop.Value.EnumerateObject())
+                    {
+                        w.WritePropertyName(tfm.Name);
+                        w.WriteStartObject();
+                        foreach (var pkg in tfm.Value.EnumerateObject())
+                        {
+                            if (rgStripAll.Contains(pkg.Name.Split('/')[0]))
+                                continue;
+                            w.WritePropertyName(pkg.Name);
+                            w.WriteStartObject();
+                            foreach (var iPos in pkg.Value.EnumerateObject())
+                            {
+                                if (iPos.Name == "dependencies")
+                                {
+                                    w.WritePropertyName("dependencies");
+                                    w.WriteStartObject();
+                                    foreach (var d in iPos.Value.EnumerateObject())
+                                        if (!rgStripAll.Contains(d.Name))
+                                        {
+                                            w.WritePropertyName(d.Name);
+                                            d.Value.WriteTo(w);
+                                        }
+                                    w.WriteEndObject();
+                                }
+                                else
+                                {
+                                    w.WritePropertyName(iPos.Name);
+                                    iPos.Value.WriteTo(w);
+                                }
+                            }
+                            w.WriteEndObject();
+                        }
+                        w.WriteEndObject();
+                    }
+                    w.WriteEndObject();
+                }
+                else if (prop.Name == "libraries")
+                {
+                    w.WritePropertyName("libraries");
+                    w.WriteStartObject();
+                    foreach (var lib in prop.Value.EnumerateObject())
+                    {
+                        if (rgStripAll.Contains(lib.Name.Split('/')[0]))
+                            continue;
+                        w.WritePropertyName(lib.Name);
+                        lib.Value.WriteTo(w);
+                    }
+                    w.WriteEndObject();
+                }
+                else
+                {
+                    w.WritePropertyName(prop.Name);
+                    prop.Value.WriteTo(w);
+                }
+            }
+            w.WriteEndObject();
+        }
+        return ms.ToArray();
     }
 
     private byte[] ReadEntryBytes(long lRel, long lCsz, long lSz)
@@ -356,6 +533,8 @@ internal class PeWriter
         byte[] rgPrefix = new byte[iEntryStart];
         Array.Copy(rgPayload, iHbase, rgPrefix, 0, iEntryStart);
         BitConverter.GetBytes(rgNames.Count).CopyTo(rgPrefix, 8);
+        uint uOutMajor = uMajor >= 2 ? 2u : uMajor;
+        BitConverter.GetBytes(uOutMajor).CopyTo(rgPrefix, 0);
 
         using var ms = new MemoryStream();
         ms.Write(rgPrefix, 0, rgPrefix.Length);
@@ -369,7 +548,7 @@ internal class PeWriter
             rgNewSzVals[i] = rgSz[i];
             rgNewCszVals[i] = rgCsz[i];
             byte[] rgName = Encoding.UTF8.GetBytes(rgNames[i]);
-            ms.Position += 8 + 8 + 8 + 1;
+            ms.Position += 8 + 8 + 1;//major 2没csz字段
             WriteBundleStr(ms, rgName);
             if (rgNames[i].Contains("deps.json")) iNewDeps = i;
             if (rgNames[i].Contains("runtimeconfig")) iNewRtc = i;
@@ -387,14 +566,19 @@ internal class PeWriter
     private void ApplyBundleOffsets()
     {
         if (iHeaderDepsPos >= 0 && iNewDeps >= 0)
+        {
             BitConverter.GetBytes(lBundleStart + rgBundleOffsets[iNewDeps]).CopyTo(rgNewHeader, iHeaderDepsPos);
+            BitConverter.GetBytes(rgNewSzVals[iNewDeps]).CopyTo(rgNewHeader, iHeaderDepsPos + 8);//deps size
+        }
         if (iHeaderRtcPos >= 0 && iNewRtc >= 0)
+        {
             BitConverter.GetBytes(lBundleStart + rgBundleOffsets[iNewRtc]).CopyTo(rgNewHeader, iHeaderRtcPos);
+            BitConverter.GetBytes(rgNewSzVals[iNewRtc]).CopyTo(rgNewHeader, iHeaderRtcPos + 8);//rtc size
+        }
         for (int i = 0; i < iEntryCount && i < 0x1000; i++)
         {
             BitConverter.GetBytes(lBundleStart + rgBundleOffsets[i]).CopyTo(rgNewHeader, rgEntryOffPos[i]);
             BitConverter.GetBytes(rgNewSzVals[i]).CopyTo(rgNewHeader, rgEntryOffPos[i] + 8);
-            BitConverter.GetBytes(rgNewCszVals[i]).CopyTo(rgNewHeader, rgEntryOffPos[i] + 16);
         }
     }
 

@@ -27,13 +27,15 @@
     dotnet publish -p:PublishSingleFile=true把主程序、依赖dll、
     deps.json、runtimeconfig.json一起塞进一个exe。内部结构是"AppHost壳 +
     一串条目"。文件末尾有一段bundle header，记录每个条目的名字、偏移、大小、
-    类型；入口通过40字节的marker（签名）从文件尾往前扫描定位——文件尾可能被
-    签名或追加数据，不能直接读末尾，marker是固定识别序列，扫到它就找到
-    header。条目数据是明文的，谁都能拆出来——这是后面所有加密的出发点。
+    类型；入口通过40字节的marker（签名）从文件尾往前扫描定位（因为文件尾
+    可能被签名或追加数据，不能直接读末尾），marker是固定识别序列，扫到它就
+    找到header。条目数据是明文的，谁都能拆出来——这是后面所有加密的出发点。
     bundle是apphost层面的结构，在CLR加载主程序之前就解析好了。
 
     另外，bundle header有版本差异：major 2（net5时代条目没压缩大小字段）；
-    major 6+（net6+，每条目带压缩大小和runtimeconfig哈希）。
+    major 6+（net6+，每条目带压缩大小和runtimeconfig哈希）。Antheil打包器
+    重建bundle头时一律强制major 2：net5的hostfxr只接受major<=2的输入，
+    解析按major决定是否读每条目的压缩大小字段。
 
 
   1.2  PE与节区
@@ -462,7 +464,18 @@
 
     ICorJitInfo的vtable是一张函数指针表，JIT编译时问CLR要方法体信息
     （getMethodInfo、canInline和compileMethod）都走它，钩子换的就是其中
-    两个槽位。InstallJitHook做两件事：
+    两个槽位。compileMethod在所有支持的运行时里都是slot 0（稳定），但
+    getMethodInfo / canInline的槽位偏移随coreclr版本漂移，逐版本对过
+    corjit.h / corinfo.h：
+
+      net5      gmi 0x18  ci 0x20
+      net6-7    gmi 0x20  ci 0x28
+      net8      gmi 0x20  ci 0x30
+      net9-10   gmi 0x28  ci 0x40
+
+    BootAntheil启动时按Environment.Version.Major查表，调SetJitSlots把
+    两个偏移下发给jithook（ApplyJitSlots），compileMethod则固定slot 0。
+    InstallJitHook做两件事：
 
       1. 保存原槽位指针（解密后要调回原compileMethod）
       2. 用lock cmpxchg原子替换新指针
@@ -547,9 +560,12 @@
     Antheil的打包链路不产生R2R映像，所有加密方法都必然走到JIT编译这一步、
     被jithook拦下，"磁盘密文"才成立。
 
-    附：DOTNET_TieredCompilation=0可关闭分层编译。对逆向者来说这会让
-    编译路径变简单，只有一次编译，但也说明jithook的拦截点无论分层开关如何
-    都是同一套compileMethod门。
+    附：antheil的runtimeconfig默认重写System.Runtime.TieredCompilation:
+    false。根因是net10自身JIT bug（objectalloc数组溢出，issue #132480，
+    10.0.13修复）：Tier-1后台重编译带NuGet依赖的负载退出时崩溃。关闭分层
+    是对旧10.0.x的workaround，副作用是编译路径变成单次；目标机>=10.0.13
+    时可开回TC（--rtc-tiered default）。native/managed没有jithook，保留
+    默认分层。jithook的拦截点与分层开关无关，始终是同一道compileMethod门。
 
     成本量级上：
       - 方法体XOR：逐字节异或，整个程序的方法体也就毫秒级，且只在编译时发生
@@ -665,9 +681,15 @@
       -Pack                是否继续调打包器
       -InputPath / -Output / -Boot / -Decoder / -JitHook / Pheropod
        / -Mode / -AppName / -PackerTfm / -CompressDeps / -EncryptDeps
+       / -RtcVersion
+       / -RtcTiered
 
-      -EncryptDeps        逗号/分号分隔的私有依赖名，指定其方法体加密
-                           ，走jithook；其余依赖只压缩不经jithook
+      -EncryptDeps        逗号/分号分隔的私有依赖名，指定其方法体加密，
+                           走jithook；其余依赖只压缩不经jithook
+      -RtcVersion         runtimeconfig的framework版本（缺省5.0.0），
+                           配LatestMajor后net5-10可解析到兼容版本
+      -RtcTiered          runtimeconfig的TC处理：off（写false，
+                           antheil缺省）default（不写，native缺省）
 
     csproj的NativeStubPack里，编译与打包合成一个Exec调用。
 
@@ -743,8 +765,10 @@
 
       - 反调试可被"先禁用再启动"绕过，但SelfCheck方法体hash检查使patch失效
       - 解密后的IL短暂存在于内存，窗口极小但存在
-       - jithook依赖vtable槽位号，CLR大版本可能变动；VerifyJitHook运行时
-          校验vtable[0]仍指向钩子，被还原即FailFast
+       - compileMethod的slot 0在net5-10稳定，但getMethodInfo/canInline
+          槽位偏移随版本漂移——已按版本表适配（SetJitSlots/ApplyJitSlots）
+          ，未来的新coreclr仍需维护这张表；VerifyJitHook运行时校验
+          vtable[0]仍指向钩子，被还原即FailFast
       - 依赖默认只压缩不经jithook；若含私有依赖需要显式-EncryptDeps
       - 页错误捕获/内存密钥提取是OS层能力，连VM壳也没法完全防
       - jit_key依赖运行时seed，可它需要走完整解密链才能静态推导

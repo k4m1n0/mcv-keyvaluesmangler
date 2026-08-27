@@ -435,7 +435,16 @@ Abstract
         The stub MUST be a Windows executable whose runtimeconfig
         declares Microsoft.WindowsDesktop.App with rollForward
         LatestMajor, so payloads targeting .NET 5-10 (console or
-        WinForms) resolve a compatible runtime.
+        WinForms) resolve a compatible runtime. The packer rewrites
+        the embedded runtimeconfig.json: framework version defaults
+        to 5.0.0 (overridable via --rtc-version), rollForward is
+        set to LatestMajor. TieredCompilation is forced off
+        (System.Runtime.TieredCompilation=false) ONLY in antheil
+        mode: the jithook CompileHook conflicts with the .NET 10
+        background Tier-1 recompile on exit (net10 JIT bug, fixed in
+        10.0.13; workaround for older 10.0.x). native/managed keep
+        the runtime default.
+        --rtc-tiered off | default overrides per pack.
 
     6.2.  Native Pack (PE sections)
 
@@ -472,10 +481,11 @@ Abstract
 
         .NET version compatibility: payloads targeting .NET 5-10 are
         supported. LamarrBoot defaults to net8.0-windows (Boot.csproj
-        BootTfm; pass -p:BootTfm=net5.0-windows for older runtimes).
-        Bundle layouts: major 2 (net5, no per-entry compressedSize) vs
-        major >= 6 (net6+, compressedSize and a runtimeconfig hash
-        field).
+        BootTfm; pass -p:BootTfm=net5.0 for older runtimes).
+        The rebuilt bundle header is forced to major 2 (no per-entry
+        compressedSize), because the .NET 5 hostfxr rejects newer
+        bundle majors; parsers MUST key off the major when deciding
+        whether each entry carries a compressedSize field.
 
         An antheil variant extends this layout with method-body
         encryption and an extended entry set (e.g. decoder, jithook,

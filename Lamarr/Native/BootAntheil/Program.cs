@@ -59,6 +59,7 @@ internal static class P
   private delegate int JitVerifyHook();
   private delegate void JitSetAdFlag(uint f);
   private delegate uint JitGetCount();
+  private delegate void JitSetSlots(uint gmi, uint ci);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct CONTEXT
@@ -98,6 +99,7 @@ internal static class P
   private static JitVerifyHook _fnJitVerifyHook = null!;
   private static JitSetAdFlag _fnJitSetAdFlag = null!;
   private static JitGetCount _fnJitGetCount = null!;
+  private static JitSetSlots _fnJitSetSlots = null!;
   private static int _tBoot;
 
     //常量拆解 XOR对 运行时派生防静态识别
@@ -304,6 +306,7 @@ internal static class P
                 _fnJitSetKey(K1(rgJk));
                 Array.Clear(rgJk, 0, rgJk.Length);
                 if (_fnJitSetAdFlag != null) _fnJitSetAdFlag(0x13579BDFu);
+                ApplyJitSlots();
                 _fnJitInstall();
             }
             if ((RuntimeSeed() & 0x10000000u) == 0)
@@ -479,10 +482,10 @@ internal static class P
         if ((uLK0A ^ uLK0B) != 0x811C9DC5u) Environment.FailFast(null);
         if ((uLK1A ^ uLK1B) != 0x000001B3u) Environment.FailFast(null);
         //防patch反调试/解密逻辑
-        if (MethodHash(_ad) != (uHs ^ 0x5E51BD7Au)) Environment.FailFast(null);
+        if (MethodHash(_ad) != (uHs ^ 0x73BD6101u)) Environment.FailFast(null);
         if (MethodHash(_x1) != (uHs ^ 0x12928B5Du)) Environment.FailFast(null);
-        if (MethodHash(_x3) != (uHs ^ 0xE6BE461Au)) Environment.FailFast(null);
-        if (MethodHash(_x6) != (uHs ^ 0x81BE17D1u)) Environment.FailFast(null);
+        if (MethodHash(_x3) != (uHs ^ 0x1423B5AAu)) Environment.FailFast(null);
+        if (MethodHash(_x6) != (uHs ^ 0xBAAC5981u)) Environment.FailFast(null);
         _uX1H = MethodHash(_x1);
     }
 
@@ -878,8 +881,19 @@ internal static class P
               if (rgExports.TryGetValue("VerifyJitHook", out uint uVj)) _fnJitVerifyHook = Mk<JitVerifyHook>(uVj);
               if (rgExports.TryGetValue("SetAntiDebugFlag", out uint uAd)) _fnJitSetAdFlag = Mk<JitSetAdFlag>(uAd);
               if (rgExports.TryGetValue("GetJitHookDecryptCount", out uint uGc)) _fnJitGetCount = Mk<JitGetCount>(uGc);
+              if (rgExports.TryGetValue("SetJitSlots", out uint uSj)) _fnJitSetSlots = Mk<JitSetSlots>(uSj);
             Array.Clear(rgDll, 0, rgDll.Length);
         }
+    }
+
+    //net5=gmi3/ci4 net6-7=4/5 net8=4/6 net9-10=5/8
+    private static void ApplyJitSlots()
+    {
+        if (_fnJitSetSlots == null) return;
+        int v = Environment.Version.Major;
+        if (v == 5) { _fnJitSetSlots(0x18, 0x20); return; }
+        if (v == 6 || v == 7) { _fnJitSetSlots(0x20, 0x28); return; }
+        if (v == 9 || v == 10) { _fnJitSetSlots(0x28, 0x40); return; }
     }
 
     //校验jithook .text 防运行时patch
@@ -1063,7 +1077,9 @@ internal static class P
         catch { }
         //回退 文件读
         string sSelf = Process.GetCurrentProcess().MainModule?.FileName
+#if NET6_0_OR_GREATER
             ?? Environment.ProcessPath
+#endif
             ?? throw new InvalidOperationException();
         using var fs = new FileStream(sSelf, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
 
