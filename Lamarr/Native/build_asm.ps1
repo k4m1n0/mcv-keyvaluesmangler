@@ -13,7 +13,8 @@ param(
     [string]$Mode,
     [string]$AppName = 'WeaponDamageCalc',
     [string]$PackerTfm = 'net8.0-windows',
-    [string]$CompressDeps = 'false'
+    [string]$CompressDeps = 'false',
+    [string]$EncryptDeps = ''
 )
 $ErrorActionPreference = 'Stop'
 $ASM_DIR, $OUT_DIR = $AsmDir, $OutDir | ForEach-Object { $_.Trim().TrimEnd('\', '"') }
@@ -112,6 +113,7 @@ if ($Pack)
 
     $PACK_ARGS = @('--stub', $STUB_DLL, '--input', $InputPath, '--output', $Output)
     if ($CompressDeps -eq 'true') { $PACK_ARGS += @('--compress-deps') }
+    if ($EncryptDeps) { $PACK_ARGS += @('--encrypt-deps', $EncryptDeps) }
     if ($Boot)    { $PACK_ARGS += @('--boot', $Boot) }
     if ($Decoder) { $PACK_ARGS += @('--decoder', $Decoder) }
     if ($JitHook) { $PACK_ARGS += @('--jithook', $JitHook) }

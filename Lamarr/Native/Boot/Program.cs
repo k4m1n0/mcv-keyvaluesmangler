@@ -8,6 +8,7 @@ namespace LamarrBoot;
 internal static class Program
 {
     private const uint uMB_ICONERROR = 0x10;
+    private static readonly Dictionary<string, byte[]> sCache = new();
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int MessageBoxW(IntPtr hWnd, string lpText, string lpCaption, uint uType);
@@ -21,24 +22,18 @@ internal static class Program
             if (rgLamApp.Length < 8)
                 return Fail(".lamapp section too small");
 
-            //.lamapp头 4字节原长 4字节压缩长 后接LZ数据
-            uint cbOrig = BitConverter.ToUInt32(rgLamApp, 0);
-            uint cbComp = BitConverter.ToUInt32(rgLamApp, 4);
-            if (cbOrig == 0 || cbComp == 0 || cbOrig > 0x10000000 || cbComp >= cbOrig || 8UL + cbComp > (ulong)rgLamApp.Length)
-                return Fail("bad .lamapp payload header");
+            //magic "Lamarr!!" + count + entry table + names + 压缩块
+            byte[] rgMain = ParseLamApp(rgLamApp);
 
-            byte[] rgLz = new byte[cbComp];
-            Array.Copy(rgLamApp, 8, rgLz, 0, (int)cbComp);
+            //依赖已全部进.lamapp，CoreCLR在bundle里找不到 -> 走Resolving从这里喂
+            AssemblyLoadContext.Default.Resolving += (_, name) =>
+            {
+                if (name.Name != null && sCache.TryGetValue(name.Name + ".dll", out var bytes))
+                    return AssemblyLoadContext.Default.LoadFromStream(new MemoryStream(bytes));
+                return null;
+            };
 
-            //整块Lamarr LZ解码 得到主程序集
-            byte[] rgDll = new byte[cbOrig];
-            uint pcbOut = cbOrig;
-            int iRes = Lamarr.LamarrDecoder.Decode(rgDll, ref pcbOut, rgLz, cbComp);
-            if (iRes != 0 || pcbOut != cbOrig)
-                return Fail($"Lamarr decode failed (0x{iRes:X})");
-
-            //依赖dll留在bundle 由CoreCLR单文件机制解析
-            Assembly asm = AssemblyLoadContext.Default.LoadFromStream(new MemoryStream(rgDll));
+            Assembly asm = AssemblyLoadContext.Default.LoadFromStream(new MemoryStream(rgMain));
             MethodInfo? entry = asm.EntryPoint;
             if (entry == null)
                 return Fail("payload has no entry point");
@@ -51,6 +46,46 @@ internal static class Program
         {
             return Fail(ex.ToString());
         }
+    }
+
+    private static byte[] ParseLamApp(byte[] rg)
+    {
+        uint uCount = BitConverter.ToUInt32(rg, 8);
+        if (uCount == 0 || uCount > 0x10000 || 20 + (long)uCount * 20 > rg.Length)
+            throw new InvalidOperationException("bad .lamapp entry count");
+        int iNames = 20 + (int)uCount * 20;
+        var rgNames = new string[uCount];
+        for (int i = 0; i < uCount; i++)
+        {
+            int o = 20 + i * 20;
+            uint uNameLen = BitConverter.ToUInt32(rg, o);
+            if (uNameLen == 0 || iNames + uNameLen > rg.Length)
+                throw new InvalidOperationException("bad .lamapp name");
+            rgNames[i] = Encoding.UTF8.GetString(rg, iNames, (int)uNameLen);
+            iNames += (int)uNameLen;
+            while ((iNames & 3) != 0) iNames++;
+        }
+        byte[] rgMain = Array.Empty<byte>();
+        for (int i = 0; i < uCount; i++)
+        {
+            int o = 20 + i * 20;
+            uint uRawLen = BitConverter.ToUInt32(rg, o + 4);
+            uint uCompLen = BitConverter.ToUInt32(rg, o + 8);
+            uint uCompOff = BitConverter.ToUInt32(rg, o + 12);
+            if (uRawLen == 0 || uCompLen == 0 || uRawLen > 0x10000000 || uCompLen >= uRawLen || uCompOff + uCompLen > rg.Length)
+                throw new InvalidOperationException("bad .lamapp entry");
+            byte[] rgLz = new byte[uCompLen];
+            Array.Copy(rg, (int)uCompOff, rgLz, 0, (int)uCompLen);
+            byte[] rgOut = new byte[uRawLen];
+            uint pcb = uRawLen;
+            if (Lamarr.LamarrDecoder.Decode(rgOut, ref pcb, rgLz, uCompLen) != 0 || pcb != uRawLen)
+                throw new InvalidOperationException("Lamarr decode failed (lamapp entry)");
+            if (i == 0) rgMain = rgOut;
+            else sCache[rgNames[i]] = rgOut;
+        }
+        if (rgMain.Length == 0)
+            throw new InvalidOperationException(".lamapp has no main entry");
+        return rgMain;
     }
 
     private static int Fail(string sMsg)

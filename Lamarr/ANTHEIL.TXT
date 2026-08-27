@@ -144,7 +144,7 @@
 
   3.2  三个状态
 
-      磁盘态：bundle条目是密文（方法体加密、seed XOR、压缩）
+      磁盘态：主程序方法体加密，依赖压缩明文，seed XOR
       内存态：BootAntheil解出主程序IL（已解密）交给JIT
       JIT态：jithook现场解密方法体，编译成机器码执行
 
@@ -172,7 +172,7 @@
     bundle里放的是这些东西，按打包顺序：
 
       BootAntheil    主程序条目，替换原主程序
-      依赖dll        托管依赖，方法体已加密
+      依赖dll        托管依赖，默认只压缩不经jithook
       真解码器        antheil_paged.asm（4KB页解码，导出Iamdec）
       jithook        jithook.dll
       签名表         CRC32签名表，每方法4字节
@@ -521,12 +521,13 @@
 
   6.6  MethodEncryptor打包侧
 
-    对每个托管dll：
+     对主程序及-EncryptDeps指定的私有依赖：
       for每个方法:
           p = 方法体，从FatHeader开头
           计算code size，含局部变量签名和EH区位置
           方法体字节XOR jit_key          //磁盘写密文
           记录CRC32(method)到签名表              //供jithook匹配
+    依赖默认只压缩不经jithook；私有依赖用-EncryptDeps显式指定加密进签名表。
     签名表作为独立条目进lamapp，表项与0x9E3779B9异或后落盘，防dump直接匹配；
     jit_key打包与运行时同一派生，即Fnv1a(SeedKey(seed))，seed在打包时提前生成、
     运行时由X1还原，这样解密链闭环，难以从常量静态推导。
@@ -624,8 +625,11 @@
       -OutDir              产物目录（out/）
       -Packer              antheil | native（决定编译哪些stub）
       -Pack                是否继续调打包器
-      -InputPath / -Output / -Boot / -Decoder / -JitHook / Pheropod 
-       / -Mode / -AppName / -PackerTfm / -CompressDeps  pack参数
+      -InputPath / -Output / -Boot / -Decoder / -JitHook / Pheropod
+       / -Mode / -AppName / -PackerTfm / -CompressDeps / -EncryptDeps
+
+      -EncryptDeps        逗号/分号分隔的私有依赖名，指定其方法体加密
+                           ，走jithook；其余依赖只压缩不经jithook
 
     csproj的NativeStubPack里，编译与打包合成一个Exec调用。
 
@@ -703,6 +707,7 @@
       - 解密后的IL短暂存在于内存，窗口极小但存在
        - jithook依赖vtable槽位号，CLR大版本可能变动；VerifyJitHook运行时
           校验vtable[0]仍指向钩子，被还原即FailFast
+      - 依赖默认只压缩不经jithook；若含私有依赖需要显式-EncryptDeps
       - 页错误捕获/内存密钥提取是OS层能力，连VM壳也没法完全防
       - jit_key依赖运行时seed，可它需要走完整解密链才能静态推导
 

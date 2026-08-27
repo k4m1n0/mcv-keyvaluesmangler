@@ -479,7 +479,11 @@ Abstract
 
         An antheil variant extends this layout with method-body
         encryption and an extended entry set (e.g. decoder, jithook,
-        signature table).
+        signature table). Dependencies are stored as Lamarr-compressed
+        plaintext by default (no jithook pass-through); private
+        dependencies can be opted into method-body encryption
+        explicitly (-EncryptDeps). The signature table covers only
+        the main assembly (and any opted-in dependencies).
 
     6.3.  Host Compatibility
 

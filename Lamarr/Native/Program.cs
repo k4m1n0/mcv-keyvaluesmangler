@@ -12,6 +12,7 @@ internal static class Program
         string? sJitHook = Opt(rgArgs, "--jithook");
         string? sPheropod = Opt(rgArgs, "--pheropod");
         string sMode = Opt(rgArgs, "--mode") ?? "clean";
+        string? sEncryptDeps = Opt(rgArgs, "--encrypt-deps");
         if (sStub == null || sInput == null || sOutput == null)
         {
             Console.Error.WriteLine("Usage: LamarrNativePack --stub <stub.dll> --input <input.exe> --output <output.exe> [--boot <bootstrapper.dll>] [--decoder <Iamdec.dll>] [--jithook <jithook.dll>] [--pheropod <gzip-decoder.dll>] [--mode clean|antheil]");
@@ -45,6 +46,8 @@ internal static class Program
                 if (sPheropod != null) pe.LoadPheropod(sPheropod);
                   if (Array.Exists(rgArgs, a => a.Equals("--compress-deps", StringComparison.OrdinalIgnoreCase)))
                       pe.SetCompressDeps(true);
+                  if (!string.IsNullOrEmpty(sEncryptDeps))
+                      pe.SetEncryptDeps(sEncryptDeps);
                 pe.LoadPayload(sInput);
                 pe.Pack(sOutput);
             }

@@ -184,6 +184,8 @@
    IF YOU ARE CRAZY:
       dotnet publish -c Release -r win-x64 --no-self-contained
       -o ./publish -p:Packer=native
+    -p:Packer=antheil      method-body encryption + JIT decryption
+                           (see Lamarr/ANTHEIL.TXT for details)
 
   Then grab the EXE from .\publish\ and do whatever you want with it
 

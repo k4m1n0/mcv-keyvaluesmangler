@@ -33,6 +33,10 @@ internal class PeWriter
     private int iIdxDeps = -1, iIdxRtc = -1;
     private long lOrigDepsLoc, lOrigRtcLoc;
     private int iEntryCount;
+    private int iEntryStart = -1;
+    private int iNewDeps = -1, iNewRtc = -1;
+    private long[] rgNewSzVals = null!;
+    private long[] rgNewCszVals = null!;
 
     private byte[] rgBoot = null!;
     private byte[] rgLamApp = null!;
@@ -211,21 +215,22 @@ internal class PeWriter
             ReadI64(rgPayload, ref iPos);
         }
 
-        iEntryCount = iN;
-        rgEntryOffPos = new int[iN];
+        iEntryStart = iPos - iHbase;
+
+        var rgNames = new string[iN];
         var rgRel = new long[iN];
         var rgSz = new long[iN];
         var rgCsz = new long[iN];
+        var rgType = new byte[iN];
         iMainEntry = -1;
         for (int i = 0; i < iN && i < 0x1000; i++)
         {
-            rgEntryOffPos[i] = iPos - iHbase;
             rgRel[i] = ReadI64(rgPayload, ref iPos) - iBundleDataStart;
             rgSz[i] = ReadI64(rgPayload, ref iPos);
             rgCsz[i] = ReadI64(rgPayload, ref iPos);
-            ReadU8(rgPayload, ref iPos);
-            string sName = ReadStr(rgPayload, ref iPos);
-            if (iMainEntry < 0 && sName.Equals(sMainName, StringComparison.OrdinalIgnoreCase))
+            rgType[i] = ReadU8(rgPayload, ref iPos);
+            rgNames[i] = ReadStr(rgPayload, ref iPos);
+            if (iMainEntry < 0 && rgNames[i].Equals(sMainName, StringComparison.OrdinalIgnoreCase))
                 iMainEntry = i;
         }
         if (iMainEntry < 0)
@@ -238,64 +243,158 @@ internal class PeWriter
             if (iIdxRtc < 0 && uMajor >= 2 && lOrigAbs == lOrigRtcLoc) iIdxRtc = i;
         }
 
-        {
-            int iM = iMainEntry;
-            long lOndisk = rgCsz[iM] > 0 ? rgCsz[iM] : rgSz[iM];
-            byte[] rgDll = new byte[lOndisk];
-            Array.Copy(rgPayload, (int)(iBundleDataStart + rgRel[iM]), rgDll, 0, (int)lOndisk);
-            uint cbCap = LamarrEncoder.GetMaxEncodedSize((uint)rgDll.Length);
-            byte[] rgComp = new byte[cbCap];
-            uint pcb = cbCap;
-            if (LamarrEncoder.Encode(rgComp, ref pcb, rgDll, (uint)rgDll.Length) != 0)
-                throw new InvalidOperationException("Lamarr encode failed (main DLL)");
-            rgLamApp = new byte[8 + pcb];
-            BitConverter.GetBytes((uint)rgDll.Length).CopyTo(rgLamApp, 0);
-            BitConverter.GetBytes(pcb).CopyTo(rgLamApp, 4);
-            Array.Copy(rgComp, 0, rgLamApp, 8, (int)pcb);
-            Console.WriteLine($"  .lamapp: {rgDll.Length} -> {rgLamApp.Length} bytes (Lamarr)");
-        }
-
-        using var ms = new MemoryStream();
-        rgBundleOffsets = new long[iN];
-        rgBundleCsz = new long[iN];
-        rgBundleSz = new long[iN];
+        //主dll与托管依赖各自压缩 全部进.lamapp多条目容器 bundle只留Boot+deps+rtc
+        var rgLamNames = new List<string> { sMainName };
+        var rgLamData = new List<byte[]> { ReadEntryBytes(rgRel[iMainEntry], rgCsz[iMainEntry], rgSz[iMainEntry]) };
+        var rgKeepIdx = new List<int>();
         for (int i = 0; i < iN && i < 0x1000; i++)
         {
-            byte[] rgData;
-            if (i == iMainEntry)
+            if (i == iMainEntry || i == iIdxDeps || i == iIdxRtc) continue;
+            if (rgNames[i].EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
             {
-                rgData = rgBoot;//原DLL已经进.lamapp了 这里放boot
+                rgLamNames.Add(rgNames[i]);
+                rgLamData.Add(ReadEntryBytes(rgRel[i], rgCsz[i], rgSz[i]));
             }
             else
             {
-                long lOndisk = rgCsz[i] > 0 ? rgCsz[i] : rgSz[i];
-                rgData = new byte[lOndisk];
-                Array.Copy(rgPayload, (int)(iBundleDataStart + rgRel[i]), rgData, 0, (int)lOndisk);
+                rgKeepIdx.Add(i);
             }
-            rgBundleOffsets[i] = ms.Position;
-            ms.Write(rgData, 0, rgData.Length);
-            rgBundleCsz[i] = i == iMainEntry ? 0 : (rgCsz[i] > 0 ? rgData.Length : 0);//fdd的coreclr不会解压 csz直接置0
-            rgBundleSz[i] = i == iMainEntry ? rgData.Length : rgSz[i];
         }
+        BuildLamApp(rgLamNames, rgLamData);
+
+        using var ms = new MemoryStream();
+        var rgNewNames = new List<string>();
+        var rgNewSz = new List<long>();
+        var rgNewCsz = new List<long>();
+        var rgNewType = new List<byte>();
+        rgBundleOffsets = new long[iN];
+        iEntryCount = 0;
+        AddBundleEntry(ms, rgNewNames, rgNewSz, rgNewCsz, rgNewType, sMainName, rgBoot, rgBoot.Length, 0, rgType[iMainEntry]);
+        foreach (int i in rgKeepIdx)
+            AddBundleEntry(ms, rgNewNames, rgNewSz, rgNewCsz, rgNewType, rgNames[i],
+                ReadEntryBytes(rgRel[i], rgCsz[i], rgSz[i]), rgSz[i], rgCsz[i], rgType[i]);
+        if (iIdxDeps >= 0)
+            AddBundleEntry(ms, rgNewNames, rgNewSz, rgNewCsz, rgNewType, rgNames[iIdxDeps],
+                ReadEntryBytes(rgRel[iIdxDeps], rgCsz[iIdxDeps], rgSz[iIdxDeps]), rgSz[iIdxDeps], rgCsz[iIdxDeps], rgType[iIdxDeps]);
+        if (iIdxRtc >= 0)
+            AddBundleEntry(ms, rgNewNames, rgNewSz, rgNewCsz, rgNewType, rgNames[iIdxRtc],
+                ReadEntryBytes(rgRel[iIdxRtc], rgCsz[iIdxRtc], rgSz[iIdxRtc]), rgSz[iIdxRtc], rgCsz[iIdxRtc], rgType[iIdxRtc]);
         rgBundleData = ms.ToArray();
         lBundleDataLen = rgBundleData.Length;
 
-        int iHlen = rgPayload.Length - iHbase;
-        rgNewHeader = new byte[iHlen];
-        Array.Copy(rgPayload, iHbase, rgNewHeader, 0, iHlen);
+        BuildNewBundleHeader(uMajor, iHbase, rgNewNames, rgNewSz, rgNewCsz, rgNewType);
+    }
+
+    private byte[] ReadEntryBytes(long lRel, long lCsz, long lSz)
+    {
+        long l = lCsz > 0 ? lCsz : lSz;
+        byte[] rg = new byte[l];
+        Array.Copy(rgPayload, (int)(iBundleDataStart + lRel), rg, 0, (int)l);
+        return rg;
+    }
+
+    private void AddBundleEntry(MemoryStream ms, List<string> rgNames, List<long> rgSz, List<long> rgCsz, List<byte> rgType, string sName, byte[] rgData, long lSz, long lCsz, byte bType)
+    {
+        rgNames.Add(sName);
+        rgSz.Add(lSz);
+        rgCsz.Add(lCsz);
+        rgType.Add(bType);
+        rgBundleOffsets[iEntryCount] = ms.Position;
+        ms.Write(rgData, 0, rgData.Length);
+        iEntryCount++;
+    }
+
+    //magic "Lamarr!!" + count + totalOrig/totalComp + entry table(20B nameLen/rawLen/compLen/compOff) + names + 压缩块
+    private void BuildLamApp(List<string> rgNames, List<byte[]> rgData)
+    {
+        using var ms = new MemoryStream();
+        ms.Write(Encoding.ASCII.GetBytes("Lamarr!!"), 0, 8);
+        ms.Write(BitConverter.GetBytes((uint)rgNames.Count), 0, 4);
+        long lSizePos = ms.Position; ms.Write(new byte[8], 0, 8);
+        long lTable = ms.Position; ms.Position += 20L * rgNames.Count;
+        var rgNameLen = new uint[rgNames.Count];
+        for (int i = 0; i < rgNames.Count; i++)
+        {
+            byte[] rgB = Encoding.UTF8.GetBytes(rgNames[i]);
+            rgNameLen[i] = (uint)rgB.Length;
+            ms.Write(rgB, 0, rgB.Length);
+            while ((ms.Position & 3) != 0) ms.WriteByte(0);
+        }
+        var rgCompOff = new long[rgNames.Count];
+        var rgCompLen = new long[rgNames.Count];
+        long lTotalOrig = 0, lTotalComp = 0;
+        for (int i = 0; i < rgNames.Count; i++)
+        {
+            uint cbCap = LamarrEncoder.GetMaxEncodedSize((uint)rgData[i].Length);
+            byte[] rgComp = new byte[cbCap];
+            uint pcb = cbCap;
+            if (LamarrEncoder.Encode(rgComp, ref pcb, rgData[i], (uint)rgData[i].Length) != 0)
+                throw new InvalidOperationException("Lamarr encode failed (lamapp entry)");
+            rgCompOff[i] = ms.Position;
+            rgCompLen[i] = pcb;
+            ms.Write(rgComp, 0, (int)pcb);
+            lTotalOrig += rgData[i].Length;
+            lTotalComp += pcb;
+        }
+        byte[] rgBuf = ms.GetBuffer();
+        for (int i = 0; i < rgNames.Count; i++)
+        {
+            int o = (int)(lTable + i * 20);
+            BitConverter.GetBytes(rgNameLen[i]).CopyTo(rgBuf, o);
+            BitConverter.GetBytes((uint)rgData[i].Length).CopyTo(rgBuf, o + 4);
+            BitConverter.GetBytes((uint)rgCompLen[i]).CopyTo(rgBuf, o + 8);
+            BitConverter.GetBytes((uint)rgCompOff[i]).CopyTo(rgBuf, o + 12);
+        }
+        BitConverter.GetBytes((uint)lTotalOrig).CopyTo(rgBuf, lSizePos);
+        BitConverter.GetBytes((uint)lTotalComp).CopyTo(rgBuf, lSizePos + 4);
+        rgLamApp = ms.ToArray();
+        Console.WriteLine($"  .lamapp: {rgNames.Count} entries, {lTotalOrig} -> {lTotalComp} bytes (Lamarr)");
+    }
+
+    private void BuildNewBundleHeader(uint uMajor, int iHbase, List<string> rgNames, List<long> rgSz, List<long> rgCsz, List<byte> rgType)
+    {
+        byte[] rgPrefix = new byte[iEntryStart];
+        Array.Copy(rgPayload, iHbase, rgPrefix, 0, iEntryStart);
+        BitConverter.GetBytes(rgNames.Count).CopyTo(rgPrefix, 8);
+
+        using var ms = new MemoryStream();
+        ms.Write(rgPrefix, 0, rgPrefix.Length);
+        rgEntryOffPos = new int[rgNames.Count];
+        rgNewSzVals = new long[rgNames.Count];
+        rgNewCszVals = new long[rgNames.Count];
+        iNewDeps = -1; iNewRtc = -1;
+        for (int i = 0; i < rgNames.Count; i++)
+        {
+            rgEntryOffPos[i] = (int)ms.Position;
+            rgNewSzVals[i] = rgSz[i];
+            rgNewCszVals[i] = rgCsz[i];
+            byte[] rgName = Encoding.UTF8.GetBytes(rgNames[i]);
+            ms.Position += 8 + 8 + 8 + 1;
+            WriteBundleStr(ms, rgName);
+            if (rgNames[i].Contains("deps.json")) iNewDeps = i;
+            if (rgNames[i].Contains("runtimeconfig")) iNewRtc = i;
+        }
+        rgNewHeader = ms.ToArray();
+    }
+
+    private static void WriteBundleStr(MemoryStream ms, byte[] rgB)
+    {
+        if (rgB.Length < 0x80) ms.WriteByte((byte)rgB.Length);
+        else { ms.WriteByte((byte)(0x80 | (rgB.Length >> 8))); ms.WriteByte((byte)(rgB.Length & 0xFF)); }
+        ms.Write(rgB, 0, rgB.Length);
     }
 
     private void ApplyBundleOffsets()
     {
-        if (iHeaderDepsPos >= 0 && iIdxDeps >= 0)
-            BitConverter.GetBytes(lBundleStart + rgBundleOffsets[iIdxDeps]).CopyTo(rgNewHeader, iHeaderDepsPos);
-        if (iHeaderRtcPos >= 0 && iIdxRtc >= 0)
-            BitConverter.GetBytes(lBundleStart + rgBundleOffsets[iIdxRtc]).CopyTo(rgNewHeader, iHeaderRtcPos);
+        if (iHeaderDepsPos >= 0 && iNewDeps >= 0)
+            BitConverter.GetBytes(lBundleStart + rgBundleOffsets[iNewDeps]).CopyTo(rgNewHeader, iHeaderDepsPos);
+        if (iHeaderRtcPos >= 0 && iNewRtc >= 0)
+            BitConverter.GetBytes(lBundleStart + rgBundleOffsets[iNewRtc]).CopyTo(rgNewHeader, iHeaderRtcPos);
         for (int i = 0; i < iEntryCount && i < 0x1000; i++)
         {
             BitConverter.GetBytes(lBundleStart + rgBundleOffsets[i]).CopyTo(rgNewHeader, rgEntryOffPos[i]);
-            BitConverter.GetBytes(rgBundleSz[i]).CopyTo(rgNewHeader, rgEntryOffPos[i] + 8);
-            BitConverter.GetBytes(rgBundleCsz[i]).CopyTo(rgNewHeader, rgEntryOffPos[i] + 16);
+            BitConverter.GetBytes(rgNewSzVals[i]).CopyTo(rgNewHeader, rgEntryOffPos[i] + 8);
+            BitConverter.GetBytes(rgNewCszVals[i]).CopyTo(rgNewHeader, rgEntryOffPos[i] + 16);
         }
     }
 
@@ -318,9 +417,9 @@ internal class PeWriter
 
     private int GetPayloadMajor()
     {
-        if (iIdxRtc < 0) return 0;
-        int iOff = (int)rgBundleOffsets[iIdxRtc];
-        int iLen = (int)rgBundleSz[iIdxRtc];
+        if (iNewRtc < 0) return 0;
+        int iOff = (int)rgBundleOffsets[iNewRtc];
+        int iLen = (int)rgNewSzVals[iNewRtc];
         if (iOff < 0 || iLen <= 0 || iOff + iLen > rgBundleData.Length) return 0;
         string sRtc = Encoding.UTF8.GetString(rgBundleData, iOff, iLen);
         var iM = System.Text.RegularExpressions.Regex.Match(sRtc, "\"tfm\"\\s*:\\s*\"net(\\d+)");

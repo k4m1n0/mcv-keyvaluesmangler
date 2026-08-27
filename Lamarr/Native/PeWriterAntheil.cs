@@ -109,6 +109,19 @@ internal class PeWriterAntheil
     private string sDecoderPath = "";
     private bool _bCompressDeps = false;
 
+    private readonly HashSet<string> _encryptDeps = new(StringComparer.OrdinalIgnoreCase);
+    //私有依赖显式指定加密走jithook 其余依赖只压缩
+    public void SetEncryptDeps(string s)
+    {
+        foreach (var sPart in s.Split(',', ';'))
+        {
+            var sName = sPart.Trim();
+            if (sName.Length == 0) continue;
+            _encryptDeps.Add(sName);
+            _encryptDeps.Add(sName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? sName[..^4] : sName + ".dll");
+        }
+    }
+
     #endregion
     #region 入口
 
@@ -387,8 +400,10 @@ internal class PeWriterAntheil
             uint uJitKey = Fnv1a(SeedKey(Encoding.ASCII.GetBytes(sSeed)));
             var rgAllCrcs = new List<uint>();
             int iNEncMethods = 0;
-            for (int i = 0; i < rgRaw.Count - 1; i++)//对每个托管dll加密方法体
+            //主程序始终加密 依赖默认只压缩不经jithook 私有依赖由SetEncryptDeps显式指定加密
+            for (int i = 0; i < rgRaw.Count - 1; i++)
             {
+                if (i > 0 && !_encryptDeps.Contains(rgNames[i])) continue;
                 var rgCrcs = MethodEncryptor.EncryptAll(rgRaw[i], uJitKey);
                 rgAllCrcs.AddRange(rgCrcs);
                 iNEncMethods += rgCrcs.Count;
