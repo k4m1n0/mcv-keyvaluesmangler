@@ -65,12 +65,6 @@ internal class PeWriterAntheil
         0xA5,0x0F,0xF0,0x5A,0x0F,0x5A,0xA5,0xF0
     };
 
-    //Boot区XOR
-    private static readonly byte[] rgKSeed = new byte[]
-    {
-        0x10,0x00,0x02,0x80,0x28,0x01,0x90,0xEB,
-        0xC3,0x00,0x10,0x02,0x01,0x80,0x28,0x90
-    };
 
     //打包seed 提前生成 供方法体加密key派生
     private string sSeed = "";
@@ -78,9 +72,6 @@ internal class PeWriterAntheil
     //lamapp区 BSJB头+seed payload布局
     private const int iBsjbLen = 64;
     private const int iSeedOff = 64;
-    private const int iHashOff = 96;
-    private const int iHeadOff = 100;
-    private const int iTblOff = 116;
 
     //密钥派生 常量A^B参与运算
     private static readonly uint uLK0A = 0x12345678, uLK0B = 0x9328CBBD;//0x811C9DC5
@@ -111,10 +102,13 @@ internal class PeWriterAntheil
 
     public void SetCompressDeps(bool b) => _bCompressDeps = b;
     private string sDecoderPath = "";
+    private string sMethodDictPath = "";
     private bool _bCompressDeps = true;
 
     private readonly HashSet<string> _encryptDeps = new(StringComparer.OrdinalIgnoreCase);
     //私有依赖显式指定加密走jithook 其余依赖只压缩
+    public void SetMethodDict(string sPath) => sMethodDictPath = sPath;
+
     public void SetEncryptDeps(string s)
     {
         foreach (var sPart in s.Split(',', ';'))
@@ -210,8 +204,117 @@ internal class PeWriterAntheil
         if (iPe + 0x18 > rg.Length || BitConverter.ToUInt32(rg, iPe) != 0x4550)
             throw new InvalidOperationException($"Bootstrapper is not a PE: {sPath}");
         //jithook安装后才运行的方法(W1/X4/X5)才能加密 先加密(按原名找token)再重命名 顺序反了就找不到
+        string[] rgPairs = { "uLK0A","uLK0B","uLK1A","uLK1B","uLGAA","uLGAB","uLLCA","uLLCB","uLQCA","uLQCB",
+            "uKS0A","uKS0B","uKS1A","uKS1B","uKS2A","uKS2B","uKS3A","uKS3B",
+            "uQ1A","uQ1B","uQ2A","uQ2B","uQ3A","uQ3B","uQ4A","uQ4B","uR1A","uR1B","uR2A","uR2B",
+            "uV1A","uV1B","uV2A","uV2B","uV3A","uV3B","uV4A","uV4B","uV5A","uV5B","uV6A","uV6B","uV7A","uV7B" };
+        var fldMap = FieldTokens(rg, rgPairs);
+        var rgVal = new Dictionary<uint, uint>();
+        foreach (var kv in fldMap) rgVal[kv.Value] = 0;
+        uint uCctor;
+        ReadCctorValues(rg, rgVal, out uCctor);
         rgBootCrcs = MethodEncryptor.EncryptAll(rg, Fnv1a(SeedKey(Encoding.ASCII.GetBytes(sSeed))), BootTokens(rg));
-        rgBoot = BootRenamer.Rename(rg);
+        rgBoot = BootRenamer.Rename(rg, sMethodDictPath);
+        var rgNew = new Dictionary<uint, uint>();
+        var rnd5 = new Random(Environment.TickCount ^ (int)DateTime.UtcNow.Ticks);
+        for (int i = 0; i < rgPairs.Length; i += 2)
+        {
+            uint tA = fldMap[rgPairs[i]], tB = fldMap[rgPairs[i + 1]];
+            uint real = rgVal[tA] ^ rgVal[tB];
+            uint a2 = (uint)rnd5.Next() | ((uint)rnd5.Next() << 16);
+            rgNew[tA] = a2; rgNew[tB] = a2 ^ real;
+        }
+        WriteCctorValues(rgBoot, uCctor, rgNew);
+    }
+
+    private static int RvaToOffset(byte[] rgD, int iPe, ushort usOptSize, ushort usNumSec, uint uRva)
+    {
+        int iSecStart = iPe + 24 + usOptSize;
+        for (int i = 0; i < usNumSec; i++)
+        {
+            int iS = iSecStart + i * 40;
+            uint uVs = BitConverter.ToUInt32(rgD, iS + 8);
+            uint uVa = BitConverter.ToUInt32(rgD, iS + 12);
+            uint uRs = BitConverter.ToUInt32(rgD, iS + 16);
+            uint uPo = BitConverter.ToUInt32(rgD, iS + 20);
+            uint uEnd = Math.Max(uVs, uRs);
+            if (uRva >= uVa && uRva < uVa + uEnd) return (int)(uPo + (uRva - uVa));
+        }
+        return -1;
+    }
+
+    //常量对随机化：改名前按原名收集字段token
+    private static Dictionary<string, uint> FieldTokens(byte[] rgD, string[] rgNames)
+    {
+        var map = new Dictionary<string, uint>(StringComparer.Ordinal);
+        using var ms = new MemoryStream(rgD, writable: false);
+        using var per = new PEReader(ms);
+        var mr = per.GetMetadataReader();
+        foreach (var h in mr.FieldDefinitions)
+        {
+            var fd = mr.GetFieldDefinition(h);
+            string s = mr.GetString(fd.Name);
+            if (Array.IndexOf(rgNames, s) >= 0) map[s] = (uint)MetadataTokens.GetToken(h);
+        }
+        return map;
+    }
+
+    private static void ReadCctorValues(byte[] rgD, Dictionary<uint, uint> rgVal, out uint uCctor)
+    {
+        uCctor = 0;
+        using var ms = new MemoryStream(rgD, writable: false);
+        using var per = new PEReader(ms);
+        var mr = per.GetMetadataReader();
+        foreach (var h in mr.MethodDefinitions)
+        {
+            var md = mr.GetMethodDefinition(h);
+            if (mr.GetString(md.Name) != ".cctor") continue;
+            uCctor = (uint)MetadataTokens.GetToken(h);
+            var mrb = per.GetMethodBody(md.RelativeVirtualAddress);
+            if (mrb == null) continue;
+            byte[] il = mrb.GetILBytes();
+            for (int p = 0; p + 5 < il.Length; p++)
+            {
+                if (il[p] != 0x7D) continue;
+                uint tok = BitConverter.ToUInt32(il, p + 1);
+                if (!rgVal.ContainsKey(tok)) continue;
+                if (p >= 5 && il[p - 5] == 0x20) rgVal[tok] = BitConverter.ToUInt32(il, p - 4);
+                else if (p >= 2 && il[p - 2] == 0x1F) rgVal[tok] = (uint)(sbyte)il[p - 1];
+                else if (p >= 1 && il[p - 1] >= 0x16 && il[p - 1] <= 0x1E) rgVal[tok] = (uint)(il[p - 1] - 0x16);
+            }
+        }
+    }
+
+    private static void WriteCctorValues(byte[] rgD, uint uCctor, Dictionary<uint, uint> rgNew)
+    {
+        int iPe = BitConverter.ToInt32(rgD, 0x3C);
+        ushort usNumSec = BitConverter.ToUInt16(rgD, iPe + 6);
+        ushort usOptSize = BitConverter.ToUInt16(rgD, iPe + 20);
+        using var ms = new MemoryStream(rgD, writable: false);
+        using var per = new PEReader(ms);
+        var mr = per.GetMetadataReader();
+        foreach (var h in mr.MethodDefinitions)
+        {
+            if ((uint)MetadataTokens.GetToken(h) != uCctor) continue;
+            var md = mr.GetMethodDefinition(h);
+            int iRva = md.RelativeVirtualAddress;
+            var mrb = per.GetMethodBody(iRva);
+            if (mrb == null) continue;
+            byte[] il = mrb.GetILBytes();
+            bool bChanged = false;
+            for (int p = 0; p + 5 < il.Length; p++)
+            {
+                if (il[p] != 0x7D) continue;
+                uint tok = BitConverter.ToUInt32(il, p + 1);
+                if (!rgNew.TryGetValue(tok, out uint v)) continue;
+                if (p >= 5 && il[p - 5] == 0x20) { BitConverter.GetBytes(v).CopyTo(il, p - 4); bChanged = true; }
+            }
+            if (!bChanged) continue;
+            int iOff = RvaToOffset(rgD, iPe, usOptSize, usNumSec, (uint)iRva);
+            if (iOff < 0) continue;
+            int iHdr = (rgD[iOff] & 3) == 2 ? 1 : 12;
+            Array.Copy(il, 0, rgD, iOff + iHdr, il.Length);
+        }
     }
 
     private static List<uint> BootTokens(byte[] rgD)
@@ -224,7 +327,7 @@ internal class PeWriterAntheil
         {
             var md = mr.GetMethodDefinition(h);
             string sName = mr.GetString(md.Name);
-            if (sName == "W1" || sName == "X4" || sName == "X5" || sName == "TCheck" || sName == "X2")
+            if (sName == "W1" || sName == "X4" || sName == "X5" || sName == "TCheck" || sName == "X2" || sName == "X3Comp" || sName == "VerifyBodies")
                 rg.Add(0x06000000u | (uint)MetadataTokens.GetRowNumber(mr, h));
         }
         return rg;
@@ -413,6 +516,7 @@ internal class PeWriterAntheil
             int iSegLen = Math.Min(iSeg, rgDecoder.Length - j * iSeg);
             int iSegOff = iOut - iTable;//段在数据区偏移
             Array.Copy(rgDecoder, j * iSeg, rgOut, iOut, iSegLen);
+            for (int b = 0; b < iSegLen / 2; b++) (rgOut[iOut+b], rgOut[iOut+iSegLen-1-b]) = (rgOut[iOut+iSegLen-1-b], rgOut[iOut+b]);
             iOut += iSegLen;
             BitConverter.GetBytes(iSegOff).CopyTo(rgOut, 8 + j * 8);
             BitConverter.GetBytes(iSegLen).CopyTo(rgOut, 12 + j * 8);
@@ -596,37 +700,42 @@ internal class PeWriterAntheil
             else { int sz = rng.Next(32, 257); rgGarbage.Add(sz); uDataOff += (uint)sz; }
         }
 
+        uint uKey = LamKey(sSeed);
+        int iHash = 96 + ((int)((uKey >> 16) & 0x1Fu) << 2);
+        int iHead = iHash + 4 + ((int)(uKey & 0x1Fu) << 2);
+        int iTbl = iHead + 20 + ((int)((uKey >> 8) & 0x1Fu) << 2);
+
         uint uTableLen = (uint)((iCount + iDecoys) * 20);
-        uint uTotalLen = iTblOff + uTableLen + uNameAreaLen + uDataOff;
+        uint uTotalLen = (uint)iTbl + uTableLen + uNameAreaLen + uDataOff;
         rgLamApp = new byte[uTotalLen];
 
         uint cbOrigTotal = 0;
         for (int i = 0; i < iCount; i++) cbOrigTotal += rgRawLen[i];
 
-        //由seed派生key与置换表
-        uint uKey = LamKey(sSeed);
+        //由seed派生置换表
         int[] rgPerm = LamPerm(uKey);
 
         //假BSJB根 XOR写入lamapp头部
-        int iNameOff = iTblOff + (iCount + iDecoys) * 20;
+        int iNameOff = iTbl + (iCount + iDecoys) * 20;
         int iDoff = iNameOff + (int)uNameAreaLen;
         int iDecOff = iDecIdx >= 0 ? iDoff + (int)rgCompOff[iDecIdx] : 0;
         byte[] rgBsjb = BuildFakeBsjb(iNameOff, (int)uNameAreaLen, iDecOff, iDecIdx >= 0 ? (int)rgCompLen[iDecIdx] : 0);
         for (int i = 0; i < iBsjbLen; i++)
             rgLamApp[i] = (byte)(rgBsjb[i] ^ rgKBsjb[i % rgKBsjb.Length]);
 
-        //seed XOR K_seed 写入lamapp头部
+        //seed XOR 掩码(BSJB前16字节派生) 写入lamapp头部
         byte[] rgSeedB = Encoding.ASCII.GetBytes(sSeed);
+        byte[] rgMask = MaskFromBsjb16(rgLamApp);
         for (int i = 0; i < 32; i++)
-            rgLamApp[iSeedOff + i] = (byte)(rgSeedB[i] ^ rgKSeed[i % rgKSeed.Length]);
+            rgLamApp[iSeedOff + i] = (byte)(rgSeedB[i] ^ rgMask[i % rgMask.Length]);
 
         //payload FNV哈希 供selftest
-        BitConverter.GetBytes(Fnv1a(rgRaw[0])).CopyTo(rgLamApp, iHashOff);
+        BitConverter.GetBytes(Fnv1a(rgRaw[0])).CopyTo(rgLamApp, iHash);
 
-        LamWriteXor(rgLamApp, iHeadOff, (uint)iCount, uKey);
-        LamWriteXor(rgLamApp, iHeadOff + 4, cbOrigTotal, uKey);
-        LamWriteXor(rgLamApp, iHeadOff + 8, uDataOff, uKey);
-        LamWriteXor(rgLamApp, iHeadOff + 12, (uint)iDecoys, LamSlot(uKey, iCount));
+        LamWriteXor(rgLamApp, iHead, (uint)iCount, uKey);
+        LamWriteXor(rgLamApp, iHead + 4, cbOrigTotal, uKey);
+        LamWriteXor(rgLamApp, iHead + 8, uDataOff, uKey);
+        LamWriteXor(rgLamApp, iHead + 12, (uint)iDecoys, LamSlot(uKey, iCount));
 
         for (int i = 0; i < iCount + iDecoys; i++)
         {
@@ -648,19 +757,19 @@ internal class PeWriterAntheil
                 rgF[2] = (uint)rgDecData[iDd].Length;
                 rgF[3] = rgDecoyOff[iDd];
             }
-            int iOff = iTblOff + i * 20;
+            int iOff = iTbl + i * 20;
             for (int iS = 0; iS < 4; iS++)
                 BitConverter.GetBytes(rgF[rgPerm[iS]] ^ uKk).CopyTo(rgLamApp, iOff + iS * 4);
         }
 
-        int iNo = iTblOff + (iCount + iDecoys) * 20;
+        int iNo = iTbl + (iCount + iDecoys) * 20;
         for (int i = 0; i < iCount + iDecoys; i++)
         {
             Array.Copy(rgNameBytes[i], 0, rgLamApp, iNo, rgNameBytes[i].Length);
             iNo += rgNameBytes[i].Length;
         }
 
-        int iDataBase = iTblOff + (iCount + iDecoys) * 20 + (int)uNameAreaLen;
+        int iDataBase = iTbl + (iCount + iDecoys) * 20 + (int)uNameAreaLen;
         uint uPos = 0; int iG = 0;
         foreach (var (kind, idx) in rgPhys)
         {
@@ -1025,6 +1134,14 @@ internal class PeWriterAntheil
     }
 
     private static uint LamSlot(uint uK, int i) => uK + (uLGAA ^ uLGAB) * (uint)i;
+
+    private static byte[] MaskFromBsjb16(byte[] rgB)
+    {
+        byte[] m = new byte[16];
+        uint uH = uLQCA ^ uLQCB, uK = uLK1A ^ uLK1B;
+        for (int i = 0; i < 16; i++) { uH ^= rgB[i]; uH *= uK; m[i] = (byte)(uH >> 24); }
+        return m;
+    }
 
     private static void LamWriteXor(byte[] rgB, int iOff, uint uV, uint uX)
         => BitConverter.GetBytes(uV ^ uX).CopyTo(rgB, iOff);

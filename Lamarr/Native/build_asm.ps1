@@ -16,6 +16,7 @@ param(
     [string]$CompressDeps = 'true',
     [string]$EncryptDeps = '',
     [string]$NoCompressDeps = '',
+    [string]$MethodDict = '',
     [string]$RtcVersion = '5.0.0',
     [string]$RtcTiered = ''
 )
@@ -57,23 +58,32 @@ if (!$K32_LIB) { throw 'kernel32.lib not found (Windows SDK needed)' }
 
 Write-Host "[build-asm] STATUS ml64 = $ML64_EXE`n[build-asm] out : $OUT_DIR"
 
-function build_stub_dll([string]$AsmName, [string]$DllName, [switch]$Page, [string]$Exports)
+function build_stub_dll([string]$AsmName, [string]$DllName, [switch]$Page, [string]$Exports, [string]$RenameExport)
 {
     $ASM_PATH = Join-Path $ASM_DIR $AsmName
     if (!(Test-Path $ASM_PATH)) { throw "asm not found: $ASM_PATH" }
     $OBJ_FILE = Join-Path $OUT_DIR (($DllName -replace '\.dll$', '') + '.obj')
     $DLL_FILE = Join-Path $OUT_DIR $DllName
-    & $ML64_EXE /nologo /c ("/Fo" + $OBJ_FILE) $ASM_PATH
+    $SRC_FILE = $ASM_PATH
+    $LINK_EXPORT = 'Iamdec'
+    if ($RenameExport)
+    {
+        $LINK_EXPORT = 'x' + (Get-Random -Minimum 10000 -Maximum 99999).ToString()
+        $SRC_FILE = Join-Path $OUT_DIR (($DllName -replace '\.dll$', '') + '_rnd.asm')
+        (Get-Content -Raw $ASM_PATH) -replace [regex]::Escape($RenameExport), $LINK_EXPORT | Set-Content -NoNewline -Encoding Ascii $SRC_FILE
+    }
+    & $ML64_EXE /nologo /c ("/Fo" + $OBJ_FILE) $SRC_FILE
     if ($LASTEXITCODE -ne 0) { throw "ml64($AsmName) failed ($LASTEXITCODE)" }
     $LINK_ARGS = New-Object System.Collections.Generic.List[string]
     $LINK_ARGS.Add('/nologo'); $LINK_ARGS.Add('/dll'); $LINK_ARGS.Add('/noentry'); $LINK_ARGS.Add('/machine:x64'); $LINK_ARGS.Add('/subsystem:console')
-    if ($Page) { $LINK_ARGS.Add('/export:Iamdec'); $LINK_ARGS.Add('/nodefaultlib') }
+    if ($Page) { $LINK_ARGS.Add('/export:' + $LINK_EXPORT); $LINK_ARGS.Add('/nodefaultlib') }
     if ($Exports) { foreach ($e in $Exports.Split(',')) { if ($e.Trim()) { $LINK_ARGS.Add('/export:' + $e.Trim()) } } }
     $LINK_ARGS.Add('/out:' + $DLL_FILE)
     $LINK_ARGS.Add($OBJ_FILE)
     if ($Page) { $LINK_ARGS.Add($K32_LIB) }
     & $LINK_EXE $LINK_ARGS.ToArray()
     if ($LASTEXITCODE -ne 0) { throw "link($DllName) failed ($LASTEXITCODE)" }
+    if ($SRC_FILE -ne $ASM_PATH) { Remove-Item $SRC_FILE -Force -ErrorAction SilentlyContinue }
     Write-Host "[build-asm] STATUS built: $DLL_FILE"
 }
 
@@ -81,7 +91,7 @@ build_stub_dll 'lamarr_stub.asm' 'lamarr_stub.dll'
 if ($Packer -eq 'antheil')
 {
     build_stub_dll 'antheil_stub.asm' 'antheil_stub.dll'
-    build_stub_dll 'antheil_paged.asm' 'Iamdec.dll' -Page
+    build_stub_dll 'antheil_paged.asm' 'Iamdec.dll' -Page -RenameExport Iamdec
     build_stub_dll 'antlion_deco.asm' 'z0.dll' -Exports 'z0_init,z0_read,z0_align,z0_size'
 }
 
@@ -117,6 +127,8 @@ if ($Pack)
     $PACK_ARGS = @('--stub', $STUB_DLL, '--input', $InputPath, '--output', $Output)
     if ($CompressDeps -eq 'true') { $PACK_ARGS += @('--compress-deps') }
     if ($EncryptDeps) { $PACK_ARGS += @('--encrypt-deps', $EncryptDeps) }
+    if (!$MethodDict) { $m = Join-Path $ASM_DIR 'boot_method_names.txt'; if (Test-Path $m) { $MethodDict = $m } }
+    if ($MethodDict) { $PACK_ARGS += @('--method-dict', $MethodDict) }
     if ($NoCompressDeps) { $PACK_ARGS += @('--no-compress-deps', $NoCompressDeps) }
     if ($Boot)    { $PACK_ARGS += @('--boot', $Boot) }
     if ($Decoder) { $PACK_ARGS += @('--decoder', $Decoder) }

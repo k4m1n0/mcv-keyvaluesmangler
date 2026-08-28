@@ -64,7 +64,7 @@ function patch_selfcheck([hashtable]$HASH_MAP) {
     $SRC_FILE = Join-Path $ROOT_DIR 'BootAntheil\Program.cs'
     $CONTENT = [System.IO.File]::ReadAllText($SRC_FILE)
     $script:idx = 0
-    $list = @('AD', 'X1', 'X3', 'X6')
+    $list = @('AD', 'X1', 'X3', 'X6', 'AD', 'X1', 'X3', 'X6')
     $pattern = '(MethodHash\([^)]*\) != )(\(uHs \^ 0x[0-9A-Fa-f]{8}u\))'
     $evaluator = {
         param($match)

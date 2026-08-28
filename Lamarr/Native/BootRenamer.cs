@@ -3,6 +3,7 @@ using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
 using System.Text;
+using System.IO;
 
 namespace Lamarr.NativePack;
 
@@ -11,9 +12,11 @@ public static class BootRenamer
     private static readonly char[] rgFirst = "abcdefghijklmnopqrstuvwxyz".ToCharArray();
     private static readonly char[] rgChar = "abcdefghijklmnopqrstuvwxyz123456789".ToCharArray();
     private static readonly Random rnd = new Random();
+    private static readonly string[] rgSelfCheck = { "TCheck", "CheckElapsed", "VerifyBodies" };
 
-    public static byte[] Rename(byte[] rgD)
+    public static byte[] Rename(byte[] rgD, string sDictPath = "")
     {
+        var rgDict = LoadDict(sDictPath);
         uint uLfa = BitConverter.ToUInt32(rgD, 0x3C);
         int iPe = (int)uLfa;
         if (iPe <= 0 || iPe + 0x60 >= rgD.Length || BitConverter.ToUInt32(rgD, iPe) != 0x4550)
@@ -168,7 +171,9 @@ public static class BootRenamer
                 int iLen = rgAll[iOff];
                 int iMax = iBound - iOff;
                 if (iMax < 2) continue;
-                string sNew = MakeName(Math.Min(iLen, iMax), rgUsed);
+                string sOld = Encoding.ASCII.GetString(rgD, iHeap + iOff, Math.Min(iLen, 64)).TrimEnd('\0');
+                string sNew = (rgDict.Length > 0 && Array.IndexOf(rgSelfCheck, sOld) >= 0)
+                    ? PickDict(rgDict, rgUsed) : MakeName(Math.Min(iLen, iMax), rgUsed);
                 byte[] rgB = Encoding.ASCII.GetBytes(sNew);
                 if (rgB.Length + 1 > iMax)
                 {
@@ -182,6 +187,34 @@ public static class BootRenamer
             }
         }
         return rgD;
+    }
+
+    private static string[] LoadDict(string sPath)
+    {
+        if (string.IsNullOrEmpty(sPath) || !File.Exists(sPath)) return Array.Empty<string>();
+        try
+        {
+            var rg = new List<string>();
+            foreach (var l in File.ReadAllLines(sPath))
+            {
+                string t = l.Trim();
+                if (t.Length > 0 && !t.StartsWith('#')) rg.Add(t);
+            }
+            return rg.ToArray();
+        }
+        catch { return Array.Empty<string>(); }
+    }
+
+    private static string PickDict(string[] rgDict, HashSet<string> rgUsed)
+    {
+        int n = rgDict.Length;
+        int st = rnd.Next(n);
+        for (int t = 0; t < n; t++)
+        {
+            string s = rgDict[(st + t) % n].Trim();
+            if (s.Length > 0 && rgUsed.Add(s)) return s;
+        }
+        return MakeName(2, rgUsed);
     }
 
     private static int StrLen(byte[] rgD, int iHeap, int iOff)

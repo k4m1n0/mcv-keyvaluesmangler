@@ -1212,13 +1212,13 @@ InstallJitHook ENDP
 
 ; exports
 SetJitHookKey PROC
-    ; key split(64): g_keyA = key ^ SPLIT, g_keyB = SPLIT -> no full key in mem
-    mov r8, 0DEADBEEFCAFEBABEh          ; SPLIT (mov supports imm64)
+    ; key split(64): g_keyA = key ^ SPLIT, g_keyB = SPLIT
+    mov r8, 0DEADBEEFCAFEBABEh            ; SPLIT
     mov qword ptr [g_keyB], r8
     mov rax, rcx
     xor rax, r8
     mov qword ptr [g_keyA], rax
-    ; g_mask64 = key ^ (key shr 16) ^ (key shl 13) ^ 0x9E3779B97F4A7C15
+    ; mask = key ^ (key shr 16) ^ (key shl 13) ^ 0x9E3779B97F4A7C15
     mov rax, rcx
     shr rax, 16
     xor rax, rcx
@@ -1227,13 +1227,15 @@ SetJitHookKey PROC
     xor rax, r9
     mov r9, 9E3779B97F4A7C15h
     xor rax, r9
-    ; split(64): g_maskA = mask ^ SPLIT, g_maskB = SPLIT
     mov qword ptr [g_maskB], r8
     mov r9, rax
     xor r9, r8
     mov qword ptr [g_maskA], r9
     ret
 SetJitHookKey ENDP
+
+
+
 
 
 
@@ -1307,6 +1309,7 @@ szGetJit          db "getJit",0
 g_orig          dq 0                    ; original compileMethod
 g_keyA          dq 0                    ; stream cipher key split A (key ^ SPLIT, 64-bit)
 g_keyB          dq 0                    ; stream cipher key split B (SPLIT, 64-bit)
+
 g_sigCount      dd 0
 g_rdtsc_start   dd 0
 

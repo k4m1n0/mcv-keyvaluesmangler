@@ -103,7 +103,7 @@ public static class MethodEncryptor
         ulong uC3 = (Rol64(uKey, 9) ^ 0x9747B28C9747B28CUL) | 1UL;
         ulong uC4 = ((uKey * 0x85EBCA6B85EBCA6BUL) ^ 0xC2B2AE35C2B2AE35UL) | 1UL;
         byte[] rgPH, rgPL, rgIH, rgIL;
-        GenPerm(uKey, out rgPH, out rgPL, out rgIH, out rgIL);
+GenPerm(uKey, out rgPH, out rgPL, out rgIH, out rgIL);
         int iHalf = iLen / 2;
         ulong uS1 = uKey ^ (uint)iLen * uC1;
         ulong uS2 = uKey ^ uC2 ^ (uint)iLen;
