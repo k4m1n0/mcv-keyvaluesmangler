@@ -537,9 +537,10 @@
 
     CLR统计每个方法的调用次数，超过阈值就安排后台线程重新优化编译。多数人
     以为方法只编译一次，实际上TieredCompilation会让一个方法被编译两遍
-    （Tier0快速JIT + Tier1后台优化，长循环还可能OSR）。这对jithook的含义很直接：方法体解密可能被请求两次（Tier0一次、Tier1
-    一次）。解密必须是幂等的——每次从密文XOR，不能解过一次就标记"已解密"然后
-    放明文，否则第二次编译读到的是已经损坏的中间态。
+    （Tier0快速JIT + Tier1后台优化，长循环还可能OSR）。这对jithook的含义、
+    很直接：方法体解密可能被请求两次（Tier0一次、Tier1一次）。解密必须是
+    幂等的——每次从密文XOR，不能解过一次就标记"已解密"然后放明文，否则第二次
+    编译读到的是已经损坏的中间态。
 
     还有一个前提：R2R（ReadyToRun）。发布时可以把方法预编译成native映像，
     运行时JIT见到已有映像就不再编译——加密的方法体没人解密，加密形同虚设。
@@ -666,8 +667,8 @@
 
       -EncryptDeps        逗号/分号分隔的依赖名，强制其方法加密走jithook
                            （主程序始终加密，依赖不指定则只压缩）
-      -NoCompressDeps     逗号/分号分隔的依赖名，压缩默认开时排除（明文存储）；
-                           同时指定加密则跳过加密
+      -NoCompressDeps     逗号/分号分隔的依赖名，压缩默认开时排除；同时
+                           指定加密则跳过加密
       -RtcVersion         runtimeconfig的framework版本（缺省5.0.0），
                            配LatestMajor后net5-10可解析到兼容版本
       -RtcTiered          runtimeconfig的TC处理：off（写false，
