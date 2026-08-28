@@ -69,7 +69,7 @@
     方法从磁盘到执行的完整路径：
       磁盘IL字节 -> CLR加载映射进内存 -> 注册MethodDesc -> 首次调用走stub
        -> JIT经compileMethod读内存IL -> 机器码
-    关键在CLR加载时已把IL映射进内存，JIT读的是内存地址而不是重新读文件。
+    关键在于CLR加载时已把IL映射进内存，JIT读的是内存地址而不是重新读文件。
     jithook能在compileMethod入口拦下，靠的就是这条链路。
 
 
@@ -111,7 +111,7 @@
       压缩总大小 total comp size    u32
       条目表 entry table            20B × N
       名字区 names                  UTF-8，4对齐
-      压缩块 compressed blocks      每条目一个，独立Lamarr流
+      压缩块 compressed blocks      每条目对应一个独立Lamarr流
 
     条目表每条20字节：nameLen/rawLen/compLen/compOff。
 
@@ -210,7 +210,7 @@
       依赖dll        托管依赖，默认压缩，加密显式指定
       真解码器        antheil_paged.asm（4KB页解码、混入主程序压缩流）
       jithook        jithook.dll
-      签名表         签名表，每方法16字节（crc2 + 第二层密钥）
+      签名表         签名表，每条记录16字节（crc2 + 第二层密钥）
       诱饵           蜜罐（z0.dll假gzip解码器）+ 4个随机条目
 
     名字区写入时，钩子/签名表/诱饵这些特殊条目换成随机假名
@@ -280,7 +280,7 @@
     配合方式：seed由打包器随机生成，与掩码异或后写盘——掩码由产物BSJB区
     前16字节派生，运行时重算还原seed，再派生全部key。重打包就是换钥匙，
     旧产物难以复用分析结论。派生出的种子密钥不整体留在内存，分片存于
-    _skA.._skD，用时由Sk()重组、用完清零，内存里找不到连续16字节的密钥。
+    _skA到_skD，用时由Sk()重组、用完清零，内存里找不到连续16字节的密钥。
 
 
   5.5 设计权衡：为什么XOR不是AES
@@ -304,10 +304,10 @@
 
   5.6 解码规则
 
-      条目在表头有三个判定：rawLen为0x7FFFFFFF是明文条目，直接取compOff处
-      compLen字节——依赖默认压缩，关闭压缩或命中不压缩名单才明文；compLen
-      等于rawLen是原样XOR KSeed还原；compLen小于rawLen是压缩，按4KB页
-      逐页调Iamdec。
+    条目在表头有三个判定。rawLen为0x7FFFFFFF（明文标记）时是明文条目，直接
+    取compOff处compLen字节——依赖默认压缩，关闭压缩或命中不压缩名单才明文；
+    compLen等于rawLen是原样XOR KSeed还原；compLen小于rawLen是压缩，
+    按4KB页逐页调 Iamdec。
 
 
   Iamdec接口签名
@@ -413,10 +413,9 @@
 
   6.7 X3：解出主程序
 
-    条目有三种形态：rawLen为0x7FFFFFFF是明文，直接取字节（压缩关闭或命中
-    不压缩名单时明文，主程序始终压缩）；compLen等于rawLen是没压缩，直接XOR
-    KSeed还原；compLen小于rawLen是压缩，按4KB一页逐页调Iamdec。主程序条目
-    混有解码器段：解压前先按段表把它们摘掉，剩下才是压缩流。
+    条目有三种形态：rawLen为明文标记时直接取字节（压缩关闭或命中不压缩名单时
+    出现，主程序始终压缩）；compLen等于rawLen是没压缩，直接XOR KSeed还原；
+    compLen小于rawLen是压缩，按4KB一页逐页调Iamdec。
 
     分页解码器接口固定：state（0x38字节工作区）、hist（0x80000字节历史窗）、
     page（0x1000字节输出页）、src（压缩源）。最后一页不足4KB按实际长度收尾。
@@ -527,7 +526,7 @@
       2. Tier1预编译：分层编译的快速路径，也可能触碰方法体。
           拦截：加密方法不走Tier1快速路径，或同样过签名表。
       3. OSR（栈上替换）：长循环的栈上替换需要重新编译，最终还是走编译入口
-          被compileMethod的门拦住。
+          被compileMethod拦住。
 
     三者只要有一个拿到密文IL，编译结果就是垃圾——这就是早期"症状五花八门"
     的根源。
@@ -537,7 +536,7 @@
 
     CLR统计每个方法的调用次数，超过阈值就安排后台线程重新优化编译。多数人
     以为方法只编译一次，实际上TieredCompilation会让一个方法被编译两遍
-    （Tier0快速JIT + Tier1后台优化，长循环还可能OSR）。这对jithook的含义、
+    （Tier0快速JIT + Tier1后台优化，长循环还可能OSR）。这对jithook的含义
     很直接：方法体解密可能被请求两次（Tier0一次、Tier1一次）。解密必须是
     幂等的——每次从密文XOR，不能解过一次就标记"已解密"然后放明文，否则第二次
     编译读到的是已经损坏的中间态。
@@ -552,7 +551,7 @@
     10.0.13修复）：Tier-1后台重编译带NuGet依赖的负载退出时崩溃。关闭分层
     是对旧10.0.x的workaround，副作用是编译路径变成单次；目标机>=10.0.13
     时可开回TC（--rtc-tiered default）。native/managed没有jithook，保留
-    默认分层。jithook的拦截点与分层开关无关，始终是同一道compileMethod门。
+    默认分层。jithook的拦截点与分层开关无关，始终是compileMethod这一道门。
 
     成本量级上：
       - 方法体XOR：逐字节异或，整个程序的方法体也就毫秒级，且只在编译时发生
@@ -563,23 +562,23 @@
   7.6 MethodEncryptor打包侧
 
      对主程序及显式指定加密的依赖（SetEncryptDeps）：
-      for每个方法:
+      逐方法:
           p = 方法体，从FatHeader开头
           uKey2 = 随机64位                   //第二层密钥，每方法独立
           v = (uKey2 ^ jit_key) & 3         //变体号2bit 第4种映射回v0
           IL = 方法体字节 ^ 流(jit_key, v0)  //第一层，固定变体
           IL = IL ^ 流(uKey2, v)            //第二层
-          记录crc2与uKey2到签名表            //每项16字节
+          记录crc2与uKey2到签名表            //每条记录16字节
     主程序始终加密；依赖由SetEncryptDeps显式指定才加密；其余只压缩不经
     jithook。不压缩名单优先：命中即跳过加密。签名表作为独立条目进lamapp，
     表项异或mask后落盘，防dump直接匹配；jit_key打包与运行时同一派生，即
     Fnv1a(SeedKey(seed))（32位），seed在打包时提前生成、运行时由X1还原，
-    解密链闭环，难以从常量静态推导。
+    如此解密链形成闭环，难以从常量静态推导。
 
     为什么用CRC32：它是"指纹"不是"密钥"。jithook在编译现场只有MethodDesc，
     用指纹快速判断"这个方法被加密过没有"——查表在解密之前，所以签名表可以
     公开存在bundle里。公开反而防篡改：攻击者删掉它，jithook就认为方法没
-    加密，密文IL直接交JIT编译出垃圾，程序自崩。
+    加密，密文IL直接交JIT编译出垃圾，程序崩溃。
 
   7.7 调试器与JIT的交互
 
@@ -695,7 +694,7 @@
 
   9.4 验证
 
-      GUI主流程        完整跑通X6读节 -> X1解析 -> 解码器 -> 
+      GUI主流程        完整跑通X6读节 -> X1解析 -> 解码器 ->
                        jithook -> 主程序 
       EhTestE         大EH表（11个catch），验证fat EH拷贝
       EhTestS         单线程：基础链路
@@ -740,7 +739,7 @@
       防线                攻击者动作     结果
       方法体密文           dump磁盘      密文，反编译失败
       反调试FailFast       attach        进程自杀
-      canInline门禁       放行内联       JIT读密文 -> 自崩
+      canInline门禁       放行内联       JIT读密文 -> 崩溃
       条目假名化           找解码器       名字全是随机串
 
 
@@ -748,7 +747,7 @@
 
       - 反调试可被"先禁用再启动"绕过，但SelfCheck方法体hash检查使patch失效
       - 解密后的IL短暂存在于内存，窗口极小但存在
-       - compileMethod的slot 0在net5-10稳定，但getMethodInfo/canInline
+      - compileMethod的slot 0在net5-10稳定，但getMethodInfo/canInline
           槽位偏移随版本漂移，未来的新coreclr仍需维护这张表；VerifyJitHook
           运行时校验vtable[0]仍指向钩子，被还原即FailFast
       - 主程序始终加密；依赖加密显式指定；其余依赖只压缩
