@@ -49,25 +49,25 @@
   1.3  JIT与compileMethod
 
     一个方法在编译后是一段IL字节。首次调用才编译（懒编译）：方法开头放一个
-    "桩"（stub），桩里藏着这个方法的内部句柄（MethodDesc）。第一次调用走进
-    桩，桩解出MethodDesc、保存现场，然后触发JIT编译，编译完把桩改写成跳转
-    编译结果——第二次调用直接执行机器码。所有方法编译都过
+    "桩"（stub），stub里藏着这个方法的内部句柄（MethodDesc）。第一次调用
+    走进stub，解出MethodDesc、保存现场，然后触发JIT编译，编译完把stub
+    改写成跳转编译结果——第二次调用直接执行机器码。所有方法编译都过
     ICorJitInfo::compileMethod这道门。但还有"提前偷看"的路径会绕过它
     直接读方法体——所以jithook必须多守一道门：canInline这个入口也得拦。
 
 
   1.4  方法表示法：MethodDesc与方法体
 
-    JIT编译时从桩里解出的MethodDesc就是compileMethod收到的ftn。它是CLR内部
-    给每个方法分配的对象，指向方法体的元数据结构而非方法体本身，jithook靠它
-    拿方法体字节。方法体在磁盘是一段字节：COR_ILMETHOD头（FatHeader
+    JIT编译时从stub里解出的MethodDesc就是compileMethod收到的ftn。它是
+    CLR内部给每个方法分配的对象，指向方法体的元数据结构而非方法体本身，jithook
+    靠它拿方法体字节。方法体在磁盘是一段字节：COR_ILMETHOD头（FatHeader
     开头的标志、CodeSize、MaxStack、局部变量签名令牌）加IL加EH表，JIT前端
     的Importer就是读这段字节转成内部树。jithook解析方法体先读FatHeader，
     按CodeSize和EH区信息把方法体完整拿下来，解密后原样交回。
 
 
     方法从磁盘到执行的完整路径：
-      磁盘IL字节 -> CLR加载映射进内存 -> 注册MethodDesc -> 首次调用走桩
+      磁盘IL字节 -> CLR加载映射进内存 -> 注册MethodDesc -> 首次调用走stub
        -> JIT经compileMethod读内存IL -> 机器码
     关键在CLR加载时已把IL映射进内存，JIT读的是内存地址而不是重新读文件。
     jithook能在compileMethod入口拦下，靠的就是这条链路。
@@ -478,7 +478,7 @@
 
   7.2 compileMethod解密流程
 
-    compileMethod收到的ftn就是桩里解出的MethodDesc。jithook按它读方法体
+    compileMethod收到的ftn就是stub里解出的MethodDesc。jithook按它读方法体
     字节、算CRC32查签名表——命中即加密方法，进入下面的解密。查表发生在解密
     之前，所以签名表不必保密，可以公开放在bundle里。
 
@@ -704,7 +704,7 @@
 
   9.5 工具
 
-      cdb / windbg            抓栈、看崩溃现场，先禁用反调试
+      CDB / WinDbg            抓栈、看崩溃现场，先禁用反调试
       ILSpy / dnSpy           对照打包前后
       Process Monitor         观察文件/注册表访问
       dotnet --list-runtimes  确认hostfxr环境
@@ -721,7 +721,7 @@
       0x02345678 / FailFast  -> 内联读密文，canInline没装
       EH越界                 -> fat表漏拷
       selftest非0            -> 解码器段错位或key不一致
-      ml64找不到             -> 缺VS Build Tools
+      ml64找不到              -> 缺VS Build Tools
 
 
 ------------------------------------------------------------------------
@@ -749,9 +749,8 @@
       - 反调试可被"先禁用再启动"绕过，但SelfCheck方法体hash检查使patch失效
       - 解密后的IL短暂存在于内存，窗口极小但存在
        - compileMethod的slot 0在net5-10稳定，但getMethodInfo/canInline
-          槽位偏移随版本漂移——已按版本表适配（SetJitSlots/ApplyJitSlots）
-          ，未来的新coreclr仍需维护这张表；VerifyJitHook运行时校验
-          vtable[0]仍指向钩子，被还原即FailFast
+          槽位偏移随版本漂移，未来的新coreclr仍需维护这张表；VerifyJitHook
+          运行时校验vtable[0]仍指向钩子，被还原即FailFast
       - 主程序始终加密；依赖加密显式指定；其余依赖只压缩
       - 页错误捕获/内存密钥提取是OS层能力，连VM壳也没法完全防
       - jit_key依赖运行时seed，可它需要走完整解密链才能静态推导
