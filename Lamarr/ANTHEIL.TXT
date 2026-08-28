@@ -125,7 +125,7 @@
 
   2.3  与Antheil的关系
 
-    managed与native的容器以"Lamarr!!"为魔数；Antheil的.lamapp没有这个
+    managed与native的容器以"Lamarr!!"为魔数；Antheil的.rdata没有这个
     魔数——头部是64B BSJB伪头+seed，只复用条目表的20B条目结构（XOR写）
     与Lamarr压缩流，方法体加密做在压缩之上。
 
@@ -172,7 +172,7 @@
       PE头
       .text         antheil_stub.asm入口壳（找hostfxr）
       marker 40B    8B header偏移 + 32B签名
-      .rdata        .lamapp：seed/头/表/名称/数据区
+      .rdata        seed/头/表/名称/数据区
       bundle数据    BootAntheil + 重建的deps.json和runtimeconfig
       bundle头      重建的.NET bundle header（文件尾）
 
@@ -188,7 +188,7 @@
 
 
   组件与职责
-      PeWriterAntheil.cs      打包器，重写PE、组bundle、写.lamapp
+      PeWriterAntheil.cs      打包器，重写PE、组bundle、写.rdata
       antheil_stub.asm        入口壳（native，启动CLR）
       antheil_paged.asm       Iamdec解码器（4KB页解码）
       antlion_deco.asm        z0.dll蜜罐（假gzip解码器）
