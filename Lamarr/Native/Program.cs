@@ -13,6 +13,7 @@ internal static class Program
         string? sPheropod = Opt(rgArgs, "--pheropod");
         string sMode = Opt(rgArgs, "--mode") ?? "clean";
         string? sEncryptDeps = Opt(rgArgs, "--encrypt-deps");
+        string? sNoCompressDeps = Opt(rgArgs, "--no-compress-deps");
         string? sRtcVersion = Opt(rgArgs, "--rtc-version");
         string? sTiered = Opt(rgArgs, "--rtc-tiered");
         if (sStub == null || sInput == null || sOutput == null)
@@ -54,6 +55,8 @@ internal static class Program
                       pe.SetCompressDeps(true);
                   if (!string.IsNullOrEmpty(sEncryptDeps))
                       pe.SetEncryptDeps(sEncryptDeps);
+                  if (!string.IsNullOrEmpty(sNoCompressDeps))
+                      pe.SetNoCompressDeps(sNoCompressDeps);
                 pe.LoadPayload(sInput);
                 pe.Pack(sOutput);
             }

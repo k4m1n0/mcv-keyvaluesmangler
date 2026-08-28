@@ -13,8 +13,9 @@ param(
     [string]$Mode,
     [string]$AppName = 'WeaponDamageCalc',
     [string]$PackerTfm = 'net8.0-windows',
-    [string]$CompressDeps = 'false',
+    [string]$CompressDeps = 'true',
     [string]$EncryptDeps = '',
+    [string]$NoCompressDeps = '',
     [string]$RtcVersion = '5.0.0',
     [string]$RtcTiered = ''
 )
@@ -93,7 +94,7 @@ if ($Packer -eq 'antheil')
     & $ML64_EXE /nologo /c ("/Fo" + $JIT_OBJ) $JIT_ASM
     if ($LASTEXITCODE -ne 0) { throw "ml64(jithook.asm) failed ($LASTEXITCODE)" }
     & $LINK_EXE /nologo /dll /noentry /machine:x64 /subsystem:console `
-        /export:InstallJitHook /export:SetJitHookKey /export:AddPayloadSig /export:GetJitHookDecryptCount /export:VerifyJitHook /export:SetAntiDebugFlag /export:SetJitSlots `
+        /export:InstallJitHook /export:SetJitHookKey /export:AddPayloadSig /export:VerifyJitHook /export:SetAntiDebugFlag /export:SetJitSlots `
         /nodefaultlib ("/out:" + $JIT_DLL) $JIT_OBJ
     if ($LASTEXITCODE -ne 0) { throw "link(jithook.dll) failed ($LASTEXITCODE)" }
     Write-Host "[build-asm] STATUS built: $JIT_DLL"
@@ -116,6 +117,7 @@ if ($Pack)
     $PACK_ARGS = @('--stub', $STUB_DLL, '--input', $InputPath, '--output', $Output)
     if ($CompressDeps -eq 'true') { $PACK_ARGS += @('--compress-deps') }
     if ($EncryptDeps) { $PACK_ARGS += @('--encrypt-deps', $EncryptDeps) }
+    if ($NoCompressDeps) { $PACK_ARGS += @('--no-compress-deps', $NoCompressDeps) }
     if ($Boot)    { $PACK_ARGS += @('--boot', $Boot) }
     if ($Decoder) { $PACK_ARGS += @('--decoder', $Decoder) }
     if ($JitHook) { $PACK_ARGS += @('--jithook', $JitHook) }

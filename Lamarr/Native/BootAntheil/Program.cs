@@ -54,11 +54,10 @@ internal static class P
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate void JitSetKey(uint key);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    private delegate void JitAddSig(uint crc);
+    private delegate void JitAddSig(uint crc, ulong key);
     private delegate bool X1D(byte[] rgG, out List<(string, uint, uint, uint)> rgEntries);
   private delegate int JitVerifyHook();
   private delegate void JitSetAdFlag(uint f);
-  private delegate uint JitGetCount();
   private delegate void JitSetSlots(uint gmi, uint ci);
 
     [StructLayout(LayoutKind.Sequential)]
@@ -98,11 +97,9 @@ internal static class P
     private static JitAddSig _fnJitAddSig = null!;
   private static JitVerifyHook _fnJitVerifyHook = null!;
   private static JitSetAdFlag _fnJitSetAdFlag = null!;
-  private static JitGetCount _fnJitGetCount = null!;
   private static JitSetSlots _fnJitSetSlots = null!;
-  private static int _tBoot;
 
-    //常量拆解 XOR对 运行时派生防静态识别
+    //常量拆成XOR对 运行时派生
     private static readonly uint uQ1A = 0x12345678, uQ1B = 0xB7F1F3DD;//0xA5A5A5A5
     private static readonly uint uQ2A = 0x1A2B3C4D, uQ2B = 0x40716617;//0x5A5A5A5A
     private static readonly uint uQ3A = 0x12345678, uQ3B = 0x0938F4CD;//0x1B0CA2B5
@@ -113,7 +110,7 @@ internal static class P
     //方法体hash委托引用 ldftn token不依赖名字 供元数据重命名
     private static readonly Action _ad = AD;
     private static readonly X1D _x1 = X1;
-    private static readonly Func<byte[], (string, uint, uint, uint), byte[]> _x3 = X3;
+    private static readonly Func<byte[], (string, uint, uint, uint), bool, byte[]> _x3 = X3;
     private static readonly Func<byte[]> _x6 = X6;
     //AD状态
     private static uint _uAdCt = 0;
@@ -130,7 +127,7 @@ internal static class P
         S2(0xABF71588u, new uint[] { 0xA8EF16C8u, 0x49068C49u, 0xEBC60BD2u, 0x85ED818Bu, 0x279CFF1Cu, 0xC024774Du, 0x6283EE1Eu, 0xFECB6B6Fu, 0x9C02E2F0u, 0x3A9A5E21u, 0xD9E1D5EAu, 0x7859507Bu }, uR2A, uR2B),
     };
 
-    //uint[]与k+i*delta异或 按UTF-16拼字符串
+    //与k+i*delta异或 按UTF-16拼字符串
     private static string S1(uint uK, uint[] rgV)
     {
         char[] rgChars = new char[rgV.Length * 2];
@@ -264,11 +261,10 @@ internal static class P
 
             AD();
             _llT = T0();
-  _tBoot = Environment.TickCount;
             var th = new Thread(() =>
             {
                 try { IntPtr hTh = OpenThread(0x0040u, false, GetCurrentThreadId()); if (hTh != IntPtr.Zero) { NtSetInformationThread(hTh, 0x11, IntPtr.Zero, 0); CloseHandle(hTh); } } catch { }
-        for (; ; ) { try { AD(); TCheck(_llT, 10000L); _llT = T0(); if ((_uAdCt & 0x3Fu) == 0) JitVerify(); if ((_uAdCt & 0x3Fu) == 0 && _fnJitVerifyHook != null && _fnJitVerifyHook() != 0) Environment.FailFast(null); if ((_uAdCt & 0xFFu) == 0 && Environment.TickCount - _tBoot > 30000 && _fnJitGetCount != null && _fnJitGetCount() == 0) Environment.FailFast(null); } catch { } Thread.Sleep(120); }
+        for (; ; ) { try { AD(); TCheck(_llT, 10000L); _llT = T0(); if ((_uAdCt & 0x3Fu) == 0) JitVerify(); if ((_uAdCt & 0x3Fu) == 0 && _fnJitVerifyHook != null && _fnJitVerifyHook() != 0) Environment.FailFast(null); } catch { } Thread.Sleep(120); }
             }) { IsBackground = true };
             th.Start();
             SelfCheck();
@@ -321,7 +317,7 @@ internal static class P
                 W1(rgG, rgEntries);
                 GC.KeepAlive(uQ4);
             }
-            byte[] rgMain = X3(rgG, rgEntries[0]);
+            byte[] rgMain = X3(rgG, rgEntries[0], true);
             TCheck(llParse, 8000L);
             Assembly asm = X4(AssemblyLoadContext.Default, rgMain);
             Array.Clear(rgMain, 0, rgMain.Length);
@@ -427,7 +423,7 @@ internal static class P
         return false;
     }
 
-    //纯噪音 枚举窗口但永不FailFast 误导分析者以为有窗口级反调试
+    //纯噪音 枚举窗口但永不FailFast
     private static bool WndScan()
     {
         try
@@ -482,10 +478,10 @@ internal static class P
         if ((uLK0A ^ uLK0B) != 0x811C9DC5u) Environment.FailFast(null);
         if ((uLK1A ^ uLK1B) != 0x000001B3u) Environment.FailFast(null);
         //防patch反调试/解密逻辑
-        if (MethodHash(_ad) != (uHs ^ 0x73BD6101u)) Environment.FailFast(null);
-        if (MethodHash(_x1) != (uHs ^ 0x12928B5Du)) Environment.FailFast(null);
-        if (MethodHash(_x3) != (uHs ^ 0x1423B5AAu)) Environment.FailFast(null);
-        if (MethodHash(_x6) != (uHs ^ 0xBAAC5981u)) Environment.FailFast(null);
+        if (MethodHash(_ad) != (uHs ^ 0x42EEE08Bu)) Environment.FailFast(null);
+        if (MethodHash(_x1) != (uHs ^ 0x75057167u)) Environment.FailFast(null);
+        if (MethodHash(_x3) != (uHs ^ 0x63D62480u)) Environment.FailFast(null);
+        if (MethodHash(_x6) != (uHs ^ 0x35215CF5u)) Environment.FailFast(null);
         _uX1H = MethodHash(_x1);
     }
 
@@ -499,8 +495,7 @@ internal static class P
         return uH;
     }
 
-
-    //解析--参数 诱饵
+    //解析--参数 假的
     private static void H1(string[] rgArgs)
     {
         var rgMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -513,7 +508,7 @@ internal static class P
         GC.KeepAlive(rgMap);
     }
 
-    //计算g前0x100字节hash 诱饵
+    //计算g前0x100字节hash 也是诱饵
     private static void H2(byte[] rgG)
     {
         uint uH = uLK0A ^ uLK0B;
@@ -523,7 +518,7 @@ internal static class P
         GC.KeepAlive(uH);
     }
 
-    //诱饵 看似核心解密 实际无意义
+    //反正看起来像核心解密什么的
     private static uint X9(byte[] rgG)
     {
         uint uH = 0x811C9DC5u;
@@ -688,9 +683,9 @@ internal static class P
                     iSt = 5;
                     continue;
                 case 6:
-                    _iDec = iCount - 4;
-                    _iJit = _iDec + 1;
-                    _iSig = _iDec + 2;
+                    _iJit = iCount - 3;
+                    _iSig = iCount - 2;
+                    _iDec = -1;
                     return true;
             }
         }
@@ -700,30 +695,38 @@ internal static class P
         => sName.EndsWith(S1(0x28CF58B4u, new uint[] { 0x28AB589Au, 0xC76AD201u }), StringComparison.OrdinalIgnoreCase)
             ? sName.Substring(0, sName.Length - 4) : sName;
 
-    //提取Iamdec解码器 以LoadBare加载
+    //从主程序压缩流收集解码器段重组Iamdec 以LoadBare加载
     private static void EnsureDecoder(byte[] rgG, List<(string, uint, uint, uint)> rgEntries)
     {
         if (uKS3A == 0x8BADF00Du) return;
         if (_decPtr != IntPtr.Zero) return;
-        if (_iDec >= 0 && _iDec < rgEntries.Count)
+        if (rgEntries.Count == 0) return;
+        //主程序条目 8B头+段表+压缩流(解码段混入)
+        var entry = rgEntries[0];
+        uint uCompLen = entry.Item3, uOff = entry.Item4;
+        if (uCompLen == 0 || uCompLen > 0x800000) return;
+        byte[] rgB = new byte[uCompLen];
+        Array.Copy(rgG, (int)uOff, rgB, 0, (int)uCompLen);
+        int nSeg = BitConverter.ToInt32(rgB, 0);
+        int iSeg = BitConverter.ToInt32(rgB, 4);
+        int iTable = 8 + nSeg * 8;
+        if (nSeg <= 0 || nSeg > 0x1000 || iTable > rgB.Length) { Array.Clear(rgB, 0, rgB.Length); return; }
+        //按段表收集解码段
+        int n = 0;
+        for (int j = 0; j < nSeg; j++) n += BitConverter.ToInt32(rgB, 12 + j * 8);
+        byte[] rgDec = new byte[n];
+        bool ok = true;
+        for (int j = 0; j < nSeg && ok; j++)
         {
-            var entry = rgEntries[_iDec];
-            byte[] rgK = Sk();
-            uint uAdj = Mx(rgK);
-            byte[] rgDll = new byte[entry.Item2];
-            uint uDq = uAdj ^ 0x3C6EF372u;
-            for (int i = 0; i < rgDll.Length; i++)
-            {
-                rgDll[i] = (byte)(rgG[(int)entry.Item4 + i] ^ rgK[i & 15] ^ (byte)(uAdj >> (8 * (i & 3))));
-                uDq = (uDq * 0x9E3779B9u) ^ rgDll[i];
-            }
-            GC.KeepAlive(uDq);
-            Array.Clear(rgK, 0, rgK.Length);
-            _decPtr = LoadBare(rgDll, true);
-            Array.Clear(rgDll, 0, rgDll.Length);
-            return;
+            int off = BitConverter.ToInt32(rgB, 8 + j * 8);
+            int len = BitConverter.ToInt32(rgB, 12 + j * 8);
+            if (off < 0 || len <= 0 || iTable + off + len > rgB.Length) { ok = false; break; }
+            Array.Copy(rgB, iTable + off, rgDec, j * iSeg, len);
         }
-        throw new InvalidDataException();
+        Array.Clear(rgB, 0, rgB.Length);
+        if (!ok) { Array.Clear(rgDec, 0, rgDec.Length); return; }
+        _decPtr = LoadBare(rgDec, true);
+        Array.Clear(rgDec, 0, rgDec.Length);
     }
 
     //手工映射裸PE返回基址 .text/.rdata按RVA排布
@@ -863,7 +866,7 @@ internal static class P
         if (_iJit >= 0 && _iJit < rgEntries.Count)
         {
             var entry = rgEntries[_iJit];
-            byte[] rgDll = X3(rgG, entry);
+            byte[] rgDll = X3(rgG, entry, false);
             uint uDh = (uint)rgDll.Length ^ 0x5A5A5A5Au;
             _jitBase = LoadBare(rgDll, true);//.text只读 .data可写
             _uJitTextVa = PeTextVa(rgDll);
@@ -880,7 +883,6 @@ internal static class P
             _fnJitAddSig = Mk<JitAddSig>(rgExports[S2(0x29CE007Au, new uint[] { 0x2BC6035Au, 0xCB2578B3u, 0x6534F024u, 0x07146EDDu, 0xA1A3E47Eu, 0x427B625Fu, 0xDC22DAD0u }, uR2A, uR2B)]);
               if (rgExports.TryGetValue("VerifyJitHook", out uint uVj)) _fnJitVerifyHook = Mk<JitVerifyHook>(uVj);
               if (rgExports.TryGetValue("SetAntiDebugFlag", out uint uAd)) _fnJitSetAdFlag = Mk<JitSetAdFlag>(uAd);
-              if (rgExports.TryGetValue("GetJitHookDecryptCount", out uint uGc)) _fnJitGetCount = Mk<JitGetCount>(uGc);
               if (rgExports.TryGetValue("SetJitSlots", out uint uSj)) _fnJitSetSlots = Mk<JitSetSlots>(uSj);
             Array.Clear(rgDll, 0, rgDll.Length);
         }
@@ -916,12 +918,14 @@ internal static class P
         if (_iSig >= 0 && _iSig < rgEntries.Count)
         {
             var entry = rgEntries[_iSig];
-            byte[] rgSig = X3(rgG, entry);
+            byte[] rgSig = X3(rgG, entry, false);
             uint uDs = (uint)rgSig.Length;
-            for (int i = 0; i + 4 <= rgSig.Length; i += 4)
+            for (int i = 0; i + 16 <= rgSig.Length; i += 16)
             {
-                _fnJitAddSig(BitConverter.ToUInt32(rgSig, i));
-                uDs = (uDs * 0x9E3779B9u) ^ BitConverter.ToUInt32(rgSig, i);
+                uint uLo = BitConverter.ToUInt32(rgSig, i);      //低32=crc2^mask32
+                ulong uHi = BitConverter.ToUInt64(rgSig, i + 8); //uKey2^mask64
+                _fnJitAddSig(uLo, uHi);
+                uDs = (uDs * 0x9E3779B9u) ^ uLo;
             }
             GC.KeepAlive(uDs);
             Array.Clear(rgSig, 0, rgSig.Length);
@@ -929,7 +933,7 @@ internal static class P
     }
 
     //解压条目 压缩按4KB页调Iamdec 非压缩直接XOR
-    private static byte[] X3(byte[] rgG, (string, uint, uint, uint) entry)
+    private static byte[] X3(byte[] rgG, (string, uint, uint, uint) entry, bool bMain)
     {
         if (uKS1A == 0xF00DFACEu) return rgG;
         byte[] rgRaw = Array.Empty<byte>(), rgComp = Array.Empty<byte>(), rgOut = Array.Empty<byte>(), rgHist = Array.Empty<byte>(), rgPage = Array.Empty<byte>(), rgState = Array.Empty<byte>();
@@ -972,6 +976,38 @@ internal static class P
                     fnDec = Marshal.GetDelegateForFunctionPointer<DecPage>(_decPtr);
                     rgComp = new byte[iCompLen];
                     Array.Copy(rgG, iDoff, rgComp, 0, iCompLen);
+                    if (bMain)
+                    {
+                        //主程序条目 抽走解码段还原为纯压缩流
+                        int nSeg = BitConverter.ToInt32(rgComp, 0);
+                        int iSeg2 = BitConverter.ToInt32(rgComp, 4);
+                        int iTable = 8 + nSeg * 8;
+                        if (nSeg > 0 && nSeg <= 0x1000 && iTable <= rgComp.Length)
+                        {
+                            int nSegLen = 0;
+                            for (int j = 0; j < nSeg; j++) nSegLen += BitConverter.ToInt32(rgComp, 12 + j * 8);
+                            int L0 = rgComp.Length - iTable - nSegLen;
+                            if (L0 > 0)
+                            {
+                                byte[] rgComp0 = new byte[L0];
+                                int dst = L0, cur = rgComp.Length;
+                                for (int k = nSeg - 1; k >= 0; k--)
+                                {
+                                    int off = BitConverter.ToInt32(rgComp, 8 + k * 8);
+                                    int len = BitConverter.ToInt32(rgComp, 12 + k * 8);
+                                    int iSegStart = iTable + off;
+                                    int dataLen = cur - (iSegStart + len);
+                                    dst -= dataLen;
+                                    Array.Copy(rgComp, iSegStart + len, rgComp0, dst, dataLen);
+                                    cur = iSegStart;
+                                }
+                                Array.Copy(rgComp, iTable, rgComp0, 0, cur - iTable);
+                                Array.Clear(rgComp, 0, rgComp.Length);
+                                rgComp = rgComp0;
+                                iCompLen = L0;
+                            }
+                        }
+                    }
                     rgOut = new byte[uRawLen];
                     rgHist = new byte[0x80000];
                     rgPage = new byte[0x1000];
@@ -1027,7 +1063,7 @@ internal static class P
         if (asmName.Name == null || !rgDeps.TryGetValue(asmName.Name, out var entry))
             return null;
         byte[] rgB;
-        try { rgB = X3(rgG, entry); }
+        try { rgB = X3(rgG, entry, false); }
         catch { return null; }
         try { return X4(alc, rgB); }
         finally { Array.Clear(rgB, 0, rgB.Length); }
@@ -1075,7 +1111,7 @@ internal static class P
             }
         }
         catch { }
-        //回退 文件读
+        //回退为文件读取
         string sSelf = Process.GetCurrentProcess().MainModule?.FileName
 #if NET6_0_OR_GREATER
             ?? Environment.ProcessPath

@@ -1,7 +1,7 @@
 .code
 
-PUBLIC g_orig, g_key, g_sigs, g_sigCount, g_decryptCount
-PUBLIC InstallJitHook, SetJitHookKey, AddPayloadSig, GetJitHookDecryptCount, VerifyJitHook, SetAntiDebugFlag, SetJitSlots
+PUBLIC g_orig, g_keyA, g_keyB, g_sigs, g_sigCount
+PUBLIC InstallJitHook, SetJitHookKey, AddPayloadSig, VerifyJitHook, SetAntiDebugFlag, SetJitSlots
 
 ; rcx=ansi apiName -> rax=addr (kernel32, handles forwarders)
 ResolveApi PROC
@@ -152,6 +152,8 @@ ra_ret:
     ret
 ResolveApi ENDP
 
+
+
 ; rcx=ptr rdx=len -> eax
 Crc32Fn PROC
     mov eax, 0FFFFFFFFh                 ; crc=~0
@@ -179,53 +181,511 @@ crc_done:
     ret
 Crc32Fn ENDP
 
-; rcx=dst rdx=src r8d=len, uses g_key
-; !! length-preserving stream cipher, matches EncryptTool: s=s*0x9E3779B1+0x9747B28C take s>>24
+
+
+; rcx=dst rdx=src r8d=len r9d=key
+; !! length-preserving dual-state nonlinear stream
+; s1 = key ^ len*C1; s2 = key ^ C2 ^ len; s1 = s1*0x9E3779B1+0x9747B28C
+; s2 = (s2*0x85EBCA6B+0xC2B2AE35) ^ (s1>>8) ^ (s1<<16); s2 = rol(s2,13); out = (s1>>24)^(s2>>16)^(s2>>24)
+GenPerm PROC
+    push rsi
+    push rbx
+    cmp qword ptr [g_permKey], r9
+    je gp_done
+    lea r8, g_permHi
+    xor eax, eax
+gp_hinit:
+    mov byte ptr [r8+rax], al
+    inc eax
+    cmp eax, 16
+    jb gp_hinit
+    mov r9, qword ptr [rsp+60h]         ; key (XorDecrypt frame via push/ret)
+    mov r10, 9E3779B97F4A7C15h
+    xor r9, r10
+    mov esi, 15
+gp_hloop:
+    mov r10, 0100019301000193h
+    imul r9, r10
+    mov r10, 9E3779B97F4A7C15h
+    add r9, r10
+    mov rax, r9
+    shr rax, 56
+    xor edx, edx
+    lea ecx, [rsi+1]
+    div ecx
+    mov al, byte ptr [r8+rsi]
+    mov bl, byte ptr [r8+rdx]
+    mov byte ptr [r8+rsi], bl
+    mov byte ptr [r8+rdx], al
+    dec esi
+    jns gp_hloop
+    lea r8, g_permLo
+    xor eax, eax
+gp_linit:
+    mov byte ptr [r8+rax], al
+    inc eax
+    cmp eax, 16
+    jb gp_linit
+    mov r9, qword ptr [rsp+60h]
+    mov r10, 85EBCA6B85EBCA6Bh
+    xor r9, r10
+    mov esi, 15
+gp_lloop:
+    mov r10, 9E3779B19E3779B1h
+    imul r9, r10
+    mov r10, 9747B28C9747B28Ch
+    add r9, r10
+    mov rax, r9
+    shr rax, 56
+    xor edx, edx
+    lea ecx, [rsi+1]
+    div ecx
+    mov al, byte ptr [r8+rsi]
+    mov bl, byte ptr [r8+rdx]
+    mov byte ptr [r8+rsi], bl
+    mov byte ptr [r8+rdx], al
+    dec esi
+    jns gp_lloop
+    lea r10, g_permHi
+    lea r11, g_invHi
+    xor ecx, ecx
+gp_invh:
+    movzx eax, byte ptr [r10+rcx]
+    mov byte ptr [r11+rax], cl
+    inc ecx
+    cmp ecx, 16
+    jb gp_invh
+    lea r10, g_permLo
+    lea r11, g_invLo
+    xor ecx, ecx
+gp_invl:
+    movzx eax, byte ptr [r10+rcx]
+    mov byte ptr [r11+rax], cl
+    inc ecx
+    cmp ecx, 16
+    jb gp_invl
+    mov r9, qword ptr [rsp+60h]
+    mov qword ptr [g_permKey], r9
+gp_done:
+    pop rbx
+    pop rsi
+    ret
+GenPerm ENDP
+
+
+
 XorDecrypt PROC
+    push r12
+    push r13
+    push r14
+    push r15
+    sub rsp, 60h                        ; C1[0]C2[8]C3[10]C4[18] uPrev[20] iHalf[28] out[2C] save[30] len[38] src[40] key[48] dst[50]
     test r8d, r8d
     jz xd_done
-    mov eax, dword ptr [g_key]          ; s=key
-    xor r9, r9                          ; i=0
-xd_loop:
-    mov r11d, 9E3779B1h
-    imul eax, r11d
-    add eax, 9747B28Ch
-    mov r10d, eax
-    shr r10d, 24
-    movzx r11d, byte ptr [rdx+r9]
-    xor r11d, r10d
-    mov byte ptr [rcx+r9], r11b
-    inc r9
-    cmp r9, r8
-    jb xd_loop
+    lea r14, g_invHi
+    lea r15, g_invLo
+    mov qword ptr [rsp+48h], r9         ; save key
+    mov dword ptr [rsp+38h], r8d        ; save len
+    mov qword ptr [rsp+50h], rcx        ; save dst
+    mov qword ptr [rsp+40h], rdx        ; save src
+    call GenPerm
+    mov r9, qword ptr [rsp+48h]         ; restore key
+    mov r8d, dword ptr [rsp+38h]        ; restore len
+    mov rcx, qword ptr [rsp+50h]        ; restore dst
+    mov rdx, qword ptr [rsp+40h]        ; restore src
+    ; C1 = (key ^ 0x9E3779B97F4A7C15) | 1
+    mov rax, r9
+    mov r10, 9E3779B97F4A7C15h
+    xor rax, r10
+    or rax, 1
+    mov qword ptr [rsp+0], rax
+    ; C2 = ((key * 0x0100019301000193) ^ 0x85EBCA6B85EBCA6B) | 1
+    mov rax, r9
+    mov r10, 0100019301000193h
+    imul rax, r10
+    mov r10, 85EBCA6B85EBCA6Bh
+    xor rax, r10
+    or rax, 1
+    mov qword ptr [rsp+8], rax
+    ; C3 = (rol(key,9) ^ 0x9747B28C9747B28C) | 1
+    mov rax, r9
+    rol rax, 9
+    mov r10, 9747B28C9747B28Ch
+    xor rax, r10
+    or rax, 1
+    mov qword ptr [rsp+10h], rax
+    ; C4 = ((key * 0x85EBCA6B85EBCA6B) ^ 0xC2B2AE35C2B2AE35) | 1
+    mov rax, r9
+    mov r10, 85EBCA6B85EBCA6Bh
+    imul rax, r10
+    mov r10, 0C2B2AE35C2B2AE35h
+    xor rax, r10
+    or rax, 1
+    mov qword ptr [rsp+18h], rax
+    ; iHalf = len/2
+    mov r12d, r8d
+    shr r12d, 1
+    mov dword ptr [rsp+28h], r12d
+    ; variant dispatch
+    mov r11d, dword ptr [g_variant]
+    and r11d, 3
+    jz xd_v0
+    cmp r11d, 1
+    je xd_v1
+    cmp r11d, 3
+    je xd_v0
+    jmp xd_v2
+xd_v0:
+    mov rax, qword ptr [rsp+0]          ; C1
+    mov r10d, r8d                       ; len
+    imul rax, r10                       ; C1*len
+    xor rax, qword ptr [rsp+48h]        ; s1 = key ^ C1*len
+    mov r10, qword ptr [rsp+48h]        ; key
+    xor r10, qword ptr [rsp+8]          ; key ^ C2
+    mov r11d, r8d
+    xor r10, r11                        ; s2 = key ^ C2 ^ len
+    mov qword ptr [rsp+20h], 0          ; uPrev = 0
+    xor r11d, r11d                      ; i=0
+xd0_loop:
+    imul rax, qword ptr [rsp+0]         ; s1 *= C1
+    add rax, qword ptr [rsp+10h]        ; s1 += C3
+    imul r10, qword ptr [rsp+18h]       ; s2 *= C4
+    add r10, qword ptr [rsp+8]          ; s2 += C2
+    xor r10, qword ptr [rsp+20h]        ; s2 ^= uPrev
+    mov r12, rax
+    shr r12, 8
+    xor r10, r12
+    mov r12, rax
+    shl r12, 16
+    xor r10, r12
+    rol r10, 13
+    mov r12, rax
+    shr r12, 24
+    mov r13, r10
+    shr r13, 16
+    xor r12, r13
+    mov r13, r10
+    shr r13, 24
+    xor r12, r13                        ; out
+    mov dword ptr [rsp+2Ch], r12d       ; stash out
+    mov qword ptr [rsp+30h], rax        ; save s1 (inv-perm clobbers rax)
+    movzx r13d, byte ptr [rdx+r11]
+    mov qword ptr [rsp+20h], r13        ; uPrev = cipher in (CFB)
+    mov rax, r13
+    shr rax, 4
+    movzx eax, byte ptr [r14+rax]
+    shl rax, 4
+    mov r12, r13
+    and r12, 0Fh
+    movzx r13d, byte ptr [r15+r12]
+    or rax, r13
+    xor eax, dword ptr [rsp+2Ch]
+    mov byte ptr [rcx+r11], al
+    mov rax, qword ptr [rsp+30h]        ; restore s1
+    inc r11d
+    cmp r11d, dword ptr [rsp+28h]       ; i < iHalf
+    jb xd0_loop
+    mov rax, qword ptr [rsp+0]          ; C1
+    mov r10d, r8d                       ; len
+    imul rax, r10                       ; C1*len
+    xor rax, qword ptr [rsp+48h]        ; s1 = key ^ C1*len
+    mov r10, qword ptr [rsp+48h]        ; key
+    xor r10, qword ptr [rsp+8]          ; key ^ C2
+    mov r11d, r8d
+    xor r10, r11                        ; s2 = key ^ C2 ^ len
+    mov qword ptr [rsp+20h], 0          ; uPrev = 0
+    mov r11d, r8d
+    dec r11d                            ; i = len-1
+xd0_rev:
+    imul rax, qword ptr [rsp+0]         ; s1 *= C1
+    add rax, qword ptr [rsp+10h]        ; s1 += C3
+    imul r10, qword ptr [rsp+18h]       ; s2 *= C4
+    add r10, qword ptr [rsp+8]          ; s2 += C2
+    xor r10, qword ptr [rsp+20h]        ; s2 ^= uPrev
+    mov r12, rax
+    shr r12, 8
+    xor r10, r12
+    mov r12, rax
+    shl r12, 16
+    xor r10, r12
+    rol r10, 13
+    mov r12, rax
+    shr r12, 24
+    mov r13, r10
+    shr r13, 16
+    xor r12, r13
+    mov r13, r10
+    shr r13, 24
+    xor r12, r13                        ; out
+    mov dword ptr [rsp+2Ch], r12d       ; stash out
+    mov qword ptr [rsp+30h], rax        ; save s1 (inv-perm clobbers rax)
+    movzx r13d, byte ptr [rdx+r11]
+    mov qword ptr [rsp+20h], r13        ; uPrev = 输入密文 (CFB)
+    mov rax, r13
+    shr rax, 4
+    movzx eax, byte ptr [r14+rax]
+    shl rax, 4
+    mov r12, r13
+    and r12, 0Fh
+    movzx r13d, byte ptr [r15+r12]
+    or rax, r13
+    xor eax, dword ptr [rsp+2Ch]
+    mov byte ptr [rcx+r11], al
+    mov rax, qword ptr [rsp+30h]        ; restore s1
+    dec r11d
+    cmp r11d, dword ptr [rsp+28h]       ; i >= iHalf
+    jge xd0_rev
+    jmp xd_done
+xd_v1:
+    mov rax, qword ptr [rsp+0]          ; C1
+    mov r10d, r8d                       ; len
+    imul rax, r10                       ; C1*len
+    xor rax, qword ptr [rsp+48h]        ; s1 = key ^ C1*len
+    mov r10, qword ptr [rsp+48h]        ; key
+    xor r10, qword ptr [rsp+8]          ; key ^ C2
+    mov r11d, r8d
+    xor r10, r11                        ; s2 = key ^ C2 ^ len
+    mov qword ptr [rsp+20h], 0          ; uPrev = 0
+    xor r11d, r11d                      ; i=0
+xd1_loop:
+    imul rax, qword ptr [rsp+18h]       ; s1 *= C4
+    add rax, qword ptr [rsp+8]          ; s1 += C2
+    imul r10, qword ptr [rsp+0]         ; s2 *= C1
+    add r10, qword ptr [rsp+10h]        ; s2 += C3
+    xor r10, qword ptr [rsp+20h]        ; s2 ^= uPrev
+    mov r12, rax
+    shr r12, 8
+    xor r10, r12
+    mov r12, rax
+    shl r12, 16
+    xor r10, r12
+    rol r10, 11
+    mov r12, r10
+    shr r12, 24
+    mov r13, rax
+    shr r13, 16
+    xor r12, r13
+    mov r13, rax
+    shr r13, 24
+    xor r12, r13                        ; out
+    mov dword ptr [rsp+2Ch], r12d       ; stash out
+    mov qword ptr [rsp+30h], rax        ; save s1 (inv-perm clobbers rax)
+    movzx r13d, byte ptr [rdx+r11]
+    mov qword ptr [rsp+20h], r13        ; uPrev = 输入密文 (CFB)
+    mov rax, r13
+    shr rax, 4
+    movzx eax, byte ptr [r14+rax]
+    shl rax, 4
+    mov r12, r13
+    and r12, 0Fh
+    movzx r13d, byte ptr [r15+r12]
+    or rax, r13
+    xor eax, dword ptr [rsp+2Ch]
+    mov byte ptr [rcx+r11], al
+    mov rax, qword ptr [rsp+30h]        ; restore s1
+    inc r11d
+    cmp r11d, dword ptr [rsp+28h]       ; i < iHalf
+    jb xd1_loop
+    mov rax, qword ptr [rsp+0]          ; C1
+    mov r10d, r8d                       ; len
+    imul rax, r10                       ; C1*len
+    xor rax, qword ptr [rsp+48h]        ; s1 = key ^ C1*len
+    mov r10, qword ptr [rsp+48h]        ; key
+    xor r10, qword ptr [rsp+8]          ; key ^ C2
+    mov r11d, r8d
+    xor r10, r11                        ; s2 = key ^ C2 ^ len
+    mov qword ptr [rsp+20h], 0          ; uPrev = 0
+    mov r11d, r8d
+    dec r11d                            ; i = len-1
+xd1_rev:
+    imul rax, qword ptr [rsp+18h]       ; s1 *= C4
+    add rax, qword ptr [rsp+8]          ; s1 += C2
+    imul r10, qword ptr [rsp+0]         ; s2 *= C1
+    add r10, qword ptr [rsp+10h]        ; s2 += C3
+    xor r10, qword ptr [rsp+20h]        ; s2 ^= uPrev
+    mov r12, rax
+    shr r12, 8
+    xor r10, r12
+    mov r12, rax
+    shl r12, 16
+    xor r10, r12
+    rol r10, 11
+    mov r12, r10
+    shr r12, 24
+    mov r13, rax
+    shr r13, 16
+    xor r12, r13
+    mov r13, rax
+    shr r13, 24
+    xor r12, r13                        ; out
+    mov dword ptr [rsp+2Ch], r12d       ; stash out
+    mov qword ptr [rsp+30h], rax        ; save s1 (inv-perm clobbers rax)
+    movzx r13d, byte ptr [rdx+r11]
+    mov qword ptr [rsp+20h], r13        ; uPrev = 输入密文 (CFB)
+    mov rax, r13
+    shr rax, 4
+    movzx eax, byte ptr [r14+rax]
+    shl rax, 4
+    mov r12, r13
+    and r12, 0Fh
+    movzx r13d, byte ptr [r15+r12]
+    or rax, r13
+    xor eax, dword ptr [rsp+2Ch]
+    mov byte ptr [rcx+r11], al
+    mov rax, qword ptr [rsp+30h]        ; restore s1
+    dec r11d
+    cmp r11d, dword ptr [rsp+28h]       ; i >= iHalf
+    jge xd1_rev
+    jmp xd_done
+xd_v2:
+    mov rax, qword ptr [rsp+0]          ; C1
+    mov r10d, r8d                       ; len
+    imul rax, r10                       ; C1*len
+    xor rax, qword ptr [rsp+48h]        ; s1 = key ^ C1*len
+    mov r10, qword ptr [rsp+48h]        ; key
+    xor r10, qword ptr [rsp+8]          ; key ^ C2
+    mov r11d, r8d
+    xor r10, r11                        ; s2 = key ^ C2 ^ len
+    mov qword ptr [rsp+20h], 0          ; uPrev = 0
+    xor r11d, r11d                      ; i=0
+xd2_loop:
+    imul rax, qword ptr [rsp+0]         ; s1 *= C1
+    add rax, qword ptr [rsp+10h]        ; s1 += C3
+    mov r12, r10
+    shr r12, 7
+    xor rax, r12                        ; s1 ^= s2>>7
+    imul r10, qword ptr [rsp+18h]       ; s2 *= C4
+    add r10, qword ptr [rsp+8]          ; s2 += C2
+    xor r10, qword ptr [rsp+20h]        ; s2 ^= uPrev
+    mov r12, rax
+    shl r12, 16
+    xor r10, r12                        ; s2 ^= s1<<16
+    rol r10, 17
+    mov r12, rax
+    shr r12, 16
+    xor r12, r10
+    mov r13, r10
+    shr r13, 8
+    xor r12, r13
+    xor r12, rax                        ; out
+    mov dword ptr [rsp+2Ch], r12d       ; stash out
+    mov qword ptr [rsp+30h], rax        ; save s1 (inv-perm clobbers rax)
+    movzx r13d, byte ptr [rdx+r11]
+    mov qword ptr [rsp+20h], r13        ; uPrev = 输入密文 (CFB)
+    mov rax, r13
+    shr rax, 4
+    movzx eax, byte ptr [r14+rax]
+    shl rax, 4
+    mov r12, r13
+    and r12, 0Fh
+    movzx r13d, byte ptr [r15+r12]
+    or rax, r13
+    xor eax, dword ptr [rsp+2Ch]
+    mov byte ptr [rcx+r11], al
+    mov rax, qword ptr [rsp+30h]        ; restore s1
+    inc r11d
+    cmp r11d, dword ptr [rsp+28h]       ; i < iHalf
+    jb xd2_loop
+    mov rax, qword ptr [rsp+0]          ; C1
+    mov r10d, r8d                       ; len
+    imul rax, r10                       ; C1*len
+    xor rax, qword ptr [rsp+48h]        ; s1 = key ^ C1*len
+    mov r10, qword ptr [rsp+48h]        ; key
+    xor r10, qword ptr [rsp+8]          ; key ^ C2
+    mov r11d, r8d
+    xor r10, r11                        ; s2 = key ^ C2 ^ len
+    mov qword ptr [rsp+20h], 0          ; uPrev = 0
+    mov r11d, r8d
+    dec r11d                            ; i = len-1
+xd2_rev:
+    imul rax, qword ptr [rsp+0]         ; s1 *= C1
+    add rax, qword ptr [rsp+10h]        ; s1 += C3
+    mov r12, r10
+    shr r12, 7
+    xor rax, r12                        ; s1 ^= s2>>7
+    imul r10, qword ptr [rsp+18h]       ; s2 *= C4
+    add r10, qword ptr [rsp+8]          ; s2 += C2
+    xor r10, qword ptr [rsp+20h]        ; s2 ^= uPrev
+    mov r12, rax
+    shl r12, 16
+    xor r10, r12                        ; s2 ^= s1<<16
+    rol r10, 17
+    mov r12, rax
+    shr r12, 16
+    xor r12, r10
+    mov r13, r10
+    shr r13, 8
+    xor r12, r13
+    xor r12, rax                        ; out
+    mov dword ptr [rsp+2Ch], r12d       ; stash out
+    mov qword ptr [rsp+30h], rax        ; save s1 (inv-perm clobbers rax)
+    movzx r13d, byte ptr [rdx+r11]
+    mov qword ptr [rsp+20h], r13        ; uPrev = 输入密文 (CFB)
+    mov rax, r13
+    shr rax, 4
+    movzx eax, byte ptr [r14+rax]
+    shl rax, 4
+    mov r12, r13
+    and r12, 0Fh
+    movzx r13d, byte ptr [r15+r12]
+    or rax, r13
+    xor eax, dword ptr [rsp+2Ch]
+    mov byte ptr [rcx+r11], al
+    mov rax, qword ptr [rsp+30h]        ; restore s1
+    dec r11d
+    cmp r11d, dword ptr [rsp+28h]       ; i >= iHalf
+    jge xd2_rev
+    jmp xd_done
 xd_done:
+    add rsp, 60h
+    pop r15
+    pop r14
+    pop r13
+    pop r12
     ret
 XorDecrypt ENDP
+
+
 
 ; single-step slowdown detection via RDTSC
 RdtscStart PROC
     push rax
     push rdx
+    lfence                              ; serialize: rdtsc ordering stable
     rdtsc
     mov dword ptr [g_rdtsc_start], eax
+    lfence
     pop rdx
     pop rax
     ret
 RdtscStart ENDP
 
+
+
 RdtscCheck PROC
     push rax
     push rdx
+    push r10
+    lfence
     rdtsc
     sub eax, dword ptr [g_rdtsc_start]
-    cmp eax, 400000000
+    ; threshold derived from key -> varies per run, fixed-const patch is useless
+    mov r10d, dword ptr [g_keyA]
+    xor r10d, dword ptr [g_keyB]
+    and r10d, 07FFFFFFFh
+    or r10d, 0200000h                   ; [2M, 2G) cycles budget
+    cmp eax, r10d
     jb rc_ok
     ud2
 rc_ok:
+    lfence
+    pop r10
     pop rdx
     pop rax
     ret
 RdtscCheck ENDP
+
+
 
 ; -> rax = clrjit DllBase or 0 (PEB walk)
 FindClrJit PROC
@@ -265,6 +725,8 @@ fc_ret:
     pop rbx
     ret
 FindClrJit ENDP
+
+
 
 ; rcx=base rdx=ansiName -> rax=addr or 0
 FindExportInModule PROC
@@ -330,7 +792,8 @@ fe_ret:
     ret
 FindExportInModule ENDP
 
-; vtable slot0 replacement
+
+
 ; !! virtual slot call, so has self: rcx=self rdx=comp r8=info r9d=flags
 ; nativeEntry/nativeSize untouched on [rsp+28]/[rsp+30]
 CompileHook PROC
@@ -411,21 +874,30 @@ gmi_skip:
     mov rcx, rsi
     mov rdx, rdi
     call Crc32Fn
-    mov ecx, eax                        ; ciphertext CRC
+    mov ecx, eax                        ; ciphertext CRC (final layer)
     lea rax, g_sigs                     ; sig table
-    xor ecx, 9E3779B9h                    ; sig stored as crc^const
+    xor ecx, dword ptr [g_maskA]
+    xor ecx, dword ptr [g_maskB]        ; crc2 ^ mask (key-derived)
     xor edx, edx                        ; i=0
 ch_sig:
     cmp edx, dword ptr [g_sigCount]
-    jae ch_orig
-    mov r8d, [rax+rdx*4]
+    jae ch_miss
+    lea r10, [rdx*8]
+    add r10, r10                        ; rdx*16 (128-bit entry stride)
+    mov r8d, [rax+r10]                  ; entry lo32 = crc2^mask
     cmp r8d, ecx
     je ch_payload
     inc edx
     jmp ch_sig
+ch_miss:
+    jmp ch_orig
 
 ch_payload:
-    lock inc dword ptr [g_decryptCount]
+    ; entry Hi64 = uKey2^mask64 -> uKey2 (per-method independent random 64-bit key)
+    mov r9, [rax+r10+8]                 ; uKey2^mask64 (r10 = rdx*16)
+    xor r9, qword ptr [g_maskA]
+    xor r9, qword ptr [g_maskB]         ; uKey2 (64-bit)
+    mov qword ptr [rsp+48h], r9         ; stash uKey2 (survives VirtualAlloc)
     xor ecx, ecx                        ; VirtualAlloc(NULL, ilSize+0x1000, MEM_RW, PAGE_RW) JIT only reads
     lea edx, [rdi+1000h]                ; ilSize + EH slack
     mov r8d, 3000h
@@ -437,12 +909,42 @@ ch_payload:
     test rax, rax
     jz ch_orig
     mov r15, rax                        ; scratch
+    ; ---- acquire g_compLock: g_variant is global, JIT can compile concurrently ----
+ch_lock_retry:
+    lock bts dword ptr [g_compLock], 0
+    jc ch_lock_wait
+    jmp ch_lock_got
+ch_lock_wait:
+    pause
+    test dword ptr [g_compLock], 1
+    jnz ch_lock_wait
+    jmp ch_lock_retry
+ch_lock_got:
+    ; layer2: scratch = ilCode ^ stream(uKey2) = layer1 ciphertext
+    ; variant = (uKey2 ^ (g_keyA^g_keyB)) & 3 ; uKey2 stashed at [rsp+48h]
+    mov r10, qword ptr [rsp+48h]        ; uKey2 (64-bit)
+    mov rax, qword ptr [g_keyA]
+    xor rax, qword ptr [g_keyB]         ; reassemble key (64-bit)
+    xor r10, rax                        ; uKey2 ^ key
+    and r10d, 3
+    mov dword ptr [g_variant], r10d     ; set variant for layer2
     mov rcx, r15
     mov rdx, rsi
     mov r8d, edi
+    mov r9, qword ptr [rsp+48h]         ; uKey2 as layer2 key (64-bit)
     call RdtscStart
     call XorDecrypt
     call RdtscCheck
+    ; layer1: scratch = layer1 ^ stream(g_keyA^g_keyB) = plaintext
+    mov dword ptr [g_variant], 0        ; variant 0 for layer1
+    mov rcx, r15
+    mov rdx, r15
+    mov r8d, edi
+    mov r9, qword ptr [g_keyA]
+    xor r9, qword ptr [g_keyB]          ; reassemble key for layer1 (64-bit)
+    call XorDecrypt
+    ; ---- release g_compLock ----
+    lock btr dword ptr [g_compLock], 0
     ; !! fat methods with more-sections (EH table): copy raw-image EH to scratch+ilSize
     ; JIT getEHinfo locates EH by ILCode+ILCodeSize; without this it reads OOB
     mov al, byte ptr [rsi-1]            ; header byte0
@@ -512,7 +1014,8 @@ ch_done:
     ret
 CompileHook ENDP
 
-; ICorJitInfo vtable slot6 replacement
+
+
 ; rcx=this rdx=callerHnd r8=calleeHnd -> eax (CorInfoInline)
 ; JIT inline analysis reads callee IL (raw ciphertext) -> garbage -> broken codegen
 ; return INLINE_NEVER(-2) for encrypted callee to block inline IL reads
@@ -569,12 +1072,15 @@ GetCanInlineHook PROC
     call Crc32Fn
     mov ecx, eax
     lea rax, g_sigs
-    xor ecx, 9E3779B9h                  ; sig stored as crc^const
+    xor ecx, dword ptr [g_maskA]
+    xor ecx, dword ptr [g_maskB]        ; crc ^ mask (key-derived)
     xor edx, edx
 gci_sig:
     cmp edx, dword ptr [g_sigCount]
     jae gci_ret
-    mov r8d, [rax+rdx*4]
+    lea r10, [rdx*8]
+    add r10, r10                        ; rdx*16 (128-bit entry stride)
+    mov r8d, [rax+r10]                  ; entry lo32 = crc^mask
     cmp r8d, ecx
     je gci_never
     inc edx
@@ -594,6 +1100,8 @@ gci_done:
     pop rbp
     ret
 GetCanInlineHook ENDP
+
+
 
 ; PEB find clrjit, getJit, replace vtable slot0
 InstallJitHook PROC
@@ -700,38 +1208,64 @@ ih_ret:
     ret
 InstallJitHook ENDP
 
+
+
 ; exports
 SetJitHookKey PROC
-    mov dword ptr [g_key], ecx
+    ; key split(64): g_keyA = key ^ SPLIT, g_keyB = SPLIT -> no full key in mem
+    mov r8, 0DEADBEEFCAFEBABEh          ; SPLIT (mov supports imm64)
+    mov qword ptr [g_keyB], r8
+    mov rax, rcx
+    xor rax, r8
+    mov qword ptr [g_keyA], rax
+    ; g_mask64 = key ^ (key shr 16) ^ (key shl 13) ^ 0x9E3779B97F4A7C15
+    mov rax, rcx
+    shr rax, 16
+    xor rax, rcx
+    mov r9, rcx
+    shl r9, 13
+    xor rax, r9
+    mov r9, 9E3779B97F4A7C15h
+    xor rax, r9
+    ; split(64): g_maskA = mask ^ SPLIT, g_maskB = SPLIT
+    mov qword ptr [g_maskB], r8
+    mov r9, rax
+    xor r9, r8
+    mov qword ptr [g_maskA], r9
     ret
 SetJitHookKey ENDP
+
+
 
 AddPayloadSig PROC
     mov eax, dword ptr [g_sigCount]
     cmp eax, 4096
     jae sig_full
     lea r8, g_sigs
-    mov [r8+rax*4], ecx
+    lea r9, [rax*8]
+    add r9, r9                          ; rax*16 (128-bit entry stride)
+    mov [r8+r9], rcx                    ; lo64: lo32=crc2^mask32
+    mov [r8+r9+8], rdx                  ; hi64: uKey2^mask64
     inc dword ptr [g_sigCount]
 sig_full:
     ret
 AddPayloadSig ENDP
 
-GetJitHookDecryptCount PROC
-    mov eax, dword ptr [g_decryptCount]
-    ret
-GetJitHookDecryptCount ENDP
 
-; vtable[0] still our hook (not restored)
+
+; vtable[0] must still be our CompileHook (exact address, not "anything != orig")
 VerifyJitHook PROC
     mov rax, [g_vtable]
     test rax, rax
     jz vj_fail
     mov rdx, [rax]                      ; vtable[0]
+    lea rcx, CompileHook                ; must still point at our hook
+    cmp rdx, rcx
+    jne vj_fail
     mov rcx, [g_orig]                   ; original compileMethod
     test rcx, rcx
     jz vj_fail
-    cmp rdx, rcx                        ; vtable[0] == original -> restored
+    cmp rdx, rcx                        ; == original -> restored
     je vj_fail
     xor eax, eax
     ret
@@ -740,11 +1274,15 @@ vj_fail:
     ret
 VerifyJitHook ENDP
 
+
+
 ; set by BootAntheil once AD() passes
 SetAntiDebugFlag PROC
     mov dword ptr [g_adFlag], ecx
     ret
 SetAntiDebugFlag ENDP
+
+
 
 ; set by BootAntheil: rcx = ICorStaticInfo.getMethodInfo slot offset,
 ; rdx = canInline slot offset (per running coreclr version)
@@ -753,6 +1291,8 @@ SetJitSlots PROC
     mov dword ptr [g_ciOff], edx
     ret
 SetJitSlots ENDP
+
+
 
 .data
 
@@ -765,14 +1305,14 @@ szGetJit          db "getJit",0
     align 8
 
 g_orig          dq 0                    ; original compileMethod
-g_key           dd 0                    ; stream cipher key
+g_keyA          dq 0                    ; stream cipher key split A (key ^ SPLIT, 64-bit)
+g_keyB          dq 0                    ; stream cipher key split B (SPLIT, 64-bit)
 g_sigCount      dd 0
-g_decryptCount  dd 0
 g_rdtsc_start   dd 0
 
     align 8
 
-g_sigs          dd 4096 dup(0)          ; CRC32 table of encrypted method bodies
+g_sigs          dq 8192 dup(0)          ; 128bit entries hi=uKey2^mask64 lo=crc2^mask32
 
 g_pVirtualAlloc    dq 0
 g_pVirtualFree     dq 0
@@ -782,10 +1322,21 @@ g_origCanInline    dq 0                 ; original ICorJitInfo::canInline
 g_gmiOff           dd 20h               ; ICorStaticInfo.getMethodInfo slot offset (net8 default)
 g_ciOff            dd 30h               ; ICorStaticInfo.canInline slot offset (net8 default)
 g_compLock         dd 0                 ; compile serialization lock
+                   db 0,0,0             ; align
+                   db 0,0,0             ; align
 
     align 8
 
 g_vtable           dq 0                 ; vtable for VerifyJitHook
 g_adFlag           dd 0                 ; set by BootAntheil after AD passes
+
+g_maskA            dq 0                 ; key-derived 64-bit sig mask split A (mask ^ SPLIT)
+g_maskB            dq 0                 ; key-derived 64-bit sig mask split B (SPLIT)
+g_variant          dd 0                 ; per-method decrypt variant (CompileHook)
+g_permKey          dq 0                 ; last perm-gen key
+g_permHi           db 16 dup(0)         ; 4-bit high-nibble perm
+g_permLo           db 16 dup(0)         ; 4-bit low-nibble perm
+g_invHi            db 16 dup(0)         ; inverse perm high
+g_invLo            db 16 dup(0)         ; inverse perm low
 
 END

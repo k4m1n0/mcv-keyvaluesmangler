@@ -43,7 +43,7 @@ internal class PeWriterAntheil
     public void SetTiered(string m) { sTiered = m; }
 
     private byte[] rgBoot = null!;
-    private List<uint> rgBootCrcs = new();
+    private List<(ulong Hi, ulong Lo)> rgBootCrcs = new();
     private byte[] rgLamApp = null!;
     private uint uLamAppRaw, uLamAppRawSize;
     private int iMainEntry = -1;
@@ -72,7 +72,7 @@ internal class PeWriterAntheil
         0xC3,0x00,0x10,0x02,0x01,0x80,0x28,0x90
     };
 
-    //打包seed 提前生成 供方法体加密key派生（jit_key依赖seed 形成解密链闭环）
+    //打包seed 提前生成 供方法体加密key派生
     private string sSeed = "";
 
     //lamapp区 BSJB头+seed payload布局
@@ -111,7 +111,7 @@ internal class PeWriterAntheil
 
     public void SetCompressDeps(bool b) => _bCompressDeps = b;
     private string sDecoderPath = "";
-    private bool _bCompressDeps = false;
+    private bool _bCompressDeps = true;
 
     private readonly HashSet<string> _encryptDeps = new(StringComparer.OrdinalIgnoreCase);
     //私有依赖显式指定加密走jithook 其余依赖只压缩
@@ -123,6 +123,19 @@ internal class PeWriterAntheil
             if (sName.Length == 0) continue;
             _encryptDeps.Add(sName);
             _encryptDeps.Add(sName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? sName[..^4] : sName + ".dll");
+        }
+    }
+
+    private readonly HashSet<string> _noCompressDeps = new(StringComparer.OrdinalIgnoreCase);
+    //显式指定不压缩的依赖 明文存储
+    public void SetNoCompressDeps(string s)
+    {
+        foreach (var sPart in s.Split(',', ';'))
+        {
+            var sName = sPart.Trim();
+            if (sName.Length == 0) continue;
+            _noCompressDeps.Add(sName);
+            _noCompressDeps.Add(sName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? sName[..^4] : sName + ".dll");
         }
     }
 
@@ -375,6 +388,47 @@ internal class PeWriterAntheil
                                  lDepsSz, lRtcSz, lRtcHash);
     }
 
+    //解码器按0x80切成段 返回 [nSeg|iSeg|段表(off,len)xN] + 压缩流(混入解码段)
+    private byte[] MergeDecoderIntoMain(byte[] rgComp0)
+    {
+        int iL = rgComp0.Length;
+        const int iSeg = 0x80;
+        int nSeg = (rgDecoder.Length + iSeg - 1) / iSeg;
+        int iTable = 8 + nSeg * 8;
+        byte[] rgOut = new byte[iTable + iL + rgDecoder.Length];
+        BitConverter.GetBytes(nSeg).CopyTo(rgOut, 0);
+        BitConverter.GetBytes(iSeg).CopyTo(rgOut, 4);
+        int iKeep = Math.Min(0x20, iL); //避开流头
+        int iSpan = Math.Max(1, (iL - iKeep) / nSeg);//等距间距
+        int iSrc = 0, iOut = iTable;
+        var rngJ = new Random(Environment.TickCount ^ (int)DateTime.UtcNow.Ticks);
+        for (int j = 0; j < nSeg; j++)
+        {
+            int iCut = iKeep + j * iSpan;
+            if (iSpan > iSeg + 8) iCut += rngJ.Next(-8, 9);//抖动
+            iCut = Math.Min(iL, Math.Max(iSrc, iCut));//单调且不越界
+            int nCp = iCut - iSrc;
+            if (nCp > 0) Array.Copy(rgComp0, iSrc, rgOut, iOut, nCp);
+            iOut += nCp; iSrc = iCut;
+            int iSegLen = Math.Min(iSeg, rgDecoder.Length - j * iSeg);
+            int iSegOff = iOut - iTable;//段在数据区偏移
+            Array.Copy(rgDecoder, j * iSeg, rgOut, iOut, iSegLen);
+            iOut += iSegLen;
+            BitConverter.GetBytes(iSegOff).CopyTo(rgOut, 8 + j * 8);
+            BitConverter.GetBytes(iSegLen).CopyTo(rgOut, 12 + j * 8);
+        }
+        int nTail = iL - iSrc;
+        if (nTail > 0) Array.Copy(rgComp0, iSrc, rgOut, iOut, nTail);
+        iOut += nTail;
+        if (iOut < rgOut.Length)
+        {
+            byte[] rgT = new byte[iOut];
+            Array.Copy(rgOut, 0, rgT, 0, iOut);
+            rgOut = rgT;
+        }
+        return rgOut;
+    }
+
     private void BuildLamApp(long[] rgRel, long[] rgSz, long[] rgCsz, string[] rgName, List<int> rgDepIdx, string sSeed)
     {
         var rgRaw = new List<byte[]>();
@@ -396,27 +450,28 @@ internal class PeWriterAntheil
             Array.Copy(rgPayload, (int)(iBundleDataStart + rgRel[i]), rgDll, 0, (int)lOndisk);
             rgRaw.Add(rgDll); rgNames.Add(rgName[i]);
         }
-        iDecIdx = rgRaw.Count;
-        rgRaw.Add(rgDecoder); rgNames.Add(RandName());
 
         if (rgJitHook != null)
         {
             uint uJitKey = Fnv1a(SeedKey(Encoding.ASCII.GetBytes(sSeed)));
-            var rgAllCrcs = new List<uint>();
+            var rgAllCrcs = new List<(ulong Hi, ulong Lo)>();
             int iNEncMethods = 0;
-            //主程序始终加密 依赖默认只压缩不经jithook 私有依赖由SetEncryptDeps显式指定加密
+            //主程序始终加密 依赖SetEncryptDeps显式指定才加密 不压缩名单优先
             for (int i = 0; i < rgRaw.Count - 1; i++)
             {
-                if (i > 0 && !_encryptDeps.Contains(rgNames[i])) continue;
+                if (i > 0 && (!_encryptDeps.Contains(rgNames[i]) || _noCompressDeps.Contains(rgNames[i]))) continue;
                 var rgCrcs = MethodEncryptor.EncryptAll(rgRaw[i], uJitKey);
                 rgAllCrcs.AddRange(rgCrcs);
                 iNEncMethods += rgCrcs.Count;
             }
             rgAllCrcs.AddRange(rgBootCrcs);//B后半方法(W1/X4/X5)密文指纹 一并进签名表供jithook识别
             Console.WriteLine($"[jithook] encrypted {iNEncMethods} method bodies -> {rgAllCrcs.Count} sigs");
-            var rgSigBytes = new byte[rgAllCrcs.Count * 4];
+            var rgSigBytes = new byte[rgAllCrcs.Count * 16];
             for (int i = 0; i < rgAllCrcs.Count; i++)
-                BitConverter.GetBytes(rgAllCrcs[i]).CopyTo(rgSigBytes, i * 4);
+            {
+                BitConverter.GetBytes(rgAllCrcs[i].Lo).CopyTo(rgSigBytes, i * 16);//lo64 低32=crc2^mask32
+                BitConverter.GetBytes(rgAllCrcs[i].Hi).CopyTo(rgSigBytes, i * 16 + 8);//hi64 uKey2^mask64
+            }
             iJitIdx = rgRaw.Count;
             rgRaw.Add(rgJitHook); rgNames.Add(RandName());
             iSigIdx = rgRaw.Count;
@@ -492,9 +547,9 @@ internal class PeWriterAntheil
                 rgCompLen[i] = rgRawLen[i];
                 rgBlocks[i] = XorBytes(rgRaw[i], rgSeedKey, uAdj);
             }
-            else if (i > 0 && !_bCompressDeps)
+            else if (i > 0 && (!_bCompressDeps || _noCompressDeps.Contains(rgNames[i])))
             {
-                rgCompLen[i] = rgRawLen[i];//依赖明文存储 默认不压缩依赖
+                rgCompLen[i] = rgRawLen[i];//明文存储(关闭压缩或排除名单)
                 rgBlocks[i] = rgRaw[i];
             }
             else
@@ -505,6 +560,14 @@ internal class PeWriterAntheil
                 if (LamarrEncoder.Encode(rgBlocks[i], ref pcb, rgRaw[i], rgRawLen[i]) != 0)
                     throw new InvalidOperationException($"Lamarr encode failed: {rgNames[i]}");
                 rgCompLen[i] = pcb;
+                if (i == 0 && rgDecoder.Length > 0)
+                {
+                    //主程序压缩流混入解码器段
+                    byte[] rgBlk = new byte[pcb];
+                    Array.Copy(rgBlocks[i], 0, rgBlk, 0, pcb);
+                    rgBlocks[i] = MergeDecoderIntoMain(rgBlk);
+                    rgCompLen[i] = (uint)rgBlocks[i].Length;
+                }
             }
         }
 
@@ -571,7 +634,7 @@ internal class PeWriterAntheil
             uint[] rgF = new uint[4];
             if (i < iCount)
             {
-                bool bPlain = i > 0 && i != iDecIdx && i != iJitIdx && i != iSigIdx && i != iPheropodIdx && !_bCompressDeps;
+                bool bPlain = i > 0 && i != iDecIdx && i != iJitIdx && i != iSigIdx && i != iPheropodIdx && (!_bCompressDeps || _noCompressDeps.Contains(rgNames[i]));
                 rgF[0] = (uint)rgNameBytes[i].Length;
                 rgF[1] = bPlain ? 0x7FFFFFFFu : rgRawLen[i];
                 rgF[2] = bPlain ? rgRawLen[i] : rgCompLen[i];

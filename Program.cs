@@ -293,7 +293,6 @@ Examples:
         if (bVerbose) Console.WriteLine($"  [{DateTime.Now:HH:mm:ss}] {sMsg}");
     }
 
-    //提取wiki-dryrun和wiki-upload的公共逻辑：获取+反查+转换
     static async Task<(string sPage, string? sResult, int iCode)> FetchAndConvertAsync(
         string sPage, string sScripts, bool bSingle, bool bVerbose)
     {

@@ -107,7 +107,7 @@ public static class Packer
         fs.Flush(true);
     }
 
-    //在单文件stub中定位bundle header偏移 .NET单文件布局: bundle marker = [header_off(8)][signature(32)]
+    //定位bundle header偏移 bundle marker = [header_off(8)][signature(32)]
     private static int FindBundleHeaderOff(byte[] rgData)
     {
         for (int i = 0; i + 8 + rgBundleSig.Length <= rgData.Length; i++)

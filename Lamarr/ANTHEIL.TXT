@@ -52,8 +52,7 @@
     "桩"（stub），桩里藏着这个方法的内部句柄（MethodDesc）。第一次调用走进
     桩，桩解出MethodDesc、保存现场，然后触发JIT编译，编译完把桩改写成跳转
     编译结果——第二次调用直接执行机器码。所有方法编译都过
-    ICorJitInfo::compileMethod这道门。但还有"提前偷看"的路径：内联分析
-    （canInline）、Tier1预编译、OSR（栈上替换）。它们不经过compileMethod，
+    ICorJitInfo::compileMethod这道门。但还有"提前偷看"的路径会绕过它
     直接读方法体——所以jithook必须多守一道门：canInline这个入口也得拦。
 
 
@@ -64,8 +63,7 @@
     拿方法体字节。方法体在磁盘是一段字节：COR_ILMETHOD头（FatHeader
     开头的标志、CodeSize、MaxStack、局部变量签名令牌）加IL加EH表，JIT前端
     的Importer就是读这段字节转成内部树。jithook解析方法体先读FatHeader，
-    按CodeSize和EH区信息把方法体完整拿下来，解密后原样交回。7.3讲的就是
-    EH区的两种形态。
+    按CodeSize和EH区信息把方法体完整拿下来，解密后原样交回。
 
 
     方法从磁盘到执行的完整路径：
@@ -73,8 +71,6 @@
        -> JIT经compileMethod读内存IL -> 机器码
     关键在CLR加载时已把IL映射进内存，JIT读的是内存地址而不是重新读文件。
     jithook能在compileMethod入口拦下，靠的就是这条链路。
-
-    而X0伪造的假方法，本质就是MethodDesc。
 
 
   简明概念
@@ -130,9 +126,8 @@
   2.3  与Antheil的关系
 
     managed与native的容器以"Lamarr!!"为魔数；Antheil的.lamapp没有这个
-    魔数——头部是64B BSJB伪头+seed（见第五章5.2），只复用条目表的
-    20B条目结构（XOR写）与Lamarr压缩流。方法体加密做在压缩之上——
-    压缩解决体积，加密解决明文。
+    魔数——头部是64B BSJB伪头+seed，只复用条目表的20B条目结构（XOR写）
+    与Lamarr压缩流，方法体加密做在压缩之上。
 
 
 ------------------------------------------------------------------------
@@ -175,21 +170,21 @@
   4.1 产物布局
 
       PE头
-      .text       antheil_stub.asm入口壳（找hostfxr）
-      marker 40B  8B header偏移 + 32B签名
-      .rdata     .lamapp：seed/头/表/名称/数据区（解码器/钩子/签名表/诱饵）
-      bundle数据  BootAntheil + deps.json + runtimeconfig（CLR需要真名）
-      bundle头    重建的.NET bundle header（文件尾）
+      .text         antheil_stub.asm入口壳（找hostfxr）
+      marker 40B    8B header偏移 + 32B签名
+      .rdata        .lamapp：seed/头/表/名称/数据区
+      bundle数据    BootAntheil + 重建的deps.json和runtimeconfig
+      bundle头      重建的.NET bundle header（文件尾）
 
 
   4.2 三个状态
 
-      磁盘态：主程序方法体加密，依赖压缩明文，seed XOR
+      磁盘态：主程序方法体加密，依赖默认压缩，seed XOR
       内存态：BootAntheil解出主程序IL（已解密）交给JIT
       JIT态：jithook现场解密方法体，编译成机器码执行
 
-      这套东西防不住认真逆向的高手团队，但静态分析基本失效，动态分析每走一步
-      都得先过jithook和反调试。
+      这套东西防不住认真逆向的高手团队，但静态分析基本失效，动态分析
+      每走一步都得先过jithook和反调试。
 
 
   组件与职责
@@ -212,13 +207,13 @@
     bundle里放的是这些东西，按打包顺序：
 
       BootAntheil    主程序条目，替换原主程序
-      依赖dll        托管依赖，默认只压缩不经jithook
-      真解码器        antheil_paged.asm（4KB页解码，导出Iamdec）
+      依赖dll        托管依赖，默认压缩，加密显式指定
+      真解码器        antheil_paged.asm（4KB页解码、混入主程序压缩流）
       jithook        jithook.dll
-      签名表         CRC32签名表，每方法4字节
+      签名表         签名表，每方法16字节（crc2 + 第二层密钥）
       诱饵           蜜罐（z0.dll假gzip解码器）+ 4个随机条目
 
-    名字区写入时，解码器/钩子/签名表/诱饵这4个特殊条目换成随机假名
+    名字区写入时，钩子/签名表/诱饵这些特殊条目换成随机假名
      （和诱饵名同款的小写串），运行时按表索引定位——产物里没有特殊条目名，
     也没有加密特征，名字区只有主程序名、依赖名和一堆随机小写串。
 
@@ -228,18 +223,14 @@
     条目清单存在.lamapp区，即PE的.rdata节。逐字段：
 
       0    64B    BSJB伪头（#~ / #Strings指向诱饵区）
-      64   32B    seed（ASCII），存时与KSeed异或
+      64   32B    seed（ASCII），存时掩码由BSJB区前16字节派生
       96   4B     payload FNV-1a哈希（打包期校验，运行不依赖）
-      100  20B    bundle头：count/cbOrigTotal/dataOff/decoyCount/flags
+      100  20B    bundle头：count/cbOrigTotal/dataOff/decoyCount
       116  20N    条目表：nameLen/rawLen/compLen/compOff
       ...  ...    名字区（UTF-8，4对齐）+ 数据区
 
-    开头64字节是假metadata：伪造 #~ 和 #Strings两个stream，偏移指向诱饵区，
-    按标准格式解析的工具会顺着 #~ 走进假数据。seed每次打包随机（Guid "N"
-    格式），两次产物互不相同——重打包等于整体换钥匙。bundle头五个u32都与派生
-    key异或，直接读是噪音，其中flags让运行时不必依赖固定布局就能定位解码器
-    与jithook。数据区的真实条目、诱饵、垃圾块按随机顺序物理排列，核心被穿插
-    打散；gzip永远靠后，每个前后都夹着垃圾块；表里的compOff指向实际位置。
+    bundle头四个u32与派生key异或，直接读是噪音；数据区真实条目、诱饵、
+    垃圾块按随机顺序物理排列，核心穿插打散，gzip总是靠后、前后夹垃圾块。
 
 
   5.3 BSJB伪头逐字节
@@ -265,41 +256,48 @@
       52    23 53 74 72 69 6E 67 73     "#Strings"（8字节，到59）
       60    00 00 00 00                 保留
 
-    关键点：偏移32和44这两个字段，指向的不是真metadata，而是诱饵区（#~ 指向
-    解码器假数据、#Strings指向名字区）。标准解析器走到这里，拿到的是一份"
-    看起来合法、读起来是垃圾"的表。为什么这一套能骗过标准解析器：.NET工具读
-    程序集元数据，定位沿PE头 -> CLI头 -> Metadata目录 -> MetadataRoot，
-    然后按#~和#Strings两个stream的偏移去读表和字符串。伪头给出的是合法格式
-    的偏移和长度，但#~指向的数据是解码器假数据，解析出来是乱码表，#Strings
-    指向的名字区也不是真正的元数据字符串堆。工具按偏移读完，要么解析失败，
-    要么得到垃圾，但不会因为"结构不合法"直接报错。于是逆向者得到的是困惑，
-    而不是明确的失败。
+    偏移32和44这两个字段，指向的不是真metadata，而是诱饵区（#~ 指向解码器
+    假数据、#Strings指向名字区）。标准解析器走到这里，拿到的是一份"看起来
+    合法、读起来是垃圾"的表。为什么这一套能骗过标准解析器：.NET工具读程序集
+    元数据，定位沿PE头 -> CLI头 -> Metadata目录 -> MetadataRoot，然后按
+    #~和#Strings两个stream的偏移去读表和字符串。伪头给出的是合法格式的偏移
+    和长度，但#~指向的数据是解码器假数据，解析出来是乱码表，#Strings指向的
+    名字区也不是真正的元数据字符串堆。工具按偏移读完，要么解析失败，要么得
+    到垃圾，但不会因为"结构不合法"直接报错。于是逆向者得到的是困惑，而不是
+    明确的失败。
 
 
   5.4 密钥派生
 
-      KSeed = KS0A^KS0B, KS1A^KS1B, KS2A^KS2B, KS3A^KS3B
-              （四个u32常量对异或，小端写16字节）
+      KSeed = 掩码，由产物BSJB区前16字节派生
+              （打包时XOR seed写盘，运行时重算还原）
       K1    = FNV-1a：h = LK0A^LK0B，对seed逐字节
                h ^= b; h *= LK1A^LK1B
       K2    = 4元素置换：线性同余推进 + 交换，由k派生
       K3    = 逐槽key：K3(k, i)，每行独立
       LamKey / LamPerm / LamSlot是打包侧的对应实现
 
-    配合方式：seed由打包器随机生成并XOR KSeed存盘，运行时还原出真seed再派生
-    全部key，所以重打包就是换钥匙，旧产物难以复用分析结论。派生出的种子密钥
-    不整体留在内存，分片存于_skA.._skD，用时由Sk()重组、用完清零，内存里
-    找不到连续16字节的密钥。
+    配合方式：seed由打包器随机生成，与掩码异或后写盘——掩码由产物BSJB区
+    前16字节派生，运行时重算还原seed，再派生全部key。重打包就是换钥匙，
+    旧产物难以复用分析结论。派生出的种子密钥不整体留在内存，分片存于
+    _skA.._skD，用时由Sk()重组、用完清零，内存里找不到连续16字节的密钥。
 
 
   5.5 设计权衡：为什么XOR不是AES
 
-    方法体加密用的是XOR+常量派生，不是AES。两个理由：
+    方法体加密用的是XOR+密钥派生，不是AES。两个理由：
       1. 成本：AES每次编译现场解密的开销大得多，XOR逐字节几乎免费。
           方法体可能被编译两遍（Tier0/Tier1），开销会被放大。
       2. 威胁模型：目标不是密码学强度，而是挡静态反编译和
           通用工具流水线。XOR密文足以让它们全部翻车。seed随机+重打包换钥匙，
           两次产物互不相同，避免固定密钥被复用。
+
+    代价是密码学上限摆在这：第一层jit_key是32位FNV、第二层uKey2是64位
+    随机，但XOR流的数学结构没变。拿到一段明文-密文对仍可枚举流验证，命中后
+    掩码可算、第二层密钥随之恢复，两层并不独立。变体号只有两位，第4种映射
+    回第1种，只添反汇编噪音不加熵。真正的防线是重打包换钥匙、密钥分片存储，
+    以及seed掩码产物派生。
+
     简单来说：密码学选型要匹配威胁模型和性能——防君子不防小人，
     但这里的"君子"（通用工具）已经全灭了。
 
@@ -307,7 +305,7 @@
   5.6 解码规则
 
       条目在表头有三个判定：rawLen为0x7FFFFFFF是明文条目，直接取compOff处
-      compLen字节——依赖默认明文存储，CompressDeps开启后才压缩；compLen
+      compLen字节——依赖默认压缩，关闭压缩或命中不压缩名单才明文；compLen
       等于rawLen是原样XOR KSeed还原；compLen小于rawLen是压缩，按4KB页
       逐页调Iamdec。
 
@@ -320,18 +318,6 @@
 ------------------------------------------------------------------------
   六  BootAntheil
 ------------------------------------------------------------------------
-
-  双击exe之后：antheil_stub.asm找hostfxr启动CLR，随后按单文件机制加载
-  主程序，而主程序条目里装的是BootAntheil。加载链从BootAntheil.Main开始，
-  共六步：
-
-      AD()              反调试：先确认环境干净
-      X0()              伪造MethodDesc：给CLR一个假方法
-      X1()              解析.lamapp：读seed、派生key、解表
-      EnsureDecoder()   按索引取解码器，LoadBare裸映射
-      X3()              解出主程序条目（XOR或按页解码）
-      W1()              注册依赖解析 + 写元数据
-      最后invoke        调主程序入口
 
 
   6.1 AppHost与hostfxr：exe是怎么启动的
@@ -367,7 +353,7 @@
       |       |-- AD()             多维反调试
       |       |-- X0()             伪造MethodDesc
       |       |-- X1()             解析.lamapp（seed -> key -> 表）
-      |       |-- EnsureDecoder()  按索引取解码器 -> LoadBare
+      |       |-- EnsureDecoder()  收段重组Iamdec -> LoadBare
       |       |-- X3()             解主程序（XOR / 按页Iamdec）
       |       |-- W1()             写元数据 + 注册Resolving
       |       -- invoke            主程序Main
@@ -387,8 +373,9 @@
     patch。反调试通过后置g_adFlag互锁标志（SetAntiDebugFlag），jithook在
     compileMethod入口校验该标志，patch掉AD即触发ud2自毁——AD与解密链绑死。
     另有条窗口枚举路径（WndScan）恒返回false，只在反调试判定里出现，
-    纯粹为了让逆向者误以为存在窗口级检测。它们同样拦不住高手，但把
-    "随手attach"、单步跟踪和"profiler分析"的代价都抬高了。
+    纯粹为了让逆向者误以为存在窗口级检测。
+    它们同样拦不住高手，但把"随手attach"、单步跟踪和"profiler分析"
+    的代价都抬高了。
 
 
   6.4 X0：伪造MethodDesc
@@ -407,9 +394,11 @@
 
   6.6 EnsureDecoder与LoadBare
 
-    EnsureDecoder按表索引取解码器条目，取出dll字节异或KSeed还原，LoadBare
-    映射进内存。解码器固定排在真条目末尾，索引在X1解析时就定了。LoadBare
-    之所以能这么"裸"，全靠Iamdec：无导入表、无重定位、最重要的是位置无关。
+    EnsureDecoder从主程序压缩流里收段重组Iamdec，LoadBare映射进内存。
+    解码器没有独立条目：打包时切成段混进压缩流，段表记在主程序条目头部，
+    运行时按表收集、按序拼接。段插在压缩流中段，等距加随机抖动，避开流头。
+    LoadBare之所以能这么"裸"，全靠Iamdec：无导入表、无重定位、最重要的是
+    位置无关。
     映射只需三步：
 
       - 读PE头，找.text / .rdata两个节
@@ -424,9 +413,11 @@
 
   6.7 X3：解出主程序
 
-    条目有三种形态：rawLen为0x7FFFFFFF是明文，直接取字节（依赖默认明文，
-    主程序始终压缩）；compLen等于rawLen是没压缩，直接XOR KSeed还原；
-    compLen小于rawLen是压缩，按4KB一页逐页调Iamdec。
+    条目有三种形态：rawLen为0x7FFFFFFF是明文，直接取字节（压缩关闭或命中
+    不压缩名单时明文，主程序始终压缩）；compLen等于rawLen是没压缩，直接XOR
+    KSeed还原；compLen小于rawLen是压缩，按4KB一页逐页调Iamdec。主程序条目
+    混有解码器段：解压前先按段表把它们摘掉，剩下才是压缩流。
+
     分页解码器接口固定：state（0x38字节工作区）、hist（0x80000字节历史窗）、
     page（0x1000字节输出页）、src（压缩源）。最后一页不足4KB按实际长度收尾。
     解出来是完整托管IL，但它还要依赖别的dll。
@@ -495,15 +486,16 @@
          sig = 查签名表(ftn)              //CRC32指纹
         if未命中:
             return原compileMethod(...)  //非加密方法放行
-        //方法体是密文，现场解密
+        //方法体是密文，现场两层解密
         分配临时缓冲（code size + EH区大小）
-        IL = 方法体字节XOR jit_key       //逐字节
+        还原uKey2 = 签名表高64 ^ mask    //变体v=(uKey2^jit_key)&3
+        IL = 方法体字节 ^ 流(uKey2, v)   //第二层，变体流+置换+CFB
+        IL = IL ^ 流(jit_key, v0)       //第一层，固定变体0
         拷贝EH表:
             if small:    拷1节
             if fat:      按more_sections整块拷
                           长度受dataSize上限保护
         解密后的方法体 + EH表交给JIT继续编译
-        计数器++                         //GetJitHookDecryptCount
 
 
   7.3 EH表：small与fat
@@ -544,14 +536,8 @@
   7.5 JIT编译生命周期
 
     CLR统计每个方法的调用次数，超过阈值就安排后台线程重新优化编译。多数人
-    以为方法只编译一次，实际上TieredCompilation会让一个方法被编译两遍：
-
-      Tier0  快速JIT：首调时不做优化直接编译，图启动快
-      Tier1  后台优化：方法变热后重新优化编译并替换机器码
-      OSR    栈上替换：长循环在Tier0栈帧上原地升级为Tier1版，触发一次额外
-              重编译
-
-    这对jithook的含义很直接：方法体解密可能被请求两次（Tier0一次、Tier1
+    以为方法只编译一次，实际上TieredCompilation会让一个方法被编译两遍
+    （Tier0快速JIT + Tier1后台优化，长循环还可能OSR）。这对jithook的含义很直接：方法体解密可能被请求两次（Tier0一次、Tier1
     一次）。解密必须是幂等的——每次从密文XOR，不能解过一次就标记"已解密"然后
     放明文，否则第二次编译读到的是已经损坏的中间态。
 
@@ -575,31 +561,26 @@
 
   7.6 MethodEncryptor打包侧
 
-     对主程序及-EncryptDeps指定的私有依赖：
+     对主程序及显式指定加密的依赖（SetEncryptDeps）：
       for每个方法:
           p = 方法体，从FatHeader开头
-          计算code size，含局部变量签名和EH区位置
-          方法体字节XOR jit_key          //磁盘写密文
-          记录CRC32(method)到签名表              //供jithook匹配
-    依赖默认只压缩不经jithook；私有依赖用-EncryptDeps显式指定加密进签名表。
-    签名表作为独立条目进lamapp，表项与0x9E3779B9异或后落盘，防dump直接匹配；
-    jit_key打包与运行时同一派生，即Fnv1a(SeedKey(seed))，seed在打包时提前生成、
-    运行时由X1还原，这样解密链闭环，难以从常量静态推导。
+          uKey2 = 随机64位                   //第二层密钥，每方法独立
+          v = (uKey2 ^ jit_key) & 3         //变体号2bit 第4种映射回v0
+          IL = 方法体字节 ^ 流(jit_key, v0)  //第一层，固定变体
+          IL = IL ^ 流(uKey2, v)            //第二层
+          记录crc2与uKey2到签名表            //每项16字节
+    主程序始终加密；依赖由SetEncryptDeps显式指定才加密；其余只压缩不经
+    jithook。不压缩名单优先：命中即跳过加密。签名表作为独立条目进lamapp，
+    表项异或mask后落盘，防dump直接匹配；jit_key打包与运行时同一派生，即
+    Fnv1a(SeedKey(seed))（32位），seed在打包时提前生成、运行时由X1还原，
+    解密链闭环，难以从常量静态推导。
 
     为什么用CRC32：它是"指纹"不是"密钥"。jithook在编译现场只有MethodDesc，
     用指纹快速判断"这个方法被加密过没有"——查表在解密之前，所以签名表可以
     公开存在bundle里。公开反而防篡改：攻击者删掉它，jithook就认为方法没
     加密，密文IL直接交JIT编译出垃圾，程序自崩。
 
-
-  7.7 诊断
-
-    GetJitHookDecryptCount返回解密次数，用来确认钩子真的工作：正常启动
-    跑一遍后计数应当大于0，且解密数量与打包时输出的一致
-    （encrypted N method bodies）。
-
-
-  7.8 调试器与JIT的交互
+  7.7 调试器与JIT的交互
 
     调试器也读IL：请求IL代码体（GetILCodeBody）、在方法下断点
     （patch IL）。这些请求走的是调试器的通道，不经过compileMethod的解密。
@@ -611,9 +592,9 @@
       InstallJitHook            改写JIT vtable
       SetJitHookKey             设置解密密钥
       AddPayloadSig             灌入CRC32签名表
-      GetJitHookDecryptCount    解密计数（诊断）
       VerifyJitHook             校验JIT vtable未被恢复
       SetAntiDebugFlag          反调试通过后置互锁标志
+      SetJitSlots               设置getMethodInfo/canInline槽位偏移
 
   崩溃码族
       0x02345678 / 0x80000003 / FailFast / AV -> 内联读密文，
@@ -663,8 +644,8 @@
        1. 示例项目普通publish（Packer=none）
        2. 编译LamarrNativePack（打包器）
        3. 编译BootAntheil（boot dll）
-       4. build_asm.ps1 -Packer antheil -Pack：一次调用完成4个stub
-           + jithook的编译，再调LamarrNativePack打包，替换产物
+       4. build_asm.ps1 -Packer antheil -Pack：一次调用完成stub编译 +
+           jithook + 打包，替换产物
 
 
   9.2 build_asm.ps1
@@ -681,11 +662,12 @@
       -Pack                是否继续调打包器
       -InputPath / -Output / -Boot / -Decoder / -JitHook / Pheropod
        / -Mode / -AppName / -PackerTfm / -CompressDeps / -EncryptDeps
-       / -RtcVersion
-       / -RtcTiered
+       / -NoCompressDeps / -RtcVersion / -RtcTiered
 
-      -EncryptDeps        逗号/分号分隔的私有依赖名，指定其方法体加密，
-                           走jithook；其余依赖只压缩不经jithook
+      -EncryptDeps        逗号/分号分隔的依赖名，强制其方法加密走jithook
+                           （主程序始终加密，依赖不指定则只压缩）
+      -NoCompressDeps     逗号/分号分隔的依赖名，压缩默认开时排除（明文存储）；
+                           同时指定加密则跳过加密
       -RtcVersion         runtimeconfig的framework版本（缺省5.0.0），
                            配LatestMajor后net5-10可解析到兼容版本
       -RtcTiered          runtimeconfig的TC处理：off（写false，
@@ -701,10 +683,10 @@
       1. LoadStub / LoadBoot / LoadDecoder / LoadJitHook /
           LoadPheropod / LoadPayload：读入各输入
       2. MakeSeed：生成随机seed，每次打包都不同
-      3. RebuildBundle：主程序换成BootAntheil，加密依赖方法体，组装条目
-          （解码器/钩子/签名表/蜜罐/诱饵）
+      3. RebuildBundle：主程序换成BootAntheil，加密方法体，
+                         组装条目，解码器切段混入主程序压缩流
       4. ComputeLayout：按节对齐重算布局
-      5. PatchStubVars：替换stub模板标记（##APPNAME##等），写bundle头偏移
+      5. PatchStubVars：替换stub模板标记，写bundle头偏移
       6. WriteFile：按布局写盘
 
     前文的时序图是它的"读镜像"——同一份布局，一端写、一端读。
@@ -712,11 +694,11 @@
 
   9.4 验证
 
-      GUI主流程          完整跑通X6读节 -> X1解析 -> 解码器 -> 
-                         jithook -> 主程序 
-      EhTestE            大EH表（11个catch），验证fat EH拷贝
-      EhTestS            单线程：基础链路
-      EhTestM            8线程并发：并发编译/解密稳定性
+      GUI主流程        完整跑通X6读节 -> X1解析 -> 解码器 -> 
+                       jithook -> 主程序 
+      EhTestE         大EH表（11个catch），验证fat EH拷贝
+      EhTestS         单线程：基础链路
+      EhTestM         8线程并发：并发编译/解密稳定性
 
 
   9.5 工具
@@ -737,7 +719,7 @@
   常见问题
       0x02345678 / FailFast  -> 内联读密文，canInline没装
       EH越界                 -> fat表漏拷
-      selftest非0            -> 解码器索引取错或key不一致
+      selftest非0            -> 解码器段错位或key不一致
       ml64找不到             -> 缺VS Build Tools
 
 
@@ -747,7 +729,7 @@
 
   10.1 攻击面
 
-      静态：bundle条目dump、.lamapp解析、Iamdec dll提取
+      静态：bundle条目dump、.lamapp解析、解码器段收集重组
       动态：内存dump（解密后IL）、attach、profiler注入、页错误捕获
       profiler注入已被环境变量检测封住；页错误捕获是OS层能力，无解。
 
@@ -769,7 +751,7 @@
           槽位偏移随版本漂移——已按版本表适配（SetJitSlots/ApplyJitSlots）
           ，未来的新coreclr仍需维护这张表；VerifyJitHook运行时校验
           vtable[0]仍指向钩子，被还原即FailFast
-      - 依赖默认只压缩不经jithook；若含私有依赖需要显式-EncryptDeps
+      - 主程序始终加密；依赖加密显式指定；其余依赖只压缩
       - 页错误捕获/内存密钥提取是OS层能力，连VM壳也没法完全防
       - jit_key依赖运行时seed，可它需要走完整解密链才能静态推导
 
