@@ -33,9 +33,9 @@ internal class PeWriter
     private long lOrigDepsLoc, lOrigRtcLoc;
     private readonly HashSet<string> rgStripDeps = new(StringComparer.OrdinalIgnoreCase);
     private string sRtcVersion = "5.0.0";
-    public void SetRtcVersion(string v) { sRtcVersion = v; }
+    public void SetRtcVersion(string sV) { sRtcVersion = sV; }
     private string sTiered = "default";
-    public void SetTiered(string m) { sTiered = m; }
+    public void SetTiered(string sM) { sTiered = sM; }
     private int iEntryCount;
     private int iEntryStart = -1;
     private int iNewDeps = -1, iNewRtc = -1;
@@ -500,25 +500,25 @@ internal class PeWriter
         long lTotalOrig = 0, lTotalComp = 0;
         for (int i = 0; i < rgNames.Count; i++)
         {
-            uint cbCap = LamarrEncoder.GetMaxEncodedSize((uint)rgData[i].Length);
-            byte[] rgComp = new byte[cbCap];
-            uint pcb = cbCap;
-            if (LamarrEncoder.Encode(rgComp, ref pcb, rgData[i], (uint)rgData[i].Length) != 0)
+            uint uCap = LamarrEncoder.GetMaxEncodedSize((uint)rgData[i].Length);
+            byte[] rgComp = new byte[uCap];
+            uint uPcb = uCap;
+            if (LamarrEncoder.Encode(rgComp, ref uPcb, rgData[i], (uint)rgData[i].Length) != 0)
                 throw new InvalidOperationException("Lamarr encode failed (lamapp entry)");
             rgCompOff[i] = ms.Position;
-            rgCompLen[i] = pcb;
-            ms.Write(rgComp, 0, (int)pcb);
+            rgCompLen[i] = uPcb;
+            ms.Write(rgComp, 0, (int)uPcb);
             lTotalOrig += rgData[i].Length;
-            lTotalComp += pcb;
+            lTotalComp += uPcb;
         }
         byte[] rgBuf = ms.GetBuffer();
         for (int i = 0; i < rgNames.Count; i++)
         {
-            int o = (int)(lTable + i * 20);
-            BitConverter.GetBytes(rgNameLen[i]).CopyTo(rgBuf, o);
-            BitConverter.GetBytes((uint)rgData[i].Length).CopyTo(rgBuf, o + 4);
-            BitConverter.GetBytes((uint)rgCompLen[i]).CopyTo(rgBuf, o + 8);
-            BitConverter.GetBytes((uint)rgCompOff[i]).CopyTo(rgBuf, o + 12);
+            int iO = (int)(lTable + i * 20);
+            BitConverter.GetBytes(rgNameLen[i]).CopyTo(rgBuf, iO);
+            BitConverter.GetBytes((uint)rgData[i].Length).CopyTo(rgBuf, iO + 4);
+            BitConverter.GetBytes((uint)rgCompLen[i]).CopyTo(rgBuf, iO + 8);
+            BitConverter.GetBytes((uint)rgCompOff[i]).CopyTo(rgBuf, iO + 12);
         }
         BitConverter.GetBytes((uint)lTotalOrig).CopyTo(rgBuf, lSizePos);
         BitConverter.GetBytes((uint)lTotalComp).CopyTo(rgBuf, lSizePos + 4);

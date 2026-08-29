@@ -136,7 +136,7 @@ if ($Pack)
     if ($Pheropod) { $PACK_ARGS += @('--pheropod', $Pheropod) }
     if ($Mode)    { $PACK_ARGS += @('--mode', $Mode) }
     if ($RtcVersion) { $PACK_ARGS += @('--rtc-version', $RtcVersion) }
-if ($RtcTiered) { $PACK_ARGS += @('--rtc-tiered', $RtcTiered) }
+    if ($RtcTiered) { $PACK_ARGS += @('--rtc-tiered', $RtcTiered) }
 
     $RETRY_LOG = Join-Path $env:TEMP 'lamarr_pack_retry.log'
     $EXIT_CODE = 1

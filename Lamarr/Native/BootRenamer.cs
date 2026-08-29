@@ -12,11 +12,20 @@ public static class BootRenamer
     private static readonly char[] rgFirst = "abcdefghijklmnopqrstuvwxyz".ToCharArray();
     private static readonly char[] rgChar = "abcdefghijklmnopqrstuvwxyz123456789".ToCharArray();
     private static readonly Random rnd = new Random();
-    private static readonly string[] rgSelfCheck = { "TCheck", "CheckElapsed", "VerifyBodies" };
+    private static readonly string[][] rgPairs = {
+        new[] { "SelfCheck", "VerifyBodies" },
+        new[] { "CheckElapsed", "TCheck" },
+    };
 
     public static byte[] Rename(byte[] rgD, string sDictPath = "")
     {
         var rgDict = LoadDict(sDictPath);
+        var rgDictNames = new HashSet<string>();
+        foreach (var pr in rgPairs)
+        {
+            bool bFirst = rnd.Next(2) == 0;
+            rgDictNames.Add(bFirst ? pr[0] : pr[1]);
+        }
         uint uLfa = BitConverter.ToUInt32(rgD, 0x3C);
         int iPe = (int)uLfa;
         if (iPe <= 0 || iPe + 0x60 >= rgD.Length || BitConverter.ToUInt32(rgD, iPe) != 0x4550)
@@ -122,57 +131,57 @@ public static class BootRenamer
         //共享偏移只处理一次
         var rgSeen = new HashSet<int>();
         var rgList = new List<int>();
-        foreach (int c in rgCand) if (rgSeen.Add(c)) rgList.Add(c);
+        foreach (int iC in rgCand) if (rgSeen.Add(iC)) rgList.Add(iC);
 
         //覆盖前量取长度
         var rgAll = new Dictionary<int, int>();
-        foreach (int p in rgProt) if (!rgAll.ContainsKey(p)) rgAll[p] = StrLen(rgD, iHeap, p);
-        foreach (int c in rgList) if (!rgAll.ContainsKey(c)) rgAll[c] = StrLen(rgD, iHeap, c);
+        foreach (int iP in rgProt) if (!rgAll.ContainsKey(iP)) rgAll[iP] = StrLen(rgD, iHeap, iP);
+        foreach (int iC in rgList) if (!rgAll.ContainsKey(iC)) rgAll[iC] = StrLen(rgD, iHeap, iC);
 
         //#Strings后缀共享 与保护串冲突者保留 与候选冲突者按分量紧凑覆盖
         var rgSkip = new HashSet<int>();
         var rgL = new List<int>(rgList);
         rgL.Sort();
-        foreach (int x in rgL)
+        foreach (int iX in rgL)
         {
-            int lx = rgAll[x];
+            int iXLen = rgAll[iX];
             foreach (var kv in rgAll)
             {
-                int y = kv.Key;
-                if (y == x || !rgProt.Contains(y)) continue;
-                int ly = kv.Value;
-                if ((y < x && x < y + ly) || (x < y && y < x + lx)) { rgSkip.Add(x); break; }
+                int iY = kv.Key;
+                if (iY == iX || !rgProt.Contains(iY)) continue;
+                int iYLen = kv.Value;
+                if ((iY < iX && iX < iY + iYLen) || (iX < iY && iY < iX + iXLen)) { rgSkip.Add(iX); break; }
             }
         }
         var rgGrp = new List<List<int>>();
         for (int gi = 0; gi < rgL.Count; gi++)
         {
-            int x = rgL[gi];
-            if (rgSkip.Contains(x)) continue;
-            var g = new List<int> { x };
-            int gEnd = x + rgAll[x];
+            int iX = rgL[gi];
+            if (rgSkip.Contains(iX)) continue;
+            var rgGroup = new List<int> { iX };
+            int iGEnd = iX + rgAll[iX];
             for (int gj = gi + 1; gj < rgL.Count; gj++)
             {
-                int y = rgL[gj];
-                if (rgSkip.Contains(y) || y >= gEnd) break;
-                g.Add(y);
-                gEnd = Math.Max(gEnd, y + rgAll[y]);
+                int iY = rgL[gj];
+                if (rgSkip.Contains(iY) || iY >= iGEnd) break;
+                rgGroup.Add(iY);
+                iGEnd = Math.Max(iGEnd, iY + rgAll[iY]);
                 gi = gj;
             }
-            rgGrp.Add(g);
+            rgGrp.Add(rgGroup);
         }
         var rgUsed = new HashSet<string>();
-        foreach (var g in rgGrp)
+        foreach (var rgG in rgGrp)
         {
-            int iBound = g[g.Count - 1] + rgAll[g[g.Count - 1]];
-            for (int gi = g.Count - 1; gi >= 0; gi--)
+            int iBound = rgG[rgG.Count - 1] + rgAll[rgG[rgG.Count - 1]];
+            for (int gi = rgG.Count - 1; gi >= 0; gi--)
             {
-                int iOff = g[gi];
+                int iOff = rgG[gi];
                 int iLen = rgAll[iOff];
                 int iMax = iBound - iOff;
                 if (iMax < 2) continue;
                 string sOld = Encoding.ASCII.GetString(rgD, iHeap + iOff, Math.Min(iLen, 64)).TrimEnd('\0');
-                string sNew = (rgDict.Length > 0 && Array.IndexOf(rgSelfCheck, sOld) >= 0)
+                string sNew = (rgDict.Length > 0 && rgDictNames.Contains(sOld))
                     ? PickDict(rgDict, rgUsed) : MakeName(Math.Min(iLen, iMax), rgUsed);
                 byte[] rgB = Encoding.ASCII.GetBytes(sNew);
                 if (rgB.Length + 1 > iMax)
@@ -195,10 +204,10 @@ public static class BootRenamer
         try
         {
             var rg = new List<string>();
-            foreach (var l in File.ReadAllLines(sPath))
+            foreach (var sLine in File.ReadAllLines(sPath))
             {
-                string t = l.Trim();
-                if (t.Length > 0 && !t.StartsWith('#')) rg.Add(t);
+                string sT = sLine.Trim();
+                if (sT.Length > 0 && !sT.StartsWith('#')) rg.Add(sT);
             }
             return rg.ToArray();
         }
@@ -207,11 +216,11 @@ public static class BootRenamer
 
     private static string PickDict(string[] rgDict, HashSet<string> rgUsed)
     {
-        int n = rgDict.Length;
-        int st = rnd.Next(n);
-        for (int t = 0; t < n; t++)
+        int iN = rgDict.Length;
+        int iSt = rnd.Next(iN);
+        for (int iT = 0; iT < iN; iT++)
         {
-            string s = rgDict[(st + t) % n].Trim();
+            string s = rgDict[(iSt + iT) % iN].Trim();
             if (s.Length > 0 && rgUsed.Add(s)) return s;
         }
         return MakeName(2, rgUsed);
@@ -227,13 +236,13 @@ public static class BootRenamer
     private static string MakeName(int iMaxLen, HashSet<string> rgUsed)
     {
         int iL = Math.Min(iMaxLen, 2);
-        for (int l = iL; l >= 1; l--)//单字符名留给真正的短名
+        for (int iLen = iL; iLen >= 1; iLen--)//单字符名留给真正的短名
         {
-            for (int t = 0; t < 4000; t++)
+            for (int iT = 0; iT < 4000; iT++)
             {
-                var sb = new StringBuilder(l);
+                var sb = new StringBuilder(iLen);
                 sb.Append(rgFirst[rnd.Next(rgFirst.Length)]);//数字开头名触发TypeLoadException
-                for (int k = 1; k < l; k++) sb.Append(rgChar[rnd.Next(rgChar.Length)]);
+                for (int iK = 1; iK < iLen; iK++) sb.Append(rgChar[rnd.Next(rgChar.Length)]);
                 string s = sb.ToString();
                 if (rgUsed.Add(s)) return s;
             }

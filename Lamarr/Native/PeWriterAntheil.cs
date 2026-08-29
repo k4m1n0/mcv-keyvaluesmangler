@@ -38,9 +38,9 @@ internal class PeWriterAntheil
     private int iEntryCount;
     private readonly HashSet<string> rgStripDeps = new(StringComparer.OrdinalIgnoreCase);
     private string sRtcVersion = "5.0.0";
-    public void SetRtcVersion(string v) { sRtcVersion = v; }
+    public void SetRtcVersion(string sV) { sRtcVersion = sV; }
     private string sTiered = "off";
-    public void SetTiered(string m) { sTiered = m; }
+    public void SetTiered(string sM) { sTiered = sM; }
 
     private byte[] rgBoot = null!;
     private List<(ulong Hi, ulong Lo)> rgBootCrcs = new();
@@ -100,12 +100,12 @@ internal class PeWriterAntheil
         rgPheropod = File.ReadAllBytes(sPath);
     }
 
-    public void SetCompressDeps(bool b) => _bCompressDeps = b;
+    public void SetCompressDeps(bool b) => bCompressDeps = b;
     private string sDecoderPath = "";
     private string sMethodDictPath = "";
-    private bool _bCompressDeps = true;
+    private bool bCompressDeps = true;
 
-    private readonly HashSet<string> _encryptDeps = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> rgEncryptDeps = new(StringComparer.OrdinalIgnoreCase);
     //私有依赖显式指定加密走jithook 其余依赖只压缩
     public void SetMethodDict(string sPath) => sMethodDictPath = sPath;
 
@@ -115,12 +115,12 @@ internal class PeWriterAntheil
         {
             var sName = sPart.Trim();
             if (sName.Length == 0) continue;
-            _encryptDeps.Add(sName);
-            _encryptDeps.Add(sName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? sName[..^4] : sName + ".dll");
+            rgEncryptDeps.Add(sName);
+            rgEncryptDeps.Add(sName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? sName[..^4] : sName + ".dll");
         }
     }
 
-    private readonly HashSet<string> _noCompressDeps = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> rgNoCompressDeps = new(StringComparer.OrdinalIgnoreCase);
     //显式指定不压缩的依赖 明文存储
     public void SetNoCompressDeps(string s)
     {
@@ -128,8 +128,8 @@ internal class PeWriterAntheil
         {
             var sName = sPart.Trim();
             if (sName.Length == 0) continue;
-            _noCompressDeps.Add(sName);
-            _noCompressDeps.Add(sName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? sName[..^4] : sName + ".dll");
+            rgNoCompressDeps.Add(sName);
+            rgNoCompressDeps.Add(sName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? sName[..^4] : sName + ".dll");
         }
     }
 
@@ -219,10 +219,10 @@ internal class PeWriterAntheil
         var rnd5 = new Random(Environment.TickCount ^ (int)DateTime.UtcNow.Ticks);
         for (int i = 0; i < rgPairs.Length; i += 2)
         {
-            uint tA = fldMap[rgPairs[i]], tB = fldMap[rgPairs[i + 1]];
-            uint real = rgVal[tA] ^ rgVal[tB];
-            uint a2 = (uint)rnd5.Next() | ((uint)rnd5.Next() << 16);
-            rgNew[tA] = a2; rgNew[tB] = a2 ^ real;
+            uint uTokA = fldMap[rgPairs[i]], uTokB = fldMap[rgPairs[i + 1]];
+            uint uReal = rgVal[uTokA] ^ rgVal[uTokB];
+            uint uA2 = (uint)rnd5.Next() | ((uint)rnd5.Next() << 16);
+            rgNew[uTokA] = uA2; rgNew[uTokB] = uA2 ^ uReal;
         }
         WriteCctorValues(rgBoot, uCctor, rgNew);
     }
@@ -246,7 +246,7 @@ internal class PeWriterAntheil
     //常量对随机化：改名前按原名收集字段token
     private static Dictionary<string, uint> FieldTokens(byte[] rgD, string[] rgNames)
     {
-        var map = new Dictionary<string, uint>(StringComparer.Ordinal);
+        var rgMap = new Dictionary<string, uint>(StringComparer.Ordinal);
         using var ms = new MemoryStream(rgD, writable: false);
         using var per = new PEReader(ms);
         var mr = per.GetMetadataReader();
@@ -254,9 +254,9 @@ internal class PeWriterAntheil
         {
             var fd = mr.GetFieldDefinition(h);
             string s = mr.GetString(fd.Name);
-            if (Array.IndexOf(rgNames, s) >= 0) map[s] = (uint)MetadataTokens.GetToken(h);
+            if (Array.IndexOf(rgNames, s) >= 0) rgMap[s] = (uint)MetadataTokens.GetToken(h);
         }
-        return map;
+        return rgMap;
     }
 
     private static void ReadCctorValues(byte[] rgD, Dictionary<uint, uint> rgVal, out uint uCctor)
@@ -272,15 +272,15 @@ internal class PeWriterAntheil
             uCctor = (uint)MetadataTokens.GetToken(h);
             var mrb = per.GetMethodBody(md.RelativeVirtualAddress);
             if (mrb == null) continue;
-            byte[] il = mrb.GetILBytes();
-            for (int p = 0; p + 5 < il.Length; p++)
+            byte[] rgIlBytes = mrb.GetILBytes();
+            for (int iP = 0; iP + 5 < rgIlBytes.Length; iP++)
             {
-                if (il[p] != 0x7D) continue;
-                uint tok = BitConverter.ToUInt32(il, p + 1);
-                if (!rgVal.ContainsKey(tok)) continue;
-                if (p >= 5 && il[p - 5] == 0x20) rgVal[tok] = BitConverter.ToUInt32(il, p - 4);
-                else if (p >= 2 && il[p - 2] == 0x1F) rgVal[tok] = (uint)(sbyte)il[p - 1];
-                else if (p >= 1 && il[p - 1] >= 0x16 && il[p - 1] <= 0x1E) rgVal[tok] = (uint)(il[p - 1] - 0x16);
+                if (rgIlBytes[iP] != 0x7D) continue;
+                uint uTok = BitConverter.ToUInt32(rgIlBytes, iP + 1);
+                if (!rgVal.ContainsKey(uTok)) continue;
+                if (iP >= 5 && rgIlBytes[iP - 5] == 0x20) rgVal[uTok] = BitConverter.ToUInt32(rgIlBytes, iP - 4);
+                else if (iP >= 2 && rgIlBytes[iP - 2] == 0x1F) rgVal[uTok] = (uint)(sbyte)rgIlBytes[iP - 1];
+                else if (iP >= 1 && rgIlBytes[iP - 1] >= 0x16 && rgIlBytes[iP - 1] <= 0x1E) rgVal[uTok] = (uint)(rgIlBytes[iP - 1] - 0x16);
             }
         }
     }
@@ -300,20 +300,20 @@ internal class PeWriterAntheil
             int iRva = md.RelativeVirtualAddress;
             var mrb = per.GetMethodBody(iRva);
             if (mrb == null) continue;
-            byte[] il = mrb.GetILBytes();
+            byte[] rgIlBytes = mrb.GetILBytes();
             bool bChanged = false;
-            for (int p = 0; p + 5 < il.Length; p++)
+            for (int iP = 0; iP + 5 < rgIlBytes.Length; iP++)
             {
-                if (il[p] != 0x7D) continue;
-                uint tok = BitConverter.ToUInt32(il, p + 1);
-                if (!rgNew.TryGetValue(tok, out uint v)) continue;
-                if (p >= 5 && il[p - 5] == 0x20) { BitConverter.GetBytes(v).CopyTo(il, p - 4); bChanged = true; }
+                if (rgIlBytes[iP] != 0x7D) continue;
+                uint uTok = BitConverter.ToUInt32(rgIlBytes, iP + 1);
+                if (!rgNew.TryGetValue(uTok, out uint uV)) continue;
+                if (iP >= 5 && rgIlBytes[iP - 5] == 0x20) { BitConverter.GetBytes(uV).CopyTo(rgIlBytes, iP - 4); bChanged = true; }
             }
             if (!bChanged) continue;
             int iOff = RvaToOffset(rgD, iPe, usOptSize, usNumSec, (uint)iRva);
             if (iOff < 0) continue;
             int iHdr = (rgD[iOff] & 3) == 2 ? 1 : 12;
-            Array.Copy(il, 0, rgD, iOff + iHdr, il.Length);
+            Array.Copy(rgIlBytes, 0, rgD, iOff + iHdr, rgIlBytes.Length);
         }
     }
 
@@ -465,29 +465,29 @@ internal class PeWriterAntheil
             throw new InvalidOperationException($"Bundle main assembly '{sMainName}' not found. Input: '{sPayloadPath}'");
 
         //区分条目 主程序/boot保留 托管dll剥离 其余进新bundle
-        var keepIdx = new List<int>();
-        var depIdx = new List<int>();
+        var rgKeepIdx = new List<int>();
+        var rgDepIdx = new List<int>();
         rgStripDeps.Clear();
         for (int i = 0; i < iN && i < 0x1000; i++)
         {
-            if (i == iMainEntry) { keepIdx.Add(i); continue; }
+            if (i == iMainEntry) { rgKeepIdx.Add(i); continue; }
             if (rgName[i].EndsWith(".dll", StringComparison.OrdinalIgnoreCase) &&
                 IsManagedDll(i, rgRel, rgSz, rgCsz))
             {
-                depIdx.Add(i);
+                rgDepIdx.Add(i);
                 rgStripDeps.Add(rgName[i].Substring(0, rgName[i].Length - 4));
             }
             else
             {
-                keepIdx.Add(i);
+                rgKeepIdx.Add(i);
             }
         }
 
-        BuildLamApp(rgRel, rgSz, rgCsz, rgName, depIdx, sSeed);
+        BuildLamApp(rgRel, rgSz, rgCsz, rgName, rgDepIdx, sSeed);
 
         //重算布局 重建bundle数据与头部
         ComputeBundleStart();
-        BuildBundleDataAndHeader(uMajor, sBundleId, keepIdx, rgRel, rgSz, rgCsz, rgType, rgName,
+        BuildBundleDataAndHeader(uMajor, sBundleId, rgKeepIdx, rgRel, rgSz, rgCsz, rgType, rgName,
                                  lDepsSz, lRtcSz, lRtcHash);
     }
 
@@ -496,34 +496,34 @@ internal class PeWriterAntheil
     {
         int iL = rgComp0.Length;
         const int iSeg = 0x80;
-        int nSeg = (rgDecoder.Length + iSeg - 1) / iSeg;
-        int iTable = 8 + nSeg * 8;
+        int iSegCnt = (rgDecoder.Length + iSeg - 1) / iSeg;
+        int iTable = 8 + iSegCnt * 8;
         byte[] rgOut = new byte[iTable + iL + rgDecoder.Length];
-        BitConverter.GetBytes(nSeg).CopyTo(rgOut, 0);
+        BitConverter.GetBytes(iSegCnt).CopyTo(rgOut, 0);
         BitConverter.GetBytes(iSeg).CopyTo(rgOut, 4);
         int iKeep = Math.Min(0x20, iL); //避开流头
-        int iSpan = Math.Max(1, (iL - iKeep) / nSeg);//等距间距
+        int iSpan = Math.Max(1, (iL - iKeep) / iSegCnt);//等距间距
         int iSrc = 0, iOut = iTable;
         var rngJ = new Random(Environment.TickCount ^ (int)DateTime.UtcNow.Ticks);
-        for (int j = 0; j < nSeg; j++)
+        for (int j = 0; j < iSegCnt; j++)
         {
             int iCut = iKeep + j * iSpan;
             if (iSpan > iSeg + 8) iCut += rngJ.Next(-8, 9);//抖动
             iCut = Math.Min(iL, Math.Max(iSrc, iCut));//单调且不越界
-            int nCp = iCut - iSrc;
-            if (nCp > 0) Array.Copy(rgComp0, iSrc, rgOut, iOut, nCp);
-            iOut += nCp; iSrc = iCut;
+            int iCpLen = iCut - iSrc;
+            if (iCpLen > 0) Array.Copy(rgComp0, iSrc, rgOut, iOut, iCpLen);
+            iOut += iCpLen; iSrc = iCut;
             int iSegLen = Math.Min(iSeg, rgDecoder.Length - j * iSeg);
             int iSegOff = iOut - iTable;//段在数据区偏移
             Array.Copy(rgDecoder, j * iSeg, rgOut, iOut, iSegLen);
-            for (int b = 0; b < iSegLen / 2; b++) (rgOut[iOut+b], rgOut[iOut+iSegLen-1-b]) = (rgOut[iOut+iSegLen-1-b], rgOut[iOut+b]);
+            for (int iR = 0; iR < iSegLen / 2; iR++) (rgOut[iOut + iR], rgOut[iOut + iSegLen - 1 - iR]) = (rgOut[iOut + iSegLen - 1 - iR], rgOut[iOut + iR]);
             iOut += iSegLen;
             BitConverter.GetBytes(iSegOff).CopyTo(rgOut, 8 + j * 8);
             BitConverter.GetBytes(iSegLen).CopyTo(rgOut, 12 + j * 8);
         }
-        int nTail = iL - iSrc;
-        if (nTail > 0) Array.Copy(rgComp0, iSrc, rgOut, iOut, nTail);
-        iOut += nTail;
+        int iTail = iL - iSrc;
+        if (iTail > 0) Array.Copy(rgComp0, iSrc, rgOut, iOut, iTail);
+        iOut += iTail;
         if (iOut < rgOut.Length)
         {
             byte[] rgT = new byte[iOut];
@@ -563,7 +563,7 @@ internal class PeWriterAntheil
             //主程序始终加密 依赖SetEncryptDeps显式指定才加密 不压缩名单优先
             for (int i = 0; i < rgRaw.Count - 1; i++)
             {
-                if (i > 0 && (!_encryptDeps.Contains(rgNames[i]) || _noCompressDeps.Contains(rgNames[i]))) continue;
+                if (i > 0 && (!rgEncryptDeps.Contains(rgNames[i]) || rgNoCompressDeps.Contains(rgNames[i]))) continue;
                 var rgCrcs = MethodEncryptor.EncryptAll(rgRaw[i], uJitKey);
                 rgAllCrcs.AddRange(rgCrcs);
                 iNEncMethods += rgCrcs.Count;
@@ -651,31 +651,31 @@ internal class PeWriterAntheil
                 rgCompLen[i] = rgRawLen[i];
                 rgBlocks[i] = XorBytes(rgRaw[i], rgSeedKey, uAdj);
             }
-            else if (i > 0 && (!_bCompressDeps || _noCompressDeps.Contains(rgNames[i])))
+            else if (i > 0 && (!bCompressDeps || rgNoCompressDeps.Contains(rgNames[i])))
             {
                 rgCompLen[i] = rgRawLen[i];//明文存储(关闭压缩或排除名单)
                 rgBlocks[i] = rgRaw[i];
             }
             else
             {
-                uint cbCap = LamarrEncoder.GetMaxEncodedSize(rgRawLen[i]);
-                rgBlocks[i] = new byte[cbCap];
-                uint pcb = cbCap;
-                if (LamarrEncoder.Encode(rgBlocks[i], ref pcb, rgRaw[i], rgRawLen[i]) != 0)
+                uint uCap = LamarrEncoder.GetMaxEncodedSize(rgRawLen[i]);
+                rgBlocks[i] = new byte[uCap];
+                uint uPcb = uCap;
+                if (LamarrEncoder.Encode(rgBlocks[i], ref uPcb, rgRaw[i], rgRawLen[i]) != 0)
                     throw new InvalidOperationException($"Lamarr encode failed: {rgNames[i]}");
-                rgCompLen[i] = pcb;
+                rgCompLen[i] = uPcb;
                 if (i == 0 && rgDecoder.Length > 0)
                 {
                     //主程序压缩流混入解码器段
-                    byte[] rgBlk = new byte[pcb];
-                    Array.Copy(rgBlocks[i], 0, rgBlk, 0, pcb);
+                    byte[] rgBlk = new byte[uPcb];
+                    Array.Copy(rgBlocks[i], 0, rgBlk, 0, uPcb);
                     rgBlocks[i] = MergeDecoderIntoMain(rgBlk);
                     rgCompLen[i] = (uint)rgBlocks[i].Length;
                 }
             }
         }
 
-        var rgPhys = new List<(int Kind, int Idx)>();
+        var rgPhys = new List<(int iKind, int iIdx)>();
         var rgOrder = Enumerable.Range(0, iCount).OrderBy(_ => rng.Next()).ToArray();
         for (int i = 0; i < rgOrder.Length; i++)
         {
@@ -693,11 +693,11 @@ internal class PeWriterAntheil
 
         var rgGarbage = new List<int>();
         uint uDataOff = 0;
-        foreach (var (kind, idx) in rgPhys)
+        foreach (var (iKind, iIdx) in rgPhys)
         {
-            if (kind == 0) { rgCompOff[idx] = uDataOff; uDataOff += rgCompLen[idx]; }
-            else if (kind == 1) { rgDecoyOff[idx] = uDataOff; uDataOff += (uint)rgDecData[idx].Length; }
-            else { int sz = rng.Next(32, 257); rgGarbage.Add(sz); uDataOff += (uint)sz; }
+            if (iKind == 0) { rgCompOff[iIdx] = uDataOff; uDataOff += rgCompLen[iIdx]; }
+            else if (iKind == 1) { rgDecoyOff[iIdx] = uDataOff; uDataOff += (uint)rgDecData[iIdx].Length; }
+            else { int iSz = rng.Next(32, 257); rgGarbage.Add(iSz); uDataOff += (uint)iSz; }
         }
 
         uint uKey = LamKey(sSeed);
@@ -743,7 +743,7 @@ internal class PeWriterAntheil
             uint[] rgF = new uint[4];
             if (i < iCount)
             {
-                bool bPlain = i > 0 && i != iDecIdx && i != iJitIdx && i != iSigIdx && i != iPheropodIdx && (!_bCompressDeps || _noCompressDeps.Contains(rgNames[i]));
+                bool bPlain = i > 0 && i != iDecIdx && i != iJitIdx && i != iSigIdx && i != iPheropodIdx && (!bCompressDeps || rgNoCompressDeps.Contains(rgNames[i]));
                 rgF[0] = (uint)rgNameBytes[i].Length;
                 rgF[1] = bPlain ? 0x7FFFFFFFu : rgRawLen[i];
                 rgF[2] = bPlain ? rgRawLen[i] : rgCompLen[i];
@@ -771,17 +771,17 @@ internal class PeWriterAntheil
 
         int iDataBase = iTbl + (iCount + iDecoys) * 20 + (int)uNameAreaLen;
         uint uPos = 0; int iG = 0;
-        foreach (var (kind, idx) in rgPhys)
+        foreach (var (iKind, iIdx) in rgPhys)
         {
-            if (kind == 0)
+            if (iKind == 0)
             {
-                Array.Copy(rgBlocks[idx], 0, rgLamApp, (int)(iDataBase + uPos), rgCompLen[idx]);
-                uPos += rgCompLen[idx];
+                Array.Copy(rgBlocks[iIdx], 0, rgLamApp, (int)(iDataBase + uPos), rgCompLen[iIdx]);
+                uPos += rgCompLen[iIdx];
             }
-            else if (kind == 1)
+            else if (iKind == 1)
             {
-                Array.Copy(rgDecData[idx], 0, rgLamApp, (int)(iDataBase + uPos), rgDecData[idx].Length);
-                uPos += (uint)rgDecData[idx].Length;
+                Array.Copy(rgDecData[iIdx], 0, rgLamApp, (int)(iDataBase + uPos), rgDecData[iIdx].Length);
+                uPos += (uint)rgDecData[iIdx].Length;
             }
             else
             {
@@ -820,16 +820,16 @@ internal class PeWriterAntheil
         return rgB;
     }
 
-    private static byte[] GenRandomX64(Random rng, int cbMin, int cbMax)
+    private static byte[] GenRandomX64(Random rng, int iCbMin, int iCbMax)
     {
-        int cbTarget = rng.Next(cbMin, cbMax);
+        int iCbTarget = rng.Next(iCbMin, iCbMax);
         using var ms = new MemoryStream();
         if (rng.Next(4) == 0)
         {
             ms.Write(new byte[] { 0x55, 0x48, 0x8B, 0xEC }, 0, 4);//push rbp; mov rbp,rsp
-            cbTarget += 4;
+            iCbTarget += 4;
         }
-        while (ms.Length < cbTarget)
+        while (ms.Length < iCbTarget)
         {
             byte[] rgInsn = X64Insn(rng);
             ms.Write(rgInsn, 0, rgInsn.Length);
@@ -905,19 +905,19 @@ internal class PeWriterAntheil
 
     private static byte[] IlToPpc(Random rng, byte bOp)
     {
-        int rD = PpcReg(rng), rA = PpcReg(rng), rB = PpcReg(rng);
+        int iRD = PpcReg(rng), iRA = PpcReg(rng), iRB = PpcReg(rng);
         uint u;
         switch (bOp)
         {
             case 0x00: return PpcWord(24u << 26);                               //nop = ori r0,r0,0
             case 0x02: case 0x03: case 0x04: case 0x05:                         //ldarg.N -> lwz rD, 8+4N(r1)
-                return PpcWord((32u << 26) | ((uint)rD << 21) | (1u << 16) | (uint)(8 + 4 * (bOp - 0x02)));
+                return PpcWord((32u << 26) | ((uint)iRD << 21) | (1u << 16) | (uint)(8 + 4 * (bOp - 0x02)));
             case 0x06: case 0x07: case 0x08: case 0x09:                         //ldloc.N -> lwz rD, -(8+4N)(r1)
-                return PpcWord((32u << 26) | ((uint)rD << 21) | (1u << 16) | (uint)(-(8 + 4 * (bOp - 0x06)) & 0xFFFF));
+                return PpcWord((32u << 26) | ((uint)iRD << 21) | (1u << 16) | (uint)(-(8 + 4 * (bOp - 0x06)) & 0xFFFF));
             case 0x0A: case 0x0B: case 0x0C: case 0x0D:                         //stloc.N -> stw rD, -(8+4N)(r1)
-                return PpcWord((36u << 26) | ((uint)rD << 21) | (1u << 16) | (uint)(-(8 + 4 * (bOp - 0x0A)) & 0xFFFF));
+                return PpcWord((36u << 26) | ((uint)iRD << 21) | (1u << 16) | (uint)(-(8 + 4 * (bOp - 0x0A)) & 0xFFFF));
             case 0x16: case 0x17: case 0x18: case 0x19: case 0x1A: case 0x1B: case 0x1C: case 0x1D: case 0x1E://ldc.i4.N -> li rD,N
-                return PpcWord((14u << 26) | ((uint)rD << 21) | (uint)(bOp - 0x16));
+                return PpcWord((14u << 26) | ((uint)iRD << 21) | (uint)(bOp - 0x16));
             case 0x28: return PpcWord((18u << 26) | 1u);                        //call -> bl +0
             case 0x58: u = 266u; break;                                         //add
             case 0x59: u = 40u; break;                                          //sub -> subf
@@ -928,22 +928,22 @@ internal class PeWriterAntheil
             case 0x61: u = 316u; break;                                         //xor
             case 0x62: u = 24u; break;                                          //shl -> slw
             case 0x63: u = 536u; break;                                         //shr -> srw
-            case 0x65: return PpcWord((31u << 26) | ((uint)rD << 21) | ((uint)rA << 16) | (104u << 1));//neg rD,rA
-            case 0x66: return PpcWord((31u << 26) | ((uint)rD << 21) | ((uint)rB << 16) | ((uint)rB << 11) | (124u << 1));//not -> nor rD,rB,rB
+            case 0x65: return PpcWord((31u << 26) | ((uint)iRD << 21) | ((uint)iRA << 16) | (104u << 1));//neg rD,rA
+            case 0x66: return PpcWord((31u << 26) | ((uint)iRD << 21) | ((uint)iRB << 16) | ((uint)iRB << 11) | (124u << 1));//not -> nor rD,rB,rB
             case 0x2A: return PpcWord((19u << 26) | (20u << 21) | (16u << 1));  //ret -> blr
-            case 0x2C: return PpcConcat(PpcWord((11u << 26) | ((uint)rA << 16)), PpcWord((16u << 26) | (12u << 21) | (2u << 16)));//brfalse -> cmpwi rA,0; beq +0
-            case 0x2D: return PpcConcat(PpcWord((11u << 26) | ((uint)rA << 16)), PpcWord((16u << 26) | (4u << 21) | (2u << 16)));//brtrue -> cmpwi rA,0; bne +0
+            case 0x2C: return PpcConcat(PpcWord((11u << 26) | ((uint)iRA << 16)), PpcWord((16u << 26) | (12u << 21) | (2u << 16)));//brfalse -> cmpwi rA,0; beq +0
+            case 0x2D: return PpcConcat(PpcWord((11u << 26) | ((uint)iRA << 16)), PpcWord((16u << 26) | (4u << 21) | (2u << 16)));//brtrue -> cmpwi rA,0; bne +0
             default: return PpcWord(24u << 26);
         }
-        return PpcWord((31u << 26) | ((uint)rD << 21) | ((uint)rA << 16) | ((uint)rB << 11) | (u << 1));//算术通用
+        return PpcWord((31u << 26) | ((uint)iRD << 21) | ((uint)iRA << 16) | ((uint)iRB << 11) | (u << 1));//算术通用
     }
 
-    private static byte[] PpcConcat(byte[] a, byte[] b)
+    private static byte[] PpcConcat(byte[] rgA, byte[] rgB)
     {
-        byte[] r = new byte[a.Length + b.Length];
-        Buffer.BlockCopy(a, 0, r, 0, a.Length);
-        Buffer.BlockCopy(b, 0, r, a.Length, b.Length);
-        return r;
+        byte[] rgR = new byte[rgA.Length + rgB.Length];
+        Buffer.BlockCopy(rgA, 0, rgR, 0, rgA.Length);
+        Buffer.BlockCopy(rgB, 0, rgR, rgA.Length, rgB.Length);
+        return rgR;
     }
 
     private static byte[] BuildVmLure(Random rng)
@@ -958,8 +958,8 @@ internal class PeWriterAntheil
         rgPpc.AddRange(PpcWord((37u << 26) | (1u << 21) | (1u << 16) | (uint)(-iFrame & 0xFFFF)));//stwu r1,-N(r1)
         int iOff = 12;
         byte[] rgOps = { 0x00,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0A,0x0B,0x0C,0x0D,0x16,0x17,0x18,0x19,0x1A,0x1B,0x1E,0x28,0x58,0x59,0x5A,0x5B,0x5D,0x5F,0x60,0x61,0x62,0x63,0x65,0x66,0x2C,0x2D };
-        int n = 10 + rng.Next(18);
-        for (int i = 0; i < n; i++)
+        int iN = 10 + rng.Next(18);
+        for (int i = 0; i < iN; i++)
         {
             byte bOp = rgOps[rng.Next(rgOps.Length)];
             byte[] rgP = IlToPpc(rng, bOp);
@@ -974,12 +974,12 @@ internal class PeWriterAntheil
         rgPpc.AddRange(PpcWord((31u << 26) | (8u << 16) | (467u << 1)));              //mtlr r0
         rgPpc.AddRange(PpcWord((19u << 26) | (20u << 21) | (16u << 1)));              //blr
         var rgHandlers = new List<byte[]>();
-        int nH = 6 + rng.Next(6);
-        for (int i = 0; i < nH; i++)
+        int iNH = 6 + rng.Next(6);
+        for (int i = 0; i < iNH; i++)
         {
             using var h = new MemoryStream();
-            int c = 2 + rng.Next(5);
-            for (int j = 0; j < c; j++) { byte[] gi = DcryptInsn(rng); h.Write(gi, 0, gi.Length); }
+            int iC = 2 + rng.Next(5);
+            for (int j = 0; j < iC; j++) { byte[] rgInsn = DcryptInsn(rng); h.Write(rgInsn, 0, rgInsn.Length); }
             h.Write(new byte[] { 0xC3 }, 0, 1);
             rgHandlers.Add(h.ToArray());
         }
@@ -1137,21 +1137,21 @@ internal class PeWriterAntheil
 
     private static byte[] MaskFromBsjb16(byte[] rgB)
     {
-        byte[] m = new byte[16];
+        byte[] rgM = new byte[16];
         uint uH = uLQCA ^ uLQCB, uK = uLK1A ^ uLK1B;
-        for (int i = 0; i < 16; i++) { uH ^= rgB[i]; uH *= uK; m[i] = (byte)(uH >> 24); }
-        return m;
+        for (int i = 0; i < 16; i++) { uH ^= rgB[i]; uH *= uK; rgM[i] = (byte)(uH >> 24); }
+        return rgM;
     }
 
     private static void LamWriteXor(byte[] rgB, int iOff, uint uV, uint uX)
         => BitConverter.GetBytes(uV ^ uX).CopyTo(rgB, iOff);
 
     //重建bundle boot替换主程序条目 数据写在lamapp之后
-    private void BuildBundleDataAndHeader(uint uMajor, string sBundleId, List<int> keepIdx,
+    private void BuildBundleDataAndHeader(uint uMajor, string sBundleId, List<int> rgKeepIdx,
         long[] rgRel, long[] rgSz, long[] rgCsz, byte[] rgType, string[] rgName,
         long lDepsSz, long lRtcSz, long lRtcHash)
     {
-        int iM = keepIdx.Count;
+        int iM = rgKeepIdx.Count;
         rgBundleOffsets = new long[iM];
         rgBundleCsz = new long[iM];
         rgBundleSz = new long[iM];
@@ -1161,7 +1161,7 @@ internal class PeWriterAntheil
         long lRtcSzNew = lRtcSz;
         for (int k = 0; k < iM; k++)
         {
-            int i = keepIdx[k];
+            int i = rgKeepIdx[k];
             byte[] rgData;
             if (i == iMainEntry)
                 rgData = rgBoot;
@@ -1197,7 +1197,7 @@ internal class PeWriterAntheil
         iNewRtcIdx = -1;
         for (int k = 0; k < iM; k++)
         {
-            if (rgName[keepIdx[k]].EndsWith(".runtimeconfig.json", StringComparison.OrdinalIgnoreCase))
+            if (rgName[rgKeepIdx[k]].EndsWith(".runtimeconfig.json", StringComparison.OrdinalIgnoreCase))
             { iNewRtcIdx = k; break; }
         }
 
@@ -1213,7 +1213,7 @@ internal class PeWriterAntheil
             int iKDeps = -1;
             for (int k = 0; k < iM; k++)
             {
-                if (rgName[keepIdx[k]].EndsWith(".deps.json", StringComparison.OrdinalIgnoreCase))
+                if (rgName[rgKeepIdx[k]].EndsWith(".deps.json", StringComparison.OrdinalIgnoreCase))
                 { iKDeps = k; break; }
             }
             WriteI64(hd, iKDeps >= 0 ? lBundleStart + rgBundleOffsets[iKDeps] : 0);
@@ -1229,8 +1229,8 @@ internal class PeWriterAntheil
             WriteI64(hd, rgBundleSz[k]);
             if (uOutMajor >= 6)
                 WriteI64(hd, rgBundleCsz[k]);
-            WriteU8(hd, rgType[keepIdx[k]]);
-            WriteStr(hd, rgName[keepIdx[k]]);
+            WriteU8(hd, rgType[rgKeepIdx[k]]);
+            WriteStr(hd, rgName[rgKeepIdx[k]]);
         }
         rgNewHeader = hd.ToArray();
     }
@@ -1454,25 +1454,25 @@ internal class PeWriterAntheil
         return ParseMajorFromRtc(Encoding.UTF8.GetString(rgBundleData, iOff, iLen));
     }
 
-    private static void ReplaceMarker(byte[] b, string sMarker, byte[] rgValue, int iSpace)
+    private static void ReplaceMarker(byte[] rgB, string sMarker, byte[] rgValue, int iSpace)
     {
         byte[] rgPat = Encoding.ASCII.GetBytes(sMarker);
-        int i = IndexOf(b, rgPat);
+        int i = IndexOf(rgB, rgPat);
         if (i < 0)
             throw new InvalidOperationException($"Stub marker '{sMarker}' not found");
         if (rgValue.Length > iSpace)
             throw new InvalidOperationException($"Stub value for '{sMarker}' too long ({rgValue.Length} > {iSpace})");
-        Array.Clear(b, i, iSpace);
-        Array.Copy(rgValue, 0, b, i, rgValue.Length);
+        Array.Clear(rgB, i, iSpace);
+        Array.Copy(rgValue, 0, rgB, i, rgValue.Length);
     }
 
-    private static int IndexOf(byte[] b, byte[] rgPat)
+    private static int IndexOf(byte[] rgB, byte[] rgPat)
     {
-        for (int i = 0; i + rgPat.Length <= b.Length; i++)
+        for (int i = 0; i + rgPat.Length <= rgB.Length; i++)
         {
             bool bOk = true;
             for (int j = 0; j < rgPat.Length; j++)
-                if (b[i + j] != rgPat[j]) { bOk = false; break; }
+                if (rgB[i + j] != rgPat[j]) { bOk = false; break; }
             if (bOk) return i;
         }
         return -1;

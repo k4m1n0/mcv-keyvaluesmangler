@@ -174,7 +174,7 @@ GenPerm(uKey, out rgPH, out rgPL, out rgIH, out rgIL);
         uPrev = rgD[iPos];
     }
 
-    private static ulong Rol64(ulong v, int n) => (v << n) | (v >> (64 - n));
+    private static ulong Rol64(ulong uV, int iN) => (uV << iN) | (uV >> (64 - iN));
 
     private static ulong MaskOf(ulong uKey) => uKey ^ (uKey >> 16) ^ (uKey << 13) ^ 0x9E3779B97F4A7C15UL;
 
