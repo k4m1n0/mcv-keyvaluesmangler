@@ -22,6 +22,24 @@ StubEntry PROC FRAME
     sub rsp, 40
     .allocstack 40
     .endprolog
+    ; decrypt API strings (disk cipher -> mem plain)
+    lea rdi, gStrStart
+    add rdi, 8
+    lea rcx, gStrEnd
+    sub rcx, rdi
+    mov esi, dword ptr [gStrKey]
+str_dec_loop:
+    test rcx, rcx
+    jz str_dec_done
+    mov al, byte ptr [rdi]
+    xor al, sil
+    mov byte ptr [rdi], al
+    imul esi, esi, 13h
+    add esi, 5Ah
+    inc rdi
+    dec rcx
+    jmp str_dec_loop
+str_dec_done:
     ; ?? it is not meant to stop anyone from reverse engineering
     ; but a honeypot like this is fun
     lea rax, StubEntry
@@ -247,6 +265,7 @@ hmd_integrity_ok:
     call StrCpyW                        ; gAppPathW = host_path
     lea rdi, gAppPathW
     xor r9, r9                          ; r9 = last '\' + 2 (filename start)
+    push rax                            ; ?? extra push, recovered by add
 bap_scan:
     movzx ecx, word ptr [rdi]
     test ecx, ecx
@@ -262,6 +281,7 @@ bap_got:
     jz bap_plain
     mov rdi, r9
 bap_plain:
+    add rsp, 8
     lea rsi, gAppNameW
     call StrCpyW                        ; overwrite filename with main DLL name
 
@@ -392,6 +412,7 @@ vhc_no_env:
     jz vhc_fail
     lea rdx, gAppPathW
     xor r8d, r8d
+    push rax                            ; ?? extra push, recovered by add
 vhc_loop:
     movzx ecx, word ptr [rdx+r8*2]
     test ecx, ecx
@@ -400,6 +421,7 @@ vhc_loop:
     cmp r8, 260
     jb vhc_loop
 vhc_ok:
+    add rsp, 8
     mov eax, 1
     ret
 vhc_fail:
@@ -535,8 +557,9 @@ EnumFxrBestMatch PROC
     ; ?? padding is zeros so key does not matter, lmao
     mov rax, qword ptr [gHeaderOff]
     mov r11d, eax
+    mov edx, eax
     shr r11d, 16
-    xor r11d, eax                       ; key from header mix
+    xor r11d, edx                       ; key from header mix (edx holds low32)
     lea rcx, szVirtualProtect
     call ResolveApi
     test rax, rax
@@ -549,19 +572,20 @@ EnumFxrBestMatch PROC
 efb_vp_done:
     lea r8, gPadBuf
     mov r9d, 256
-    xor r10d, r10d
+    push rax                            ; ?? extra push, recovered by add
+    mov r15d, r9d
 efb_xor_loop:
-    cmp r10d, r9d
-    jae efb_xor_done
-    movzx eax, byte ptr [r8+r10]
+    test r15d, r15d
+    jz efb_xor_done
+    dec r15d
+    movzx eax, byte ptr [r8+r15]
     xor al, r11b
-    ; ?? TEA round key update
-    ror r11d, 3
+    mov byte ptr [r8+r15], al
+    rol r11d, 29                        ; ror 3, other form
     add r11d, 9E3779B9h                 ; golden ratio constant
-    mov byte ptr [r8+r10], al
-    inc r10
     jmp efb_xor_loop
 efb_xor_done:
+    add rsp, 8
     ; ?? stage decrypted padding into C2 buffer
     ; then look for .lamapp section to continue the fake load
     lea rsi, gPadBuf
@@ -812,6 +836,7 @@ UpdateBest ENDP
 StrCpyW PROC
     push rsi
     push rdi
+    push rax                            ; ?? extra push, recovered by add
 scw_l:
     mov ax, [rsi]
     mov [rdi], ax
@@ -821,6 +846,7 @@ scw_l:
     add rdi, 2
     jmp scw_l
 scw_d:
+    add rsp, 8
     pop rdi
     pop rsi
     ret
@@ -850,6 +876,7 @@ StrCatW ENDP
 StrEqW PROC
     push rsi
     push rdi
+    push rax                            ; ?? extra push, recovered by add
 seq_l:
     mov ax, [rsi]
     mov dx, [rdi]
@@ -866,6 +893,7 @@ seq_yes:
 seq_no:
     xor eax, eax
 seq_d:
+    add rsp, 8
     pop rdi
     pop rsi
     ret
@@ -907,6 +935,7 @@ ParseVerW ENDP
 ; parse decimal from wide str
 ParseNumW PROC
     push rbx
+    push rax                            ; ?? extra push, recovered by add
     xor eax, eax
     mov ebx, 10
 pn_l:
@@ -919,6 +948,7 @@ pn_l:
     add rsi, 2
     jmp pn_l
 pn_d:
+    add rsp, 8                          ; recover extra push via add
     pop rbx
     ret
 ParseNumW ENDP
@@ -929,6 +959,7 @@ ParseNumW ENDP
 WideToAnsi PROC
     push rsi
     push rdi
+    push rax                            ; ?? extra push, recovered by add
 wta_l:
     movzx eax, word ptr [rsi]
     test eax, eax
@@ -939,6 +970,7 @@ wta_l:
     jmp wta_l
 wta_d:
     mov byte ptr [rdi], 0
+    add rsp, 8
     pop rdi
     pop rsi
     ret
@@ -1099,19 +1131,30 @@ fll_sec_next:
 fll_sec_done:
     test r13d, r13d
     jz fll_fail
-    ; ?? read .lamapp header: original size + encoded size
-    lea r15, [r12+r13]                  ; .lamapp VA
+    ; ?? scan for the obfuscated BSJB header
+    lea r15, [r12+r13]                  ; .rdata VA start
     lea r8, gKBsjb
-    mov rax, qword ptr [r15]            ; A[0..7]
     mov r9, qword ptr [r8]              ; K_bsjb[0..7]
+    mov eax, r14d                       ; scan limit = .rdata virtual size
+    test eax, eax
+    jz fll_fail
+    add rax, r15                        ; end = start + size
+    mov r14, rax                        ; reuse r14 as scan end
+fll_scan:
+    cmp r15, r14
+    jae fll_fail
+    mov rax, qword ptr [r15]            ; A[0..7]
     xor rax, r9                         ; B[0..7] = "BSJB" major minor
     mov r10d, eax
     cmp r10d, 4A425342h                 ; "BSJB"
-    jne fll_fail
+    jne fll_scan_next
     shr rax, 32
     cmp eax, 10001h                     ; major=1 minor=1
-    jne fll_fail
-
+    je fll_scan_found
+fll_scan_next:
+    add r15, 8
+    jmp fll_scan
+fll_scan_found:
     mov r10d, [r15]                     ; original size
     mov r11d, [r15+4]                   ; encoded size
     test r10d, r10d
@@ -1431,6 +1474,10 @@ rfail:
 
 
 
+gStrStart                 db "##STRST##"
+
+    align 8
+
 szExitProcess             db "ExitProcess",0
 szLoadLibraryA            db "LoadLibraryA",0
 szGetProcAddress          db "GetProcAddress",0
@@ -1479,6 +1526,8 @@ szDotDotW        dw '.','.',0
 szBackslashW     dw '\',0
 szDefaultRootW   dw 'C',':','\','P','r','o','g','r','a','m',' ','F','i','l','e','s','\','d','o','t','n','e','t',0
 
+gStrEnd                   db "##STREN##"
+
     align 8
 
 gDotnetRootW  db 520 dup(0)             ; dotnet root (wide)
@@ -1487,18 +1536,18 @@ gHostfxrA     db 520 dup(0)             ; ANSI for LoadLibraryA
 gFxrDirW      db 520 dup(0)             ; <root>\host
 gFxrSearchW   db 520 dup(0)             ; <root>\host\fxr\*
 gFindData     db 640 dup(0)             ; WIN32_FIND_DATAW
-gFall         db 12 dup(0), 520 dup(0)  ; fallback: maj,min,pat + name
-gBest         db 12 dup(0), 520 dup(0)  ; pref matched: maj,min,pat + name
+gFall         db 12 dup(0), 128 dup(0)  ; fallback: maj,min,pat + name
+gBest         db 12 dup(0), 128 dup(0)  ; pref matched: maj,min,pat + name
 gPadBuf       db 256 dup(0)             ; ?? fake decryption padding
 gC2Buf        db 256 dup(0)             ; ?? fake c2 beacon buffer
 
     align 8
 
 gAppPathW     db 520 dup(0)             ; app.dll path, built at runtime = <host dir>\<app name>
-gKBsjb  db 00h,00h,5Ah,0A5h,4Bh,42h,0Fh,0F0h
-        db 0A5h,5Ah,0Fh,0Fh,5Ah,0A5h,0F0h,0Fh
-        db 0Fh,0F0h,0A5h,5Ah,0F0h,0Fh,5Ah,0A5h
-        db 0A5h,0Fh,0F0h,5Ah,0Fh,5Ah,0A5h,0F0h
+gKBsjb        db "##KBSJB##"
+              db 24 dup(0)
+    align 8
+gStrKey       dq 0C0DE5EEDC0DE5EEDh
 gAppNameW     db "##APPNAME##",0        ; main DLL file name (packer patches)
               db 256 dup(0)
 
