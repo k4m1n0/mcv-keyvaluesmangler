@@ -27,10 +27,10 @@
     dotnet publish -p:PublishSingleFile=true把主程序、依赖dll、
     deps.json、runtimeconfig.json一起塞进一个exe。内部结构是"AppHost壳 +
     一串条目"。文件末尾有一段bundle header，记录每个条目的名字、偏移、大小、
-    类型；入口通过40字节的marker（签名）从文件尾往前扫描定位（因为文件尾
-    可能被签名或追加数据，不能直接读末尾），marker是固定识别序列，扫到它就
-    找到header。条目数据是明文的，谁都能拆出来——这是后面所有加密的出发点。
-    bundle是apphost层面的结构，在CLR加载主程序之前就解析好了。
+    类型；入口靠40字节的marker（签名）从文件尾往前扫，marker是固定识别序列，
+    扫到它就找到header。文件尾可能被签名或追加数据，所以不能直接读末尾。条目
+    数据是明文的，谁都能拆出来——这是后面所有加密的出发点。bundle是apphost
+    层面的结构，在CLR加载主程序之前就解析好了。
 
     另外，bundle header有版本差异：major 2（net5时代条目没压缩大小字段）；
     major 6+（net6+，每条目带压缩大小和runtimeconfig哈希）。Antheil打包器
@@ -126,8 +126,9 @@
   2.3  与Antheil的关系
 
     managed与native的容器以"Lamarr!!"为魔数；Antheil的.rdata没有这个
-    魔数——头部是64B BSJB伪头+seed，只复用条目表的20B条目结构（XOR写）
-    与Lamarr压缩流，方法体加密做在压缩之上。
+    魔数——头64B是随机IA64密钥区，种子由它派生，BSJB伪头挪进数据区第一块
+    （XOR gKBsjb），只复用条目表的20B条目结构（XOR写）与Lamarr压缩流，
+    方法体加密做在压缩之上。
 
 
 ------------------------------------------------------------------------
@@ -140,21 +141,21 @@
 
   3.1 明文问题
 
-    单文件里的条目是完整IL。用ILSpy / dnSpy打开主程序，代码还原度很高；
+    单文件里的条目是完整IL。用ILSpy / dnSpy打开主程序，代码还原度很高，
     依赖的NuGet包也一目了然。native打包只是把IL压缩过，运行时解压成完整IL
-    再交给JIT——dump内存照样能拿回原始IL。压缩挡不住静态反编译。
+    再交给JIT，dump内存照样能拿回原始IL。压缩挡不住静态反编译。
 
 
   3.2 思路：让明文不存在
 
     与其压缩明文，不如让IL明文不存在。方法体在磁盘上直接加密，JIT编译时
-    现场解密。于是：
+    现场解密。
 
       - 静态dump文件 -> 全是密文，反编译失败
       - 内联 / Tier1 / OSR提前读方法体 -> 读到密文 -> 拦下
       - 内存里解密过的IL是临时的，编译完即弃
 
-    所以加密不能只在打包时做，还得在JIT编译时解密——jithook就是干这个的。
+    加密不能只在打包时做，还得在JIT编译时解密——jithook就是干这个的。
 
       1. 方法体加密    MethodEncryptor：写密文 + CRC32签名表
       2. JIT解密      jithook：compileMethod解密 + canInline门禁
@@ -172,7 +173,7 @@
       PE头
       .text         antheil_stub.asm入口壳（找hostfxr）
       marker 40B    8B header偏移 + 32B签名
-      .rdata        seed/头/表/名称/数据区
+      .rdata        IA64密钥区/头/表/名称/数据区
       bundle数据    BootAntheil + 重建的deps.json和runtimeconfig
       bundle头      重建的.NET bundle header（文件尾）
 
@@ -222,15 +223,15 @@
 
     条目清单存在.lamapp区，即PE的.rdata节。逐字段：
 
-      0    64B    BSJB伪头（#~ / #Strings指向诱饵区）
-      64   32B    seed（ASCII），存时掩码由BSJB区前16字节派生
-      96   4B     payload FNV-1a哈希（打包期校验，运行不依赖）
-      100  20B    bundle头：count/cbOrigTotal/dataOff/decoyCount
-      116  20N    条目表：nameLen/rawLen/compLen/compOff
-      ...  ...    名字区（UTF-8，4对齐）+ 数据区
+      0    64B    IA64密钥区（随机，DeriveSeed派生种子）
+      64   4B     payload FNV-1a哈希（打包期校验，运行不依赖）
+      68   ...    随机填充 + bundle头（XOR uKey）+ 随机填充
+      ...  ...    数据区 8对齐
 
-    bundle头四个u32与派生key异或，直接读是噪音；数据区真实条目、诱饵、
-    垃圾块按随机顺序物理排列，核心穿插打散，gzip总是靠后、前后夹垃圾块。
+    数据区第一块是BSJB伪头，XOR gKBsjb落盘；真实条目、诱饵、垃圾块按随机
+    顺序物理排列，核心穿插打散，gzip总是靠后、前后夹垃圾块。bundle头四个
+    u32与派生key异或，直接读是噪音。lamapp里没有明文可读的metadata头——
+    扫描BSJB/版本号只会命中新bundle的Boot入口。
 
 
   5.3 BSJB伪头逐字节
@@ -269,17 +270,20 @@
 
   5.4 密钥派生
 
-      KSeed = 掩码，由产物BSJB区前16字节派生
-              （打包时XOR seed写盘，运行时重算还原）
-      K1    = FNV-1a：h = LK0A^LK0B，对seed逐字节
-               h ^= b; h *= LK1A^LK1B
-      K2    = 4元素置换：线性同余推进 + 交换，由k派生
-      K3    = 逐槽key：K3(k, i)，每行独立
+      seed       = DeriveSeed，由lamapp前64B四路FNV乱序派生
+      K1         = FNV-1a：h = LK0A^LK0B，对seed逐字节
+                   h ^= b; h *= LK1A^LK1B
+      K2         = 4元素置换：线性同余推进 + 交换，由k派生
+      K3         = 逐槽key：K3(k, i)，每行独立
+      gKBsjb     = seed派生，BSJB伪头XOR
+      rgSeedKey  = SeedKey(seed)，加密依赖与主程序压缩流XOR
+      GenDisturb = 明文依赖头部扰动key，独立于seed链，每产物不同
       LamKey / LamPerm / LamSlot是打包侧的对应实现
 
-    配合方式：seed由打包器随机生成，与掩码异或后写盘——掩码由产物BSJB区
-    前16字节派生，运行时重算还原seed，再派生全部key。重打包就是换钥匙，
-    旧产物难以复用分析结论。派生出的种子密钥不整体留在内存，分片存于
+    配合方式：种子由IA64密钥区派生，重打包换密钥区即全链换钥匙，旧产物难以
+    复用分析结论。扰动key刻意独立于种子链——公开依赖的明文随手可下载，若
+    共用种子派生key，拿明文对比密文就能还原整条链；独立派生后，扰动只破坏
+    扫描特征，不提供任何推导素材。派生出的种子密钥不整体留在内存，分片存于
     _skA到_skD，用时由Sk()重组、用完清零，内存里找不到连续16字节的密钥。
 
 
@@ -289,14 +293,14 @@
       1. 成本：AES每次编译现场解密的开销大得多，XOR逐字节几乎免费。
           方法体可能被编译两遍（Tier0/Tier1），开销会被放大。
       2. 威胁模型：目标不是密码学强度，而是挡静态反编译和
-          通用工具流水线。XOR密文足以让它们全部翻车。seed随机+重打包换钥匙，
+          通用工具流水线。XOR密文足以让它们全部翻车。种子随机+重打包换钥匙，
           两次产物互不相同，避免固定密钥被复用。
 
     代价是密码学上限摆在这：第一层jit_key是32位FNV、第二层uKey2是64位
     随机，但XOR流的数学结构没变。拿到一段明文-密文对仍可枚举流验证，命中后
     掩码可算、第二层密钥随之恢复，两层并不独立。变体号只有两位，第4种映射
     回第1种，只添反汇编噪音不加熵。真正的防线是重打包换钥匙、密钥分片存储，
-    以及seed掩码产物派生。
+    以及种子掩码产物派生。
 
     简单来说：密码学选型要匹配威胁模型和性能——防君子不防小人，
     但这里的"君子"（通用工具）已经全灭了。
@@ -306,8 +310,9 @@
 
     条目在表头有三个判定。rawLen为0x7FFFFFFF（明文标记）时是明文条目，直接
     取compOff处compLen字节——依赖默认压缩，关闭压缩或命中不压缩名单才明文；
-    compLen等于rawLen是原样XOR KSeed还原；compLen小于rawLen是压缩，
-    按4KB页逐页调 Iamdec。
+    compLen等于rawLen是原样XOR KSeed还原；compLen小于rawLen是压缩，按
+    4KB页逐页调Iamdec。主程序压缩流整体XOR后落盘，压缩流里的metadata头
+    字面量在磁盘上不可见。
 
 
   Iamdec接口签名
@@ -319,29 +324,27 @@
   六  BootAntheil
 ------------------------------------------------------------------------
 
-
   6.1 AppHost与hostfxr：exe是怎么启动的
 
-    .NET单文件exe的最外层是apphost——一个原生壳，不是托管代码。
-    它做的事：读runtimeconfig.json定位runtime版本，加载hostfxr（.NET的
-    hosting入口），由hostfxr加载coreclr并传入托管入口。antheil_stub.asm
-    手写复刻的正是这一套：遍历PEB找kernel32，解析API，找.NET root
-    （DOTNET_ROOT环境变量 -> 注册表 -> ProgramFiles），选hostfxr，最后调
-    hostfxr_main_bundle_startupinfo。区别是antheil_stub没有导入表，
-    一切API都靠运行时解析。
+    .NET单文件exe的最外层是apphost，说白了是个原生壳，不是托管代码。
+    它先读runtimeconfig.json定位runtime版本，加载hostfxr（.NET的hosting
+    入口），由hostfxr加载CoreCLR并传入托管入口。antheil_stub.asm手写复刻
+    的正是这一套：遍历PEB（进程环境块）找kernel32、解析API、找.NET root
+    （DOTNET_ROOT环境变量->注册表 -> ProgramFiles）、选hostfxr，最后调
+    hostfxr_main_bundle_startupinfo。区别是antheil_stub没有导入表，API
+    全靠位置无关代码在运行中解析。
 
-    它怎么在"无导入表"下调用API？三件事：
+    它怎么在"无导入表"下调用API？依次是：
 
-      1. 从PEB（进程环境块）出发，沿PEB_LDR_DATA的InMemoryOrderModuleList
+      1. 从PEB出发，沿PEB_LDR_DATA的InMemoryOrderModuleList
           找kernel32/ntdll基址。
       2. 在模块导出表（Export Directory）里按名字找函数，ResolveApi
           就是这段逻辑。
       3. 跨模块再查用ResolveApiIn（指定模块）。
 
     PEB -> PEB_LDR_DATA -> InMemoryOrderModuleList -> 双向链表遍历，
-    每个节点的DllBase是模块基址、BaseDllName是名字。这是shellcode的
-    基本功：位置无关代码不依赖链接器补导入表，一切API地址运行时现找。
-    LoadBare加载Iamdec是同一思路——裸dll不需要导入表，因为压根没有导入。
+    每个节点给出一个已加载模块的基址和名字。这就是shellcode的基本功；
+    LoadBare加载Iamdec是同一思路：裸dll不需要导入表，因为压根没有导入。
 
 
   6.2 整体时序
@@ -370,10 +373,12 @@
     ICorProfiler注入路径。检测不只在启动时做一次：后台反调试线程持续运转，
     时间戳校验让单步调试的线程因拖慢而超时自毁，线程本身用
     NtSetInformationThread对调试器隐藏，jithook的.text还定时校验防运行时
-    patch。反调试通过后置g_adFlag互锁标志（SetAntiDebugFlag），jithook在
-    compileMethod入口校验该标志，patch掉AD即触发ud2自毁——AD与解密链绑死。
+    patch。反调试过了，置g_adFlag互锁标志（SetAntiDebugFlag）。jithook在
+    compileMethod入口查它，patch掉AD直接ud2自毁——AD与解密链绑死。
     另有条窗口枚举路径（WndScan）恒返回false，只在反调试判定里出现，
-    纯粹为了让逆向者误以为存在窗口级检测。
+    纯粹为了让逆向者误以为存在窗口级检测；哨兵常量检查分布在多个方法，
+    对任一处的单一patch都无法解除整条反调试链。
+
     它们同样拦不住高手，但把"随手attach"、单步跟踪和"profiler分析"
     的代价都抬高了。
 
@@ -387,9 +392,11 @@
 
   6.5 X1：解析.lamapp
 
-    四件事：读seed异或还原；K1派生主key；K2置换 + K3逐槽派生slot key；
+    从IA64密钥区派生种子，K1派生主key，K2置换加K3逐槽派生slot key，
     按置换解开bundle头，再按20字节一条解条目表。表里有真条目也有诱饵，
     X1只解出来，不区分——区分是后面各步按表索引做的事。
+    解析收尾时RestoreData就地还原主程序流XOR与明文依赖扰动，此后各步
+    读到的是原始字节。
 
 
   6.6 EnsureDecoder与LoadBare
@@ -399,15 +406,15 @@
     运行时按表收集、按序拼接。段插在压缩流中段，等距加随机抖动，避开流头。
     每段在打包端按字节反转（大端序）写入，收集时翻回小端再拼接——直接从
     压缩流提取的段是倒序字节，无法当代码执行。解码器导出名每产物随机，
-    没有固定的标识。LoadBare之所以能这么"裸"，全靠Iamdec：无导入表、
-    无重定位、最重要的是位置无关。
+    没有固定的标识。LoadBare能这么"裸"，全靠Iamdec：无导入表、无重定位、
+    最重要的是位置无关。
     映射只需三步：
 
       - 读PE头，找.text / .rdata两个节
       - VirtualAlloc一块RWX
       - .text拷到基址，.rdata按RVA摆到偏移处
 
-    返回基址直接当函数指针用。正常dll加载还要做导入表修复和重定位；Iamdec
+    返回基址直接当函数指针用。正常dll加载还要做导入表修复和重定位，Iamdec
     刻意只用基址相对寻址、不依赖外部符号，所以没有导入表、没有重定位，三步
     就够，免去商业壳常见的导入表修复和重定位。位置无关的代码不依赖绝对地址，
     全靠相对寻址，换基址也能跑。
@@ -428,7 +435,7 @@
   6.8 W1：依赖与元数据
 
     CoreCLR单文件机制只认deps.json / runtimeconfig.json。W1做两件事：
-    把必要元数据写进内存里的bundle结构让解析器认账；注册
+    把必要元数据写进内存里的bundle结构让解析器认账，注册
     AssemblyLoadContext.Resolving——CLR缺哪个依赖就从bundle解出哪个（XOR
     或按页解码），LoadFromStream喂回去。之后控制权交给真正的主程序入口。
 
@@ -458,7 +465,7 @@
     ICorJitInfo的vtable是一张函数指针表，JIT编译时问CLR要方法体信息
     （getMethodInfo、canInline和compileMethod）都走它，钩子换的就是其中
     两个槽位。compileMethod在所有支持的运行时里都是slot 0（稳定），但
-    getMethodInfo / canInline的槽位偏移随coreclr版本漂移，逐版本对过
+    getMethodInfo / canInline的槽位偏移随CoreCLR版本漂移，逐版本对过
     corjit.h / corinfo.h：
 
       net5      gmi 0x18  ci 0x20
@@ -538,23 +545,15 @@
   7.5 JIT编译生命周期
 
     CLR统计每个方法的调用次数，超过阈值就安排后台线程重新优化编译。多数人
-    以为方法只编译一次，实际上TieredCompilation会让一个方法被编译两遍
-    （Tier0快速JIT + Tier1后台优化，长循环还可能OSR）。这对jithook的含义
-    很直接：方法体解密可能被请求两次（Tier0一次、Tier1一次）。解密必须是
-    幂等的——每次从密文XOR，不能解过一次就标记"已解密"然后放明文，否则第二次
-    编译读到的是已经损坏的中间态。
+    以为方法只编译一次，实际上分层编译（Tier0快速JIT + Tier1后台优化，
+    长循环还可能OSR）会让一个方法被编译两遍。这对jithook的含义很直接：
+    方法体解密可能被请求两次，解密必须幂等——每次从密文XOR，不能解过一次
+    就标记"已解密"然后放明文，否则第二次编译读到的是已经损坏的中间态。
 
     还有一个前提：R2R（ReadyToRun）。发布时可以把方法预编译成native映像，
-    运行时JIT见到已有映像就不再编译——加密的方法体没人解密，加密形同虚设。
+    程序运行中JIT见到已有映像就不再编译——加密的方法体没人解密，加密形同虚设。
     Antheil的打包链路不产生R2R映像，所有加密方法都必然走到JIT编译这一步、
     被jithook拦下，"磁盘密文"才成立。
-
-    附：antheil的runtimeconfig默认重写System.Runtime.TieredCompilation:
-    false。根因是net10自身JIT bug（objectalloc数组溢出，issue #132480，
-    10.0.13修复）：Tier-1后台重编译带NuGet依赖的负载退出时崩溃。关闭分层
-    是对旧10.0.x的workaround，副作用是编译路径变成单次；目标机>=10.0.13
-    时可开回TC（--rtc-tiered default）。native/managed没有jithook，保留
-    默认分层。jithook的拦截点与分层开关无关，始终是compileMethod这一道门。
 
     成本量级上：
       - 方法体XOR：逐字节异或，整个程序的方法体也就毫秒级，且只在编译时发生
@@ -575,7 +574,7 @@
     主程序始终加密；依赖由SetEncryptDeps显式指定才加密；其余只压缩不经
     jithook。不压缩名单优先：命中即跳过加密。签名表作为独立条目进lamapp，
     表项异或mask后落盘，防dump直接匹配；jit_key打包与运行时同一派生，即
-    Fnv1a(SeedKey(seed))（32位），seed在打包时提前生成、运行时由X1还原，
+    Fnv1a(SeedKey(seed))（32位），种子在打包时提前生成、运行时由X1还原，
     如此解密链形成闭环，难以从常量静态推导。
 
     为什么用CRC32：它是"指纹"不是"密钥"。jithook在编译现场只有MethodDesc，
@@ -679,8 +678,8 @@
                            指定加密则跳过加密
       -RtcVersion         runtimeconfig的framework版本（缺省5.0.0），
                            配LatestMajor后net5-10可解析到兼容版本
-      -RtcTiered          runtimeconfig的TC处理：off（写false，
-                           antheil缺省）default（不写，native缺省）
+      -RtcTiered          分层编译处理，off写false、default不写。用于防止
+                           10.0.13前的.NET 10 JIT在Tier1后台重编译时崩溃
 
     csproj的NativeStubPack里，编译与打包合成一个Exec调用。
 
@@ -690,15 +689,16 @@
     PeWriterAntheil的流程：
 
       1. LoadStub / LoadBoot / LoadDecoder / LoadJitHook /
-          LoadPheropod / LoadPayload：读入各输入
-      2. MakeSeed：生成随机seed，每次打包都不同
-      3. RebuildBundle：主程序换成BootAntheil，加密方法体，
-                         组装条目，解码器切段混入主程序压缩流
-      4. ComputeLayout：按节对齐重算布局
-      5. PatchStubVars：替换stub模板标记，写bundle头偏移
-      6. WriteFile：按布局写盘
+          LoadPheropod / LoadPayload 读入各输入
+      2. GenIa64Area(64) 生成随机IA64密钥区DeriveSeed四路FNV派生seed，
+                          重打包即全链换钥
+      3. RebuildBundle   主程序换成BootAntheil，加密方法体，
+                          组装条目，解码器切段混入主程序压缩流
+      4. ComputeLayout  按节对齐重算布局
+      5. PatchStubVars  替换stub模板标记，写bundle头偏移
+      6. WriteFile      按布局写盘
 
-    前文的时序图是它的"读镜像"——同一份布局，一端写、一端读。
+    前文的时序图是它的"读镜像"：同一份布局，一端写一端读。
 
 
   9.4 验证
@@ -738,33 +738,26 @@
 
   10.1 攻击面
 
-      静态：bundle条目dump、.lamapp解析、解码器段收集重组
+      静态：bundle条目dump、.lamapp解析、解码器段的收集与重组
       动态：内存dump（解密后IL）、attach、profiler注入、页错误捕获
-      profiler注入已被环境变量检测封住；页错误捕获是OS层能力，无解。
 
 
-  10.2 防御-绕过
+  10.2 已知弱点
 
-      防线                攻击者动作     结果
-      方法体密文           dump磁盘      密文，反编译失败
-      反调试FailFast       attach        进程自杀
-      canInline门禁       放行内联       JIT读密文 -> 崩溃
-      条目假名化           找解码器       名字全是随机串
+      - 反调试可被"先禁用再启动"绕过，但若通过patch禁用，SelfCheck的
+         方法体hash校验会使patch失效。
+      - 解密后的IL短暂存在于内存，窗口极小但存在；攻击者可借助页错误捕获
+         等OS层能力捕捉该窗口，防御方难以封堵。
+      - compileMethod的slot 0在.NET 5-10稳定，getMethodInfo/canInline
+        槽位偏移随版本漂移，新CoreCLR仍需维护上述偏移表。VerifyJitHook运行
+        后校验vtable[0]仍指向钩子，被还原即触发FailFast。
+      - 新bundle明文Boot是CLR运行时入口，metadata与核心IL必须可读。仅靠
+         方法重命名与部分加密抬高成本，挡不住整体dump，是当前最大分析面。
+      - jit_key依赖打包期种子，静态推导只能走完整解密链，但种子在运行中
+         必然出现于内存，因此动态分析可绕过此链。
 
-
-  10.3 已知弱点
-
-      - 反调试可被"先禁用再启动"绕过，但SelfCheck方法体hash检查使patch失效
-      - 解密后的IL短暂存在于内存，窗口极小但存在
-      - compileMethod的slot 0在net5-10稳定，但getMethodInfo/canInline
-          槽位偏移随版本漂移，未来的新coreclr仍需维护这张表；VerifyJitHook
-          运行时校验vtable[0]仍指向钩子，被还原即FailFast
-      - 主程序始终加密；依赖加密显式指定；其余依赖只压缩
-      - 页错误捕获/内存密钥提取是OS层能力，连VM壳也没法完全防
-      - jit_key依赖运行时seed，可它需要走完整解密链才能静态推导
-
-    没有不可破解，只有让破解成本大于收益。目标是让静态分析基本失效、
-    动态分析费时费力、大部分逆向者走三次弯路后就放弃了。
+    没有不可破解的保护，只有让破解成本大于收益的保护。目标是让静态分析
+    基本失效、动态分析费时费力、大部分逆向者走三次弯路后就放弃了。
 
 
 ------------------------------------------------------------------------

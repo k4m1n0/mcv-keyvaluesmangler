@@ -58,13 +58,32 @@ if (!$K32_LIB) { throw 'kernel32.lib not found (Windows SDK needed)' }
 
 Write-Host "[build-asm] STATUS ml64 = $ML64_EXE`n[build-asm] out : $OUT_DIR"
 
-function build_stub_dll([string]$AsmName, [string]$DllName, [switch]$Page, [string]$Exports, [string]$RenameExport)
+function New-StubVariant([string]$AsmPath, [string]$OutPath) {
+    $lines = Get-Content $AsmPath
+    $out = New-Object System.Collections.Generic.List[string]
+    foreach ($ln in $lines) {
+        if ($ln -match '^\S+.*\bPROC\b') {
+            $n = Get-Random -Minimum 0 -Maximum 4
+            for ($i = 0; $i -lt $n; $i++) {
+                $out.Add('        db 66h,0Fh,1Fh,44h,00h,00h')
+            }
+        }
+        $out.Add($ln)
+    }
+    Set-Content -Path $OutPath -Value $out -Encoding ASCII
+}
+
+function build_stub_dll([string]$AsmName, [string]$DllName, [switch]$Page, [string]$Exports, [string]$RenameExport, [switch]$Variant)
 {
     $ASM_PATH = Join-Path $ASM_DIR $AsmName
     if (!(Test-Path $ASM_PATH)) { throw "asm not found: $ASM_PATH" }
     $OBJ_FILE = Join-Path $OUT_DIR (($DllName -replace '\.dll$', '') + '.obj')
     $DLL_FILE = Join-Path $OUT_DIR $DllName
     $SRC_FILE = $ASM_PATH
+    if ($Variant) {
+        $SRC_FILE = Join-Path $OUT_DIR (($DllName -replace '\.dll$', '') + '_var.asm')
+        New-StubVariant $ASM_PATH $SRC_FILE
+    }
     $LINK_EXPORT = 'Iamdec'
     if ($RenameExport)
     {
@@ -90,7 +109,7 @@ function build_stub_dll([string]$AsmName, [string]$DllName, [switch]$Page, [stri
 build_stub_dll 'lamarr_stub.asm' 'lamarr_stub.dll'
 if ($Packer -eq 'antheil')
 {
-    build_stub_dll 'antheil_stub.asm' 'antheil_stub.dll'
+    build_stub_dll 'antheil_stub.asm' 'antheil_stub.dll' -Variant
     build_stub_dll 'antheil_paged.asm' 'Iamdec.dll' -Page -RenameExport Iamdec
     build_stub_dll 'antlion_deco.asm' 'z0.dll' -Exports 'z0_init,z0_read,z0_align,z0_size'
 }
