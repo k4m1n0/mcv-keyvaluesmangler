@@ -114,7 +114,7 @@ internal static class P
     private static readonly uint uV5A = 0x75663258u, uV5B = 0xF47AAF9Du;//0x811C9DC5
     private static readonly uint uV6A = 0x9F6755EFu, uV6B = 0x9F67545Cu;//0x000001B3
     private static readonly uint uV7A = 0xF58C5705u, uV7B = 0xE6DBCCDAu;//0x13579BDF
-    //方法体hash委托引用 ldftn token不依赖名字 供元数据重命名
+    //方法体hash用ldftn委托引用 靠token不靠名字 元数据重命名后仍有效
     private static readonly Action _ad = AD;
     private static readonly X1D _x1 = X1;
     private static readonly Func<byte[], (string, uint, uint, uint), bool, byte[]> _x3 = X3;
@@ -598,7 +598,7 @@ internal static class P
         return (int)(RuntimeSeed() & 0xF) + 1;
     }
 
-    //明文依赖头部扰动key 与打包端GenDisturb一致 独立于seed链
+    //明文依赖头部扰动的key 与打包端GenDisturb一致 且独立于seed链
     private static byte[] GenDisturb(byte[] rgH)
     {
         uint uA = 0x6E5A1F2Bu, uB = 0x4D7C9E35u;
@@ -790,7 +790,7 @@ internal static class P
         => sName.EndsWith(S1(0x28CF58B4u, new uint[] { 0x28AB589Au, 0xC76AD201u }), StringComparison.OrdinalIgnoreCase)
             ? sName.Substring(0, sName.Length - 4) : sName;
 
-    //从主程序压缩流按region type重组附加数据(1=解码器 2=jithook 3=签名表) 字节反转还原
+    //按region type从主程序压缩流重组附加数据(1=解码器 2=jithook 3=签名表) 并字节反转还原
     private static byte[] ExtractRegion(byte[] rgG, (string, uint, uint, uint) entry, int iType)
     {
         uint uCompLen = entry.Item3, uOff = entry.Item4;
@@ -1039,7 +1039,7 @@ internal static class P
         }
     }
 
-    //解压条目 压缩按4KB页调Iamdec 非压缩直接XOR
+    //解压条目时 压缩的按4KB页调Iamdec 非压缩的直接XOR
     private static byte[] X3(byte[] rgG, (string, uint, uint, uint) entry, bool bMain)
     {
         if (uKS1A == 0xF00DFACEu) return rgG;
@@ -1162,7 +1162,7 @@ internal static class P
         finally { Array.Clear(rgB, 0, rgB.Length); }
     }
 
-    //内存读节 命中返回数据 失败null回退文件
+    //从内存读节 命中即返回数据 失败则回退到文件
     private static byte[]? X6Mem(ProcessModule mm, string sSection)
     {
         IntPtr pBase = mm.BaseAddress;

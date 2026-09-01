@@ -94,7 +94,7 @@ public static class MethodEncryptor
         return 0;//不支持的格式 跳过
     }
 
-    //双向流密码 前半正向后半逆向 输出再按nibble置换 高/低独立
+    //双向流密码 前半正向后半逆向 输出再按nibble置换 高/低各用独立流
     private static void Xor(byte[] rgD, int iOff, int iLen, ulong uKey, int iV)
     {
         //流常数由key派生 每次打包不同
@@ -117,7 +117,7 @@ GenPerm(uKey, out rgPH, out rgPL, out rgIH, out rgIL);
             Step(rgD, iOff + i, ref uS1, ref uS2, ref uPrev, uC1, uC2, uC3, uC4, iV, rgPH, rgPL);
     }
 
-    //nibble置换表 高/低独立由key派生 含逆表
+    //nibble置换表由key派生 高/低独立 含逆表
     private static void GenPerm(ulong uKey, out byte[] rgPH, out byte[] rgPL, out byte[] rgIH, out byte[] rgIL)
     {
         byte[] rgP = new byte[16];

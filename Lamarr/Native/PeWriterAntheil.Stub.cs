@@ -269,7 +269,7 @@ internal partial class PeWriterAntheil
         return ParseMajorFromRtc(Encoding.UTF8.GetString(rgBundleData, iOff, iLen));
     }
 
-    //全0缓冲随机化 gFall/gBest必须0(efb标志) 填充从##STREN##标记9B后align8起
+    //全0缓冲随机化 但gFall/gBest必须保持0(efb标志) 填充从##STREN##标记9B后align8开始
     private static void ScrambleBuffers(byte[] rgB, Random rng)
     {
         int iSE = IndexOf(rgB, Encoding.ASCII.GetBytes("##STREN##"));

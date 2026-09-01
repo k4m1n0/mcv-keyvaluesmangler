@@ -416,7 +416,7 @@ internal partial class PeWriterAntheil
         return rgOut;
     }
 
-    //就地等价替换 短指令换成2字节长形式 每处+1字节 利用方法体后空隙 零移动 重定位方法内分支
+    //短指令就地换成2字节长形式 每处+1字节 用方法体后空隙填充 零移动并重定位分支
     private static byte[] DisturbIl(byte[] rgB, int iIl, int iCs, int iGap, Random rng)
     {
         if (iCs <= 8 || iGap <= 0) return null;
@@ -568,7 +568,7 @@ internal partial class PeWriterAntheil
                 int ip = rgInsn[idx].iPos + rgInsn[idx].iLen;
                 if (ip <= 1 || ip >= iCs - 1) continue;
                 if (rgIns.Contains(ip)) continue;
-                //插入点前指令非终止指令(ret/br/switch/leave/throw)
+                //插入点前的指令不能是终止指令(ret/br/switch/leave/throw)
                 byte opPrev = rgIl[rgInsn[idx].iPos];
                 if (opPrev == 0x2A || opPrev == 0x7A || opPrev == 0xDC || opPrev == 0xDD || opPrev == 0xDE ||
                     (opPrev >= 0x38 && opPrev <= 0x45)) continue;
@@ -591,7 +591,7 @@ internal partial class PeWriterAntheil
         {
             if (iInsIdx < rgIns.Count && iSrc == rgIns[iInsIdx])
             {
-                //恒假分支 6字节与预留量一致
+                //恒假分支恰为6字节 与预留量一致
                 rgNew[iDst++] = 0x16;
                 rgNew[iDst++] = 0x2C; rgNew[iDst++] = 0x03;
                 rgNew[iDst++] = 0x16;

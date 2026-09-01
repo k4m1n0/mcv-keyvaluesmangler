@@ -2,7 +2,6 @@
 DispenserGoinUp
 RedTapeRecorder
 YourEternalReward
-GuardianoDelleGalassieEDellIperspazio
 TextGoesHere
 PatchHere
 RemoveBeforeShipping
@@ -15,7 +14,7 @@ PROC
 ENDPROC
 BoOhOWaEr
 YouAreAbsolutelyRight
-WelcomeToCitySeventeen
+FreemanYouFool
 HowDidYouGetInHere
 AndHisNameIsJohnCena
 TEMPHACKFIXME

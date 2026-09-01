@@ -174,7 +174,7 @@ internal partial class PeWriterAntheil
         var rng = new Random(Environment.TickCount ^ (int)(DateTime.UtcNow.Ticks & 0x7FFFFFFF));
         string RandName() => new string(Enumerable.Range(0, rng.Next(4, 16)).Select(_ => (char)('a' + rng.Next(26))).ToArray());
 
-        //jithook与解码器 混入主程序流时XOR并字节反转
+        //jithook与解码器混入主程序流时先XOR再字节反转
 
         {
             long lOndisk = rgCsz[iMainEntry] > 0 ? rgCsz[iMainEntry] : rgSz[iMainEntry];
@@ -440,7 +440,7 @@ internal partial class PeWriterAntheil
             }
             else if (iKind == 5)
             {
-                //BSJB头按8字节对齐 供FakeLamAppLoader按8步进扫描
+                //BSJB头按8字节对齐 便于FakeLamAppLoader按8步进扫描
                 uPos += (uint)((8 - (int)(uPos % 8)) % 8);
                 int iDst2 = iDataBase + (int)uPos;
                 int iNameOffAbs = iDataBase + iNamePos;
