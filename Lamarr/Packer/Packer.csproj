@@ -1,13 +1,48 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <PackerTfm Condition="'$(PackerTfm)'=='' And '$(LamarrTfm)'!=''">$(LamarrTfm)</PackerTfm>
+    <PackerTfm Condition="'$(PackerTfm)'=='' And '$(PianolaTfm)'!=''">$(PianolaTfm)</PackerTfm>
+    <PackerTfm Condition="'$(PackerTfm)'==''">net5.0-windows</PackerTfm>
+    <TargetFramework>$(PackerTfm)</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <CheckEolTargetFramework>false</CheckEolTargetFramework>
+    <RollForward>LatestMajor</RollForward>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>LamarrPacker</AssemblyName>
-    <RootNamespace>LamarrPacker</RootNamespace>
+    <RootNamespace>Lamarr.Packer</RootNamespace>
+    <Version>1.0.0.0</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <PublishSingleFile Condition="'$(RuntimeIdentifier)' != ''">true</PublishSingleFile>
+    <DebugType Condition="'$(Configuration)' == 'Release'">none</DebugType>
+    <DebugSymbols Condition="'$(Configuration)' == 'Release'">false</DebugSymbols>
+    <TreatWarningsAsErrors Condition="'$(Configuration)'=='Release'">true</TreatWarningsAsErrors>
+    <LamarrAntheil Condition="'$(LamarrAntheil)'==''">0</LamarrAntheil>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(LamarrAntheil)'=='1'">
+    <DefineConstants>$(DefineConstants);LAMARR_ANTHEIL</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Lamarr.csproj" />
+    <Compile Include="..\BundleWriter.cs" Link="BundleWriter.cs" />
+    <Compile Include="..\LamarrEncoder.cs" Link="LamarrEncoder.cs" />
   </ItemGroup>
+  <ItemGroup>
+    <AssemblyMetadata Include="LamarrAntheil" Value="$(LamarrAntheil)" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(LamarrAntheil)'!='1'">
+    <Compile Remove="PeWriterAntheil*.cs" />
+    <Compile Remove="Pianola\**\*.cs" />
+    <Compile Remove="BootExp.cs" />
+    <Compile Remove="BootNames.cs" />
+    <Compile Remove="BootRenamer.cs" />
+    <Compile Remove="MethodEncryptor.cs" />
+    <Compile Remove="Q.cs" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(LamarrAntheil)'=='1'">
+    <EmbeddedResource Include="..\Native\out\z0.dll" LogicalName="z0.dll" />
+  </ItemGroup>
+  <Target Name="RequireZ0" BeforeTargets="BeforeBuild" Condition="'$(LamarrAntheil)'=='1' And !Exists('..\Native\out\z0.dll')">
+    <Error Text="LamarrAntheil=1 needs ..\Native\out\z0.dll: run Lamarr\Native\build_asm.ps1 first" />
+  </Target>
 </Project>

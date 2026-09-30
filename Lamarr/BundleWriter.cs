@@ -3,21 +3,21 @@ using System.Text.Json;
 
 namespace Lamarr;
 
-public static class Packer
+public static class BundleWriter
 {
-    private static readonly byte[] rgMagic = [0x4C, 0x61, 0x6D, 0x61, 0x72, 0x72, 0x21, 0x21];//Lamarr!!
+    private static readonly byte[] rgMagic = { 0x4C, 0x61, 0x6D, 0x61, 0x72, 0x72, 0x21, 0x21 };//Lamarr!!
     private static readonly byte[] rgBundleSig =
-    [
+    {
         0x8B, 0x12, 0x02, 0xB9, 0x6A, 0x61, 0x20, 0x38, 0x72, 0x7B, 0x93, 0x02, 0x14, 0xD7, 0xA0, 0x32,
         0x13, 0xF5, 0xB9, 0xE6, 0xEF, 0xAE, 0x33, 0x18, 0xEE, 0x3B, 0x2D, 0xCE, 0x24, 0xB3, 0x6A, 0xAE,
-    ];
+    };
 
     public static void Pack(string sStubPath, string sInputPath, string sOutputPath)
     {
         byte[] rgStub = File.ReadAllBytes(sStubPath);
         byte[] rgMain = File.ReadAllBytes(sInputPath);
 
-        //从deps.json收集托管依赖 主dll同目录
+        //从依赖清单收集托管依赖 主程序集同目录
         var rgDeps = CollectManagedDeps(sInputPath);
 
         int iCount = 1 + rgDeps.Count;
@@ -51,7 +51,7 @@ public static class Packer
             uDataOff += pcb;
         }
 
-        //名字区4字节对齐
+        //名字区按4字节对齐
         var rgNameBytes = new byte[iCount][];
         uint uNameTotal = 0;
         for (int i = 0; i < iCount; i++)
@@ -61,12 +61,12 @@ public static class Packer
         }
         uint uNameArea = (uNameTotal + 3) & ~3u;
 
-        //压缩后写到新文件再覆盖原exe 避免读自己把自己写坏
+        //压缩后写到新文件再覆盖原程序 避免读自己时把内容写坏
         using var fs = new FileStream(sOutputPath, FileMode.Create, FileAccess.Write, FileShare.None);
 
-        //单文件stub的bundle header由hostfxr通过bundle marker的header_off定位
-        //容器插在header之前会整体后移header 必须同步更新marker里的header_off指向新位置
-        //否则hostfxr按旧偏移读到容器数据报"Bundle header version compatibility check failed"
+        //单文件桩的容器头部由运行时通过标记里的偏移定位
+        //容器插在头部之前会整体后移头部 必须同步更新标记里的偏移指向新位置
+        //否则运行时会按旧偏移读到容器数据 报头部版本不兼容
         int iHeaderOff = FindBundleHeaderOff(rgStub);
         int iStubDataEnd = (iHeaderOff > 0 && iHeaderOff < rgStub.Length) ? iHeaderOff : rgStub.Length;
         if (iStubDataEnd < rgStub.Length)
@@ -100,14 +100,14 @@ public static class Packer
         for (int i = 0; i < iCount; i++)
             fs.Write(rgBlocks[i], 0, (int)rgCompLen[i]);
 
-        //bundle header保持在文件尾
+        //容器头部保持在文件尾
         if (iStubDataEnd < rgStub.Length)
             fs.Write(rgStub, iStubDataEnd, rgStub.Length - iStubDataEnd);
 
         fs.Flush(true);
     }
 
-    //定位bundle header偏移 bundle marker = [header_off(8)][signature(32)]
+    //定位容器头部偏移 标记由8字节偏移与32字节签名组成
     private static int FindBundleHeaderOff(byte[] rgData)
     {
         for (int i = 0; i + 8 + rgBundleSig.Length <= rgData.Length; i++)
@@ -133,7 +133,7 @@ public static class Packer
         return -1;
     }
 
-    //返回bundle marker偏移([header_off(8)][signature(32)]的header_off所在位置)
+    //返回标记偏移 即8字节偏移字段所在位置
     private static int FindBundleMarker(byte[] rgData)
     {
         for (int i = 0; i + 8 + rgBundleSig.Length <= rgData.Length; i++)
@@ -159,7 +159,7 @@ public static class Packer
         return -1;
     }
 
-    //解析主dll的deps.json收集runtime托管依赖 排除主程序集和卫星程序集
+    //解析主程序集的依赖清单收集托管依赖 排除主程序集和卫星程序集
     private static List<(string name, byte[] data)> CollectManagedDeps(string sMainPath)
     {
         var rgDeps = new List<(string, byte[])>();
@@ -173,11 +173,11 @@ public static class Packer
             return rgDeps;
 
         var rgSeen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var tfm in rgTargets.EnumerateObject())
-            foreach (var pkg in tfm.Value.EnumerateObject())
-                foreach (var p in pkg.Value.EnumerateObject())
+        foreach (var jpTfm in rgTargets.EnumerateObject())
+            foreach (var jpPkg in jpTfm.Value.EnumerateObject())
+                foreach (var p in jpPkg.Value.EnumerateObject())
                 {
-                    //publish -r win-x64的deps.json用runtimeTargets(键带lib/net8.0/前缀) 普通publish用runtime
+                    //publish -r win-x64的依赖清单用运行时目标表 普通发布用运行时表
                     if (p.Name != "runtime" && p.Name != "runtimeTargets") continue;
                     foreach (var rt in p.Value.EnumerateObject())
                     {

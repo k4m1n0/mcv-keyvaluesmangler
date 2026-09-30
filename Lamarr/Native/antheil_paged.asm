@@ -61,7 +61,7 @@ Iamdec PROC EXPORT
     ; [rsp+00h]=bSkip [rsp+08h]=uSrc [rsp+10h]=flags
     ; [rsp+18h]=pageStart [rsp+20h]=tag&7Fh [rsp+28h]=len [rsp+30h]=dist
     mov rbx, rcx                        ; state (56B block)
-    mov r15, rdx                        ; hist (512KB window, caller-owned)
+    mov r15, rdx                        ; hist, 512KB window owned by the caller
     mov rdi, r8                         ; page (4KB output)
     mov [rbx+ST_SRCBASE], r9d           ; save src base
     mov r13, r9                         ; src end
@@ -70,7 +70,7 @@ Iamdec PROC EXPORT
     mov rsi, r9                         ; src ptr
     mov eax, [rbx+ST_INPOS]
     add rsi, rax                        ; rsi = src + inPos
-    mov r14d, [rbx+ST_PAGEEND]          ; r14 = pageEnd (caller-set)
+    mov r14d, [rbx+ST_PAGEEND]          ; r14 = pageEnd, set by the caller
     mov r11d, [rbx+ST_OUTPOS]           ; r11 = outPos (global)
     mov r12d, [rbx+ST_NIB]              ; r12b = nibble sync bit
     mov ebp, [rbx+ST_TAG]               ; ebp = tag
@@ -84,19 +84,26 @@ Iamdec PROC EXPORT
     mov eax, [rbx+ST_PAGESTART]
     mov [rsp+18h], eax                  ; pageStart
 
-; !! paged state machine: decodes [uOutPos,pageEnd) so plaintext never spans pages
+; !! paged state machine, decodes [uOutPos,pageEnd), plaintext never spans a page
 ; caller owns pageStart/pageEnd/dstLen
 ; decoder persists inPos/outPos/tag/iBC/flags/remain/src/nib
-; main loop
 lam_loop:
+iam_slot_0001::
+    db 0Fh, 1Fh, 44h, 00h, 00h, 0Fh, 1Fh, 00h
     cmp r11d, r14d
     jae lam_done
     mov ecx, [rsp+18h]
+    ;%poly:opseq
     xor eax, eax
+    ;%poly:alt
+    sub eax, eax
+    ;%poly:end
     cmp r11d, ecx
     jae lam_skip0
     mov eax, 1
 lam_skip0:
+iam_slot_0002::
+    db 0Fh, 1Fh, 80h, 00h, 00h, 00h, 00h, 0Fh, 1Fh, 00h
     mov [rsp+00h], eax
 
     test byte ptr [rsp+10h], F_PENDING
@@ -105,8 +112,9 @@ lam_skip0:
     jnz pump_raw
     jmp pump_hist
 
-; new item
 di_new:
+iam_slot_0003::
+    db 0Fh, 1Fh, 80h, 00h, 00h, 00h, 00h, 90h
     test r8b, r8b
     jnz di_have_tag
     mov rax, r13
@@ -116,11 +124,13 @@ di_new:
     NibRead
     mov ebp, eax
 di_have_tag:
+iam_slot_0004::
+    db 0Fh, 1Fh, 44h, 00h, 00h, 0Fh, 1Fh, 44h, 00h, 00h
     mov al, bpl
     shl al, 1
     jc di_match
 
-; literal
+; literal, copy one byte from the input
     mov rax, r13
     sub rax, r12
     cmp rsi, rax
@@ -136,11 +146,14 @@ di_have_tag:
     and ecx, 0FFFh
     mov [rdi+rcx], al
 wb_nopg:
+iam_slot_0005::
+    db 0Fh, 1Fh, 84h, 00h, 00h, 00h, 00h, 00h, 0Fh, 1Fh, 00h, 90h
     inc r11d
     jmp di_adv
 
-; match
 di_match:
+iam_slot_0006::
+    db 66h, 0Fh, 1Fh, 44h, 00h, 00h, 66h, 90h
     mov eax, ebp
     and eax, 7Fh
     mov [rsp+20h], eax
@@ -159,10 +172,14 @@ di_match:
     add r9d, 081h
     jmp rd_done
 rd_s0:
+iam_slot_0007::
+    db 0Fh, 1Fh, 44h, 00h, 00h, 0Fh, 1Fh, 00h
     and r9d, 07Fh
     inc r9d
     jmp rd_done
 rd_long:
+iam_slot_0008::
+    db 0Fh, 1Fh, 84h, 00h, 00h, 00h, 00h, 00h, 0Fh, 1Fh, 40h, 00h
     mov r9d, eax
     shr r9d, 2
     mov ecx, eax
@@ -180,20 +197,28 @@ rd_long:
     add r9d, 04441h
     jmp rd_done
 rd_l10:
+iam_slot_0009::
+    db 0Fh, 1Fh, 80h, 00h, 00h, 00h, 00h, 90h
     inc rsi
     and r9d, 03FFFh
     add r9d, 0441h
     jmp rd_done
 rd_l01:
+iam_slot_0010::
+    db 0Fh, 1Fh, 44h, 00h, 00h, 0Fh, 1Fh, 40h, 00h, 90h
     add rsi, r12
     xor r12b, 1
     and r9d, 03FFh
     add r9d, 041h
     jmp rd_done
 rd_l00:
+iam_slot_0011::
+    db 0Fh, 1Fh, 84h, 00h, 00h, 00h, 00h, 00h, 66h, 90h
     and r9d, 03Fh
     inc r9d
 rd_done:
+iam_slot_0012::
+    db 0Fh, 1Fh, 00h, 66h, 0Fh, 1Fh, 44h, 00h, 00h, 0Fh, 1Fh, 00h
     mov [rsp+30h], r9d                  ; dist (stash)
 
 ; ReadLen -> eax
@@ -218,19 +243,29 @@ rl12a: and  eax, 0FFFh
     and eax, 0FFFFh
     jmp rl_u
 rl_u16:
+iam_slot_0013::
+    db 0Fh, 1Fh, 44h, 00h, 00h, 0Fh, 1Fh, 00h, 0Fh, 1Fh, 00h, 90h
     movzx eax, word ptr [rsi]
 rl_u:
+iam_slot_0014::
+    db 0Fh, 1Fh, 84h, 00h, 00h, 00h, 00h, 00h, 0Fh, 1Fh, 00h, 90h
     add eax, L_1B
     add rsi, 2
     jmp rl_done
 rl_s:
+iam_slot_0015::
+    db 0Fh, 1Fh, 80h, 00h, 00h, 00h, 00h, 90h
     and eax, 0Fh
     add eax, 3
     jmp rl_done
 rl_m:
+iam_slot_0016::
+    db 0Fh, 1Fh, 00h, 0Fh, 1Fh, 44h, 00h, 00h, 66h, 90h
     shr eax, 4
     add eax, 012h
 rl_done:
+iam_slot_0017::
+    db 66h, 0Fh, 1Fh, 44h, 00h, 00h, 0Fh, 1Fh, 44h, 00h, 00h, 90h
     mov [rsp+28h], eax
 
 ; len == L_2B -> copy chunk
@@ -247,10 +282,14 @@ rl_done:
     xor r12d, r12d
     jmp cc_calc
 cn0:
+iam_slot_0018::
+    db 66h, 0Fh, 1Fh, 44h, 00h, 00h, 0Fh, 1Fh, 00h, 90h
     movzx ecx, word ptr [rsi-5]
     and ecx, 0FC0h
     shl ecx, 1
 cc_calc:
+iam_slot_0019::
+    db 0Fh, 1Fh, 40h, 00h, 66h, 90h
     add ecx, [rsp+20h]
     add ecx, 4
     shl ecx, 1
@@ -264,6 +303,8 @@ cc_calc:
 
 ; normal match (history copy)
 di_match_hist:
+iam_slot_0020::
+    db 0Fh, 1Fh, 84h, 00h, 00h, 00h, 00h, 00h
     mov ecx, [rsp+30h]
     cmp r11d, ecx
     jb di_err_dist
@@ -282,9 +323,11 @@ di_match_hist:
     mov r10d, eax
     jmp pump_hist
 
-; pump: raw copy from input
+; pump, raw copy from input
 pump_raw:
 pr_loop:
+iam_slot_0021::
+    db 66h, 0Fh, 1Fh, 84h, 00h, 00h, 00h, 00h, 00h, 90h
     test r10d, r10d
     jz pump_finish
     cmp r11d, r14d
@@ -302,13 +345,17 @@ pr_loop:
     and ecx, 0FFFh
     mov [rdi+rcx], al
 pr_nopg:
+iam_slot_0022::
+    db 66h, 0Fh, 1Fh, 44h, 00h, 00h
     inc r11d
     dec r10d
     jmp pr_loop
 
-; pump: history copy (byte by byte)
+; pump, history copy, byte by byte
 pump_hist:
 ph_loop:
+iam_slot_0023::
+    db 0Fh, 1Fh, 40h, 00h, 66h, 90h
     test r10d, r10d
     jz pump_finish
     cmp r11d, r14d
@@ -327,12 +374,15 @@ ph_loop:
     and ecx, 0FFFh
     mov [rdi+rcx], al
 ph_nopg:
+iam_slot_0024::
+    db 66h, 0Fh, 1Fh, 84h, 00h, 00h, 00h, 00h, 00h, 0Fh, 1Fh, 00h
     inc r11d
     dec r10d
     jmp ph_loop
 
-; pump finish
 pump_finish:
+iam_slot_0025::
+    db 0Fh, 1Fh, 40h, 00h, 66h, 90h
     and byte ptr [rsp+10h], 0FEh
     test byte ptr [rsp+10h], F_SENT
     jnz pf_sent
@@ -341,38 +391,58 @@ pump_finish:
     and r8b, 7
     jmp di_after_pump
 pf_sent:
+iam_slot_0026::
+    db 66h, 0Fh, 1Fh, 44h, 00h, 00h
+    ;%poly:opseq
     mov r8b, 0
+    ;%poly:alt
+    xor r8b, r8b
+    ;%poly:end
 di_after_pump:
+iam_slot_0027::
+    db 0Fh, 1Fh, 40h, 00h, 0Fh, 1Fh, 44h, 00h, 00h, 0Fh, 1Fh, 00h
     cmp r11d, r14d
     jae lam_done
     jmp lam_loop
 
-; tag advance
 di_adv:
+iam_slot_0028::
+    db 66h, 0Fh, 1Fh, 44h, 00h, 00h, 0Fh, 1Fh, 00h, 90h
     shl ebp, 1
     inc r8b
     and r8b, 7
     jmp lam_loop
 
-; errors
 di_exhaust:
+iam_slot_0029::
+    db 0Fh, 1Fh, 00h, 0Fh, 1Fh, 00h
     mov eax, 105h
     jmp lam_exit
 di_err_dist:
+iam_slot_0030::
+    db 0Fh, 1Fh, 44h, 00h, 00h, 90h
     mov eax, 104h
     jmp lam_exit
 di_err_out:
+iam_slot_0031::
+    db 0Fh, 1Fh, 84h, 00h, 00h, 00h, 00h, 00h, 0Fh, 1Fh, 40h, 00h
     mov eax, 106h
     jmp lam_exit
 di_err_overrun:
+iam_slot_0032::
+    db 0Fh, 1Fh, 44h, 00h, 00h, 0Fh, 1Fh, 00h
     mov eax, 107h
     jmp lam_exit
 
 ; !! write back state so caller resumes next page
 ; hist/page buffers are owned by caller
 lam_done:
+iam_slot_0033::
+    db 0Fh, 1Fh, 40h, 00h, 66h, 90h
     xor eax, eax
 lam_exit:
+iam_slot_0034::
+    db 0Fh, 1Fh, 84h, 00h, 00h, 00h, 00h, 00h, 0Fh, 1Fh, 00h, 90h
     mov ecx, esi
     sub ecx, [rbx+ST_SRCBASE]
     mov [rbx+ST_INPOS], ecx
@@ -395,5 +465,46 @@ lam_exit:
     pop rbx
     ret
 Iamdec ENDP
+
+
+; fixed slots, the packer rewrites them in place
+iam_slot_dir_n equ 34
+iam_slot_dir:
+    dd 0C4B1A7E3h, 05E2D90B0h
+    dd iam_slot_dir_n
+    dd iam_slot_0001 - iam_slot_dir, 8, 0, 0
+    dd iam_slot_0002 - iam_slot_dir, 10, 0, 0
+    dd iam_slot_0003 - iam_slot_dir, 8, 0, 0
+    dd iam_slot_0004 - iam_slot_dir, 10, 0, 0
+    dd iam_slot_0005 - iam_slot_dir, 12, 0, 0
+    dd iam_slot_0006 - iam_slot_dir, 8, 0, 0
+    dd iam_slot_0007 - iam_slot_dir, 8, 0, 0
+    dd iam_slot_0008 - iam_slot_dir, 12, 0, 0
+    dd iam_slot_0009 - iam_slot_dir, 8, 0, 0
+    dd iam_slot_0010 - iam_slot_dir, 10, 0, 0
+    dd iam_slot_0011 - iam_slot_dir, 10, 0, 0
+    dd iam_slot_0012 - iam_slot_dir, 12, 0, 0
+    dd iam_slot_0013 - iam_slot_dir, 12, 0, 0
+    dd iam_slot_0014 - iam_slot_dir, 12, 0, 0
+    dd iam_slot_0015 - iam_slot_dir, 8, 0, 0
+    dd iam_slot_0016 - iam_slot_dir, 10, 0, 0
+    dd iam_slot_0017 - iam_slot_dir, 12, 0, 0
+    dd iam_slot_0018 - iam_slot_dir, 10, 0, 0
+    dd iam_slot_0019 - iam_slot_dir, 6, 0, 0
+    dd iam_slot_0020 - iam_slot_dir, 8, 0, 0
+    dd iam_slot_0021 - iam_slot_dir, 10, 0, 0
+    dd iam_slot_0022 - iam_slot_dir, 6, 0, 0
+    dd iam_slot_0023 - iam_slot_dir, 6, 0, 0
+    dd iam_slot_0024 - iam_slot_dir, 12, 0, 0
+    dd iam_slot_0025 - iam_slot_dir, 6, 0, 0
+    dd iam_slot_0026 - iam_slot_dir, 6, 0, 0
+    dd iam_slot_0027 - iam_slot_dir, 12, 0, 0
+    dd iam_slot_0028 - iam_slot_dir, 10, 0, 0
+    dd iam_slot_0029 - iam_slot_dir, 6, 0, 0
+    dd iam_slot_0030 - iam_slot_dir, 6, 0, 0
+    dd iam_slot_0031 - iam_slot_dir, 12, 0, 0
+    dd iam_slot_0032 - iam_slot_dir, 8, 0, 0
+    dd iam_slot_0033 - iam_slot_dir, 6, 0, 0
+    dd iam_slot_0034 - iam_slot_dir, 12, 0, 0
 
 END

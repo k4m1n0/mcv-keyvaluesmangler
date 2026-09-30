@@ -3,10 +3,11 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
+    <PackerTfm Condition="'$(PackerTfm)' == ''">$(TargetFramework)</PackerTfm>
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    
+
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <Version>1.2.0.0</Version>
     <FileVersion>1.2.0.0</FileVersion>
@@ -36,45 +37,26 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Packer Condition="'$(Packer)' == ''">managed</Packer>
-    <BootName Condition="'$(BootName)' == ''">WeaponDamageCalc.Boot</BootName>
-    <BootTfm Condition="'$(BootTfm)' == ''">$(TargetFramework)</BootTfm>
-    <NativeTfm Condition="'$(NativeTfm)' == ''">$(TargetFramework)</NativeTfm>
+    <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(SelfContained)' == '' And ('$(Packer)' == 'native' Or '$(Packer)' == 'antheil')">
-    <SelfContained>false</SelfContained>
-  </PropertyGroup>
+  <ItemGroup>
+  </ItemGroup>
 
   <Target Name="PublishStub" BeforeTargets="Publish" Condition="'$(Packer)' == 'managed' And '$(SelfContained)' != 'true' And '$(Configuration)' != 'Debug'">
-    <Exec Command="dotnet publish &quot;$(ProjectDir)Lamarr&quot; -c $(Configuration) -r $(RuntimeIdentifier) --no-self-contained -p:PublishSingleFile=true -p:LamarrTfm=$(TargetFramework) -p:DebugType=none -p:DebugSymbols=false -o &quot;$(PublishDir)&quot;" />
-    <Exec Command="dotnet build &quot;$(ProjectDir)Lamarr\Packer&quot; -c $(Configuration)" />
+    <Exec Command="dotnet publish &quot;$(ProjectDir)Lamarr&quot; -c $(Configuration) -r $(RuntimeIdentifier) --no-self-contained -p:PublishSingleFile=true -p:LamarrTfm=$(TargetFramework) -p:DebugType=none -p:DebugSymbols=false -p:Version=$(FileVersion) -p:FileVersion=$(FileVersion) -p:InformationalVersion=$(FileVersion) -p:AssemblyVersion=1.0.0.0 -p:IncludeSourceRevisionInInformationalVersion=false -o &quot;$(PublishDir)&quot;" />
+    <Exec Command="dotnet build &quot;$(ProjectDir)Lamarr\Packer&quot; -c $(Configuration) -p:PackerTfm=$(PackerTfm)" />
   </Target>
 
   <Target Name="LamarrPack" AfterTargets="Publish" Condition="'$(Packer)' == 'managed' And '$(SelfContained)' != 'true' And '$(Configuration)' != 'Debug'">
-    <Exec Command="&quot;$(ProjectDir)Lamarr\Packer\bin\$(Configuration)\net8.0-windows\LamarrPacker.exe&quot; --stub &quot;$(PublishDir)Lamarr.exe&quot; --input &quot;$(ProjectDir)bin\$(Configuration)\$(TargetFramework)\win-x64\$(AssemblyName).dll&quot; --output &quot;$(PublishDir)$(AssemblyName)_packed.exe&quot;" />
-    <Copy SourceFiles="$(PublishDir)$(AssemblyName)_packed.exe" DestinationFiles="$(PublishDir)$(AssemblyName).exe" OverwriteReadOnlyFiles="true" />
-    <Delete Files="$(PublishDir)$(AssemblyName)_packed.exe" />
-  </Target>
-
-  <Target Name="NativeStubPack" AfterTargets="Publish" Condition="'$(Packer)' == 'native' Or '$(Packer)' == 'antheil'">
-    <Delete Files="$(PublishDir)$(AssemblyName).exe" />
-    <Exec Command="dotnet publish &quot;$(ProjectDir)WeaponDamageCalc.csproj&quot; -c $(Configuration) -r $(RuntimeIdentifier) --no-self-contained -p:PublishSingleFile=true -p:Packer=none -o &quot;$(PublishDir)&quot;" Condition="'$(SelfContained)' != 'true'" />
-    <Exec Command="dotnet build &quot;$(ProjectDir)Lamarr\Native\Native.csproj&quot; -c Release -v q" />
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)Lamarr\Native\build_boot.ps1&quot; -Build -BootName $(BootName) -BootTfm $(BootTfm)" Condition="'$(Packer)' == 'antheil'" />
-    <Exec Command="dotnet build &quot;$(ProjectDir)Lamarr\Native\Boot\Boot.csproj&quot; -c Release -v q" Condition="'$(Packer)' == 'native'" />
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)Lamarr\Native\build_asm.ps1&quot; -AsmDir &quot;$(ProjectDir)Lamarr\Native&quot; -OutDir &quot;$(ProjectDir)Lamarr\Native\out&quot; -Packer antheil -Pack -InputPath &quot;$(PublishDir)$(AssemblyName).exe&quot; -Output &quot;$(PublishDir)$(AssemblyName)_packed.exe&quot; -Boot &quot;$(ProjectDir)Lamarr\Native\BootAntheil\bin\Release\$(BootTfm)\$(BootName).dll&quot; -Decoder &quot;$(ProjectDir)Lamarr\Native\out\Iamdec.dll&quot; -JitHook &quot;$(ProjectDir)Lamarr\Native\out\jithook.dll&quot; -Pheropod &quot;$(ProjectDir)Lamarr\Native\out\z0.dll&quot; -AppName $(AssemblyName) -PackerTfm $(NativeTfm) -Mode antheil" Condition="'$(Packer)' == 'antheil'" />
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)Lamarr\Native\build_asm.ps1&quot; -AsmDir &quot;$(ProjectDir)Lamarr\Native&quot; -OutDir &quot;$(ProjectDir)Lamarr\Native\out&quot; -Packer native -Pack -InputPath &quot;$(PublishDir)$(AssemblyName).exe&quot; -Output &quot;$(PublishDir)$(AssemblyName)_packed.exe&quot; -Boot &quot;$(ProjectDir)Lamarr\Native\Boot\bin\Release\$(BootTfm)\LamarrBoot.dll&quot; -Mode clean" Condition="'$(Packer)' == 'native'" />
+    <Exec Command="&quot;$(ProjectDir)Lamarr\Packer\bin\$(Configuration)\$(PackerTfm)\LamarrPacker.exe&quot; --stub &quot;$(PublishDir)Lamarr.exe&quot; --input &quot;$(ProjectDir)bin\$(Configuration)\$(TargetFramework)\win-x64\$(AssemblyName).dll&quot; --output &quot;$(PublishDir)$(AssemblyName)_packed.exe&quot; --mode managed" />
     <Copy SourceFiles="$(PublishDir)$(AssemblyName)_packed.exe" DestinationFiles="$(PublishDir)$(AssemblyName).exe" OverwriteReadOnlyFiles="true" />
     <Delete Files="$(PublishDir)$(AssemblyName)_packed.exe" />
   </Target>
 
   <ItemGroup>
     <Compile Remove="Lamarr\**" />
-    <Compile Remove="publish\**" />
-    <Compile Remove="PeWriter.cs" />
     <EmbeddedResource Remove="Lamarr\**" />
-    <EmbeddedResource Remove="publish\**" />
     <None Remove="publish\**" />
   </ItemGroup>
 
@@ -99,5 +81,7 @@
       </ItemGroup>
       <Delete Files="@(Cor3Dlls)" />
   </Target>
+
+  <Import Project="Lamarr\Native\PayloadPack.targets" />
 
 </Project>

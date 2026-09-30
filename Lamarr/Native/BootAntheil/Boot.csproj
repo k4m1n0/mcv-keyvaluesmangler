@@ -22,5 +22,14 @@
     <EnableUnsafeBinaryFormatterSerialization>false</EnableUnsafeBinaryFormatterSerialization>
     <EnableUnsafeUTF7Encoding>false</EnableUnsafeUTF7Encoding>
     <DebuggerSupport>false</DebuggerSupport>
+    <NoWin32Manifest>true</NoWin32Manifest>
   </PropertyGroup>
+
+  <PropertyGroup Condition="'$(LamarrTriageKnobs)' == '1'">
+    <DefineConstants>$(DefineConstants);LAMARR_TRIAGE</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\Packer\BootExp.cs" />
+  </ItemGroup>
 </Project>

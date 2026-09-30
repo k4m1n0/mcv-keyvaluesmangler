@@ -6,7 +6,7 @@ using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
 
-namespace Lamarr.NativePack;
+namespace Lamarr.Packer;
 
 internal partial class PeWriterAntheil
 {
@@ -32,13 +32,13 @@ internal partial class PeWriterAntheil
     private sealed class MReloc
     {
         public int Row, iRva, iHdr, iCs;
-        public byte[] rgBody;
+        public byte[] rgBody = null!;
         public bool bGrow;
         public bool bPlain;
-        public string sName;
+        public string sName = null!;
     }
 
-    //方法区平移注入 目标方法体内插恒假分支 后续方法起点平移 md6表与metadata同步
+    //方法区平移注入目标方法体内插恒假分支 后续方法起点平移 方法表与元数据同步
     private static byte[] MoveInjectIl(byte[] rgB, Random rng)
     {
         int iPe = BitConverter.ToInt32(rgB, 0x3C);
@@ -63,35 +63,33 @@ internal partial class PeWriterAntheil
         }
         if (iTva == 0 || iTroff == 0) return rgB;
         string sOnly = Environment.GetEnvironmentVariable("LAMARR_MOVE_ONLY") ?? "";
-        var rgPlain = new HashSet<string> { "DeriveSeed", "RestoreData", "GenDisturb", "CheckElapsed", "SelfCheck" };
+        var rgPlain = new HashSet<string>(BootNames.MoveInjected);
         var rgAll = new List<MReloc>();
-        using (var ms = new MemoryStream(rgB, writable: false))
-        using (var per = new PEReader(ms))
+        using var ms = new MemoryStream(rgB, writable: false);
+        using var per = new PEReader(ms);
+        var mr = per.GetMetadataReader();
+        foreach (var mdh in mr.MethodDefinitions)
         {
-            var mr = per.GetMetadataReader();
-            foreach (var mdh in mr.MethodDefinitions)
-            {
-                var md = mr.GetMethodDefinition(mdh);
-                int iRva = md.RelativeVirtualAddress;
-                if (iRva == 0) continue;
-                string sName = mr.GetString(md.Name);
-                int iOff = iTroff + (iRva - iTva);
-                if (iOff < 0 || iOff + 12 > rgB.Length) continue;
-                byte b0 = rgB[iOff];
-                int iHdr, iCs;
-                if ((b0 & 3) == 2) { iHdr = 1; iCs = b0 >> 2; }
-                else if ((b0 & 3) == 3) { iHdr = 12; iCs = BitConverter.ToInt32(rgB, iOff + 4); }
-                else continue;
-                if (iCs <= 0 || iCs > 0xFFFF) continue;
-                int iRow = MetadataTokens.GetRowNumber(mr, mdh);
-                bool bHasEh = false;
-                try { bHasEh = per.GetMethodBody(iRva).ExceptionRegions.Any(); }
-                catch { }
-                var m = new MReloc { Row = iRow, iRva = iRva, iHdr = iHdr, iCs = iCs, sName = sName };
-                m.bPlain = !bHasEh && m.iHdr == 12 &&
-                    (sOnly.Length > 0 ? sName == sOnly : rgPlain.Contains(sName));
-                rgAll.Add(m);
-            }
+            var md = mr.GetMethodDefinition(mdh);
+            int iRva = md.RelativeVirtualAddress;
+            if (iRva == 0) continue;
+            string sName = mr.GetString(md.Name);
+            int iOff = iTroff + (iRva - iTva);
+            if (iOff < 0 || iOff + 12 > rgB.Length) continue;
+            byte b0 = rgB[iOff];
+            int iHdr, iCs;
+            if ((b0 & 3) == 2) { iHdr = 1; iCs = b0 >> 2; }
+            else if ((b0 & 3) == 3) { iHdr = 12; iCs = BitConverter.ToInt32(rgB, iOff + 4); }
+            else continue;
+            if (iCs <= 0 || iCs > 0xFFFF) continue;
+            int iRow = MetadataTokens.GetRowNumber(mr, mdh);
+            bool bHasEh = false;
+            try { bHasEh = per.GetMethodBody(iRva).ExceptionRegions.Any(); }
+            catch { }
+            var m = new MReloc { Row = iRow, iRva = iRva, iHdr = iHdr, iCs = iCs, sName = sName };
+            m.bPlain = !bHasEh && m.iHdr == 12 &&
+                (sOnly.Length > 0 ? sName == sOnly : rgPlain.Contains(sName));
+            rgAll.Add(m);
         }
         if (rgAll.Count == 0) return rgB;
         var rgS = rgAll.OrderBy(m => m.iRva).ToList();
@@ -116,10 +114,10 @@ internal partial class PeWriterAntheil
         {
             if (!m.bPlain || m.iHdr != 12) continue;
             int iOff = iTroff + (m.iRva - iTva);
-            byte[] rgD;
+            byte[]? rgD;
             if (Environment.GetEnvironmentVariable("LAMARR_MOVE_NOPONLY") == "1")
             {
-                //纯移动 末尾追加nop 数量由LAMARR_MOVE_NOP控制
+                //纯移动模式下末尾追加空操作 数量由环境变量控制
                 int iNop = int.TryParse(Environment.GetEnvironmentVariable("LAMARR_MOVE_NOP") ?? "", out int iV) ? iV : 6;
                 rgD = new byte[m.iCs + iNop];
                 Array.Copy(rgB, iOff + m.iHdr, rgD, 0, m.iCs);
@@ -143,6 +141,13 @@ internal partial class PeWriterAntheil
             iMetaShift = (iGrowth + 7) & ~7;
             int iMetaSize = BitConverter.ToInt32(rgB, iCliOff + 12);
             if (iMetaSize <= 0 || iMd + iMetaSize + iMetaShift > iTroff + iTvs) return rgB;
+            //元数据要挪过去的那段字节必须为空 其后紧跟入口桩与导入表
+            for (int i = 0; i < iMetaShift; i++)
+                if (rgOut[iMd + iMetaSize + i] != 0)
+                {
+                    Console.WriteLine("  il_mutate: metadata shift would clobber live data, mutation skipped");
+                    return rgB;
+                }
             byte[] rgMeta = new byte[iMetaSize];
             Buffer.BlockCopy(rgOut, iMd, rgMeta, 0, iMetaSize);
             Buffer.BlockCopy(rgMeta, 0, rgOut, iMd + iMetaShift, iMetaSize);
@@ -156,42 +161,44 @@ internal partial class PeWriterAntheil
             iAreaEnd = Math.Max(iAreaEnd, iTroff + (m.iRva - iTva) + m.iHdr + m.iCs);
         int iOldArea = iAreaEnd - iFirstOff;
         if (iOldArea <= 0) return rgB;
+        //方法区与元数据间还有CLR头与导入桩 增长过大会踩到 此处留痕(每方法最多3字节)
+        if (iCliOff > 0 && iAreaEnd + iGrowth > iCliOff)
+            Console.WriteLine($"  il_mutate: WARN growth reaches the CLR header (area={iAreaEnd} growth={iGrowth} cli={iCliOff})");
         byte[] rgNewArea = new byte[iOldArea + iGrowth];
         var cumShift = new int[rgS.Count];
-        int csum = 0, cur = 0;
+        int iCsum = 0, cur = 0;
         for (int i = 0; i < rgS.Count; i++)
         {
             var m = rgS[i];
-            cumShift[i] = csum;
+            cumShift[i] = iCsum;
             int iOff = iTroff + (m.iRva - iTva);
 
-            if (rgNewBody.TryGetValue(m.Row, out var body))
+            if (rgNewBody.TryGetValue(m.Row, out var rgBody))
             {
                 byte[] hdr = new byte[m.iHdr];
                 Array.Copy(rgB, iOff, hdr, 0, m.iHdr);
 
-                if (m.iHdr >= 8) BitConverter.GetBytes(body.Length).CopyTo(hdr, 4);
+                if (m.iHdr >= 8) BitConverter.GetBytes(rgBody.Length).CopyTo(hdr, 4);
                 Array.Copy(hdr, 0, rgNewArea, cur, hdr.Length); cur += hdr.Length;
-                Array.Copy(body, 0, rgNewArea, cur, body.Length); cur += body.Length;
-                csum += body.Length - m.iCs;
+                Array.Copy(rgBody, 0, rgNewArea, cur, rgBody.Length); cur += rgBody.Length;
+                iCsum += rgBody.Length - m.iCs;
             }
             else
             {
                 Array.Copy(rgB, iOff, rgNewArea, cur, m.iHdr + m.iCs); cur += m.iHdr + m.iCs;
             }
             int iGapEnd = (i + 1 < rgS.Count) ? iTroff + (rgS[i + 1].iRva - iTva) : iAreaEnd;
-            int gap = iGapEnd - (iOff + m.iHdr + m.iCs);
+            int iGap = iGapEnd - (iOff + m.iHdr + m.iCs);
 
-            if (gap > 0 && i + 1 < rgS.Count && cur + gap <= rgNewArea.Length)
+            if (iGap > 0 && i + 1 < rgS.Count && cur + iGap <= rgNewArea.Length)
             {
-                Array.Copy(rgB, iOff + m.iHdr + m.iCs, rgNewArea, cur, gap);
-                cur += gap;
+                Array.Copy(rgB, iOff + m.iHdr + m.iCs, rgNewArea, cur, iGap);
+                cur += iGap;
             }
         }
         Array.Copy(rgNewArea, 0, rgOut, iFirstOff, rgNewArea.Length);
 
-
-        if (iGrowth > 0 && iMd >= 0)
+if (iGrowth > 0 && iMd >= 0)
         {
             var rvaMap = new Dictionary<int, int>();
 
@@ -264,34 +271,27 @@ internal partial class PeWriterAntheil
         ulong uValid = BitConverter.ToUInt64(rgD, iT + 8);
         if ((uValid & (1UL << 6)) == 0) return;
         int[] rowCount = new int[7], rowSize = new int[7];
-        using (var ms = new MemoryStream(rgD, writable: false))
-        using (var per = new PEReader(ms))
+        using var ms = new MemoryStream(rgD, writable: false);
+        using var per = new PEReader(ms);
+        var mr = per.GetMetadataReader();
+        for (int t = 0; t <= 6; t++)
         {
-            var mr = per.GetMetadataReader();
-            for (int t = 0; t <= 6; t++)
-            {
-                if ((uValid & (1UL << t)) == 0) continue;
-                rowCount[t] = mr.GetTableRowCount((TableIndex)t);
-                rowSize[t] = mr.GetTableRowSize((TableIndex)t);
-            }
+            if ((uValid & (1UL << t)) == 0) continue;
+            rowCount[t] = mr.GetTableRowCount((TableIndex)t);
+            rowSize[t] = mr.GetTableRowSize((TableIndex)t);
         }
         int iRows = iT + 24;
         for (int t = 0; t < 64; t++)
             if ((uValid & (1UL << t)) != 0) iRows += 4;
         for (int t = 0; t < 6; t++)
             if ((uValid & (1UL << t)) != 0) iRows += rowCount[t] * rowSize[t];
-        int iPatched = 0;
         for (int r = 0; r < rowCount[6]; r++)
         {
             int iRow = iRows + r * rowSize[6];
             if (iRow + 4 > rgD.Length) break;
             if (rvaMap.TryGetValue(r + 1, out int newRva))
-            {
                 BitConverter.GetBytes(newRva).CopyTo(rgD, iRow);
-                iPatched++;
-            }
         }
-
     }
 
     private static byte[] InjectIlNoise(byte[] rgB, Random rng)
@@ -318,49 +318,46 @@ internal partial class PeWriterAntheil
             }
         }
         if (iTva == 0 || iTroff == 0) return rgB;
-        var rgPlain = new HashSet<string> { "X1","X3","DeriveSeed","RestoreData","GenDisturb","CheckElapsed","SelfCheck","AD" };
-        //就地扰动明文方法 加密方法由MethodEncryptor加密 jf方法体哈希锁定AD/X1/X3/F不在范围
+        var rgPlain = new HashSet<string>(BootNames.NoiseInjected);
+        //就地扰动明文方法 加密方法与哈希锁定的方法不在此列
         var rgAll = new List<MReloc>();
-        using (var ms = new MemoryStream(rgB, writable: false))
-        using (var per = new PEReader(ms))
+        using var ms = new MemoryStream(rgB, writable: false);
+        using var per = new PEReader(ms);
+        var mr = per.GetMetadataReader();
+        foreach (var mdh in mr.MethodDefinitions)
         {
-            var mr = per.GetMetadataReader();
-            foreach (var mdh in mr.MethodDefinitions)
+            var md = mr.GetMethodDefinition(mdh);
+            int iRva = md.RelativeVirtualAddress;
+            if (iRva == 0) continue;
+            string sName = mr.GetString(md.Name);
+            int iOff = iTroff + (iRva - iTva);
+            if (iOff < 0 || iOff + 12 > rgB.Length) continue;
+            byte b0 = rgB[iOff];
+            int iHdr, iCs;
+            if ((b0 & 3) == 2) { iHdr = 1; iCs = b0 >> 2; }
+            else if ((b0 & 3) == 3) { iHdr = 12; iCs = BitConverter.ToInt32(rgB, iOff + 4); }
+            else continue;
+            if (iCs <= 0 || iCs > 0xFFFF) continue;
+            int iRow = MetadataTokens.GetRowNumber(mr, mdh);
+            bool bHasEh = false;
+            int iFull = 0;
+            try
             {
-                var md = mr.GetMethodDefinition(mdh);
-                int iRva = md.RelativeVirtualAddress;
-                if (iRva == 0) continue;
-                string sName = mr.GetString(md.Name);
-                int iOff = iTroff + (iRva - iTva);
-                if (iOff < 0 || iOff + 12 > rgB.Length) continue;
-                byte b0 = rgB[iOff];
-                int iHdr, iCs;
-                if ((b0 & 3) == 2) { iHdr = 1; iCs = b0 >> 2; }
-                else if ((b0 & 3) == 3) { iHdr = 12; iCs = BitConverter.ToInt32(rgB, iOff + 4); }
-                else continue;
-                if (iCs <= 0 || iCs > 0xFFFF) continue;
-                int iRow = MetadataTokens.GetRowNumber(mr, mdh);
-                bool bHasEh = false;
-                int iFull = 0;
-                try
-                {
-                    var mbb = per.GetMethodBody(iRva);
-                    iFull = mbb.Size;
-                    bHasEh = mbb.ExceptionRegions.Any();
-                }
-                catch { iFull = iHdr + iCs; }
-                if (iFull < iHdr + iCs) iFull = iHdr + iCs;
-                var m = new MReloc { Row = iRow, iRva = iRva, iHdr = iHdr, iCs = iCs };
-                m.bPlain = rgPlain.Contains(sName) && !bHasEh
-                    && sName != "AD" && sName != "X1" && sName != "X3";
-                m.rgBody = new byte[iFull];
-                Buffer.BlockCopy(rgB, iOff, m.rgBody, 0, iFull);
-                rgAll.Add(m);
+                var mbb = per.GetMethodBody(iRva);
+                iFull = mbb.Size;
+                bHasEh = mbb.ExceptionRegions.Any();
             }
+            catch { iFull = iHdr + iCs; }
+            if (iFull < iHdr + iCs) iFull = iHdr + iCs;
+            var m = new MReloc { Row = iRow, iRva = iRva, iHdr = iHdr, iCs = iCs };
+            m.bPlain = rgPlain.Contains(sName) && !bHasEh;
+            m.rgBody = new byte[iFull];
+            Buffer.BlockCopy(rgB, iOff, m.rgBody, 0, iFull);
+            rgAll.Add(m);
         }
         if (rgAll.Count == 0) return rgB;
         var rgS = rgAll.OrderBy(m => m.iRva).ToList();
-        int iMetaShift = 8;//metadata平移按4对齐 为最后方法就地增长腾空隙
+        //元数据不得前移腾空间 其后紧跟入口桩与导入表 最后一个方法只能长到元数据处 节末不是上界
         var rgOut = (byte[])rgB.Clone();
         int iCli = iOpt + (usMagic == 0x20B ? 112 : 96) + 14 * 8;
         int iMd = -1;
@@ -375,26 +372,23 @@ internal partial class PeWriterAntheil
                 if (uMdRva != 0) iMd = RvaToOffset(rgB, iPe, usOpt, usNum, uMdRva);
             }
         }
+        int iRvaLimit = iTva + iTvs;
         if (iMd >= 0)
         {
             int iMetaSize = BitConverter.ToInt32(rgB, iCliOff + 12);
-            if (iMetaSize <= 0 || iMd + iMetaSize + iMetaShift > iTroff + iTvs) return rgB;
-            byte[] rgMeta = new byte[iMetaSize];
-            Buffer.BlockCopy(rgOut, iMd, rgMeta, 0, iMetaSize);
-            Buffer.BlockCopy(rgMeta, 0, rgOut, iMd + iMetaShift, iMetaSize);
-            Array.Clear(rgOut, iMd, Math.Min(iMetaShift, iMetaSize));
-            BitConverter.GetBytes(BitConverter.ToUInt32(rgB, iCliOff + 8) + (uint)iMetaShift).CopyTo(rgOut, iCliOff + 8);
+            if (iMetaSize <= 0 || iMd + iMetaSize > iTroff + iTvs) return rgB;
+            iRvaLimit = iTva + (iMd - iTroff);//最后一个方法最多长到元数据处 不能越过
         }
         int iDisturbed = 0, iGrow = 0;
         for (int i = 0; i < rgS.Count; i++)
         {
             var m = rgS[i];
             if (!m.bPlain || m.iHdr != 12) continue;
-            int iNextRva = i + 1 < rgS.Count ? rgS[i + 1].iRva : iTva + iTvs;
+            int iNextRva = i + 1 < rgS.Count ? rgS[i + 1].iRva : iRvaLimit;
             int iGap = iNextRva - m.iRva - (m.iHdr + m.iCs);
             if (iGap <= 0) continue;
             int iOff = iTroff + (m.iRva - iTva);
-            byte[] rgD = DisturbIl(rgB, iOff + m.iHdr, m.iCs, Math.Min(iGap, 3), rng);
+            byte[]? rgD = DisturbIl(rgB, iOff + m.iHdr, m.iCs, Math.Min(iGap, 3), rng);
             if (rgD == null) continue;
             if (!IlSanity(rgD)) { Console.WriteLine($"  il_noise: DISTURB-FAIL {m.sName}"); continue; }
             m.rgBody = new byte[m.iHdr + rgD.Length];
@@ -411,13 +405,13 @@ internal partial class PeWriterAntheil
             if (m.bGrow)
                 Buffer.BlockCopy(m.rgBody, 0, rgOut, iTroff + (m.iRva - iTva), m.rgBody.Length);
         }
-        //方法起点RVA不变 零移动 md6表无需更新
+        //方法起点相对虚拟地址不变 零移动 方法表无需更新
         Console.WriteLine($"  il_noise: {rgS.Count} methods, disturb={iDisturbed}, +{iGrow} bytes");
         return rgOut;
     }
 
-    //短指令就地换成2字节长形式 每处+1字节 用方法体后空隙填充 零移动并重定位分支
-    private static byte[] DisturbIl(byte[] rgB, int iIl, int iCs, int iGap, Random rng)
+    //短指令就地换成2字节长形式 每处加1字节 用方法体后空隙填充 零移动并重定位分支
+    private static byte[]? DisturbIl(byte[] rgB, int iIl, int iCs, int iGap, Random rng)
     {
         if (iCs <= 8 || iGap <= 0) return null;
         byte[] rgIl = new byte[iCs];
@@ -433,7 +427,7 @@ internal partial class PeWriterAntheil
             if (IsBranch(rgIl[p]))
             {
                 int[] rgT = BranchTargets(rgIl, p, l);
-                if (rgT != null && rgT.Length > 0) rgBr.Add((p, l, rgT));
+                if (rgT?.Length > 0) rgBr.Add((p, l, rgT));
             }
             p += l;
         }
@@ -452,9 +446,9 @@ internal partial class PeWriterAntheil
         var rgSel = new List<int>();
         for (int t = 0; t < iWant; t++)
         {
-            int idx = rng.Next(rgCand.Count);
-            rgSel.Add(rgInsn[rgCand[idx]].iPos);
-            rgCand.RemoveAt(idx);
+            int iIdx = rng.Next(rgCand.Count);
+            rgSel.Add(rgInsn[rgCand[iIdx]].iPos);
+            rgCand.RemoveAt(iIdx);
         }
         rgSel.Sort();
         foreach (var br in rgBr)
@@ -489,11 +483,11 @@ internal partial class PeWriterAntheil
                 }
                 else
                 {
-                    rgNew[iDst++] = op;//1字节指令加nop 语义等价
+                    rgNew[iDst++] = op;//1字节指令加nop 行为不变
                     rgNew[iDst++] = 0x00;
                 }
                 iSel++;
-                iSrc += 1;//原指令1字节
+                iSrc += 1;
                 continue;
             }
             int l = IlLen(rgIl, iSrc);
@@ -536,8 +530,8 @@ internal partial class PeWriterAntheil
         return rgNew;
     }
 
-    //不透明谓词注入 恒假分支 无EH方法
-    private static byte[] ObfuscateIl(byte[] rgB, int iIl, int iCs, Random rng)
+    //不透明谓词注入 恒假分支 只用于无异常处理的方法
+    private static byte[]? ObfuscateIl(byte[] rgB, int iIl, int iCs, Random rng)
     {
         byte[] rgIl = new byte[iCs];
         Array.Copy(rgB, iIl, rgIl, 0, iCs);
@@ -552,7 +546,7 @@ internal partial class PeWriterAntheil
             if (IsBranch(rgIl[p]))
             {
                 int[] rgT = BranchTargets(rgIl, p, l);
-                if (rgT != null && rgT.Length > 0) rgBr.Add((p, l, rgT));
+                if (rgT?.Length > 0) rgBr.Add((p, l, rgT));
             }
             p += l;
         }
@@ -564,15 +558,15 @@ internal partial class PeWriterAntheil
             bool bOk = false;
             for (int a = 0; a < 40 && !bOk; a++)
             {
-                int idx = 2 + rng.Next(Math.Max(1, rgInsn.Count - 4));
-                int ip = rgInsn[idx].iPos + rgInsn[idx].iLen;
+                int iIdx = 2 + rng.Next(Math.Max(1, rgInsn.Count - 4));
+                int ip = rgInsn[iIdx].iPos + rgInsn[iIdx].iLen;
                 if (ip <= 1 || ip >= iCs - 1) continue;
                 if (rgIns.Contains(ip)) continue;
-                //插入点前的指令不能是终止指令(ret/br/switch/leave/throw)
-                byte opPrev = rgIl[rgInsn[idx].iPos];
+                //插入点前的指令不能是终止指令(ret/jmp/br/leave/throw)
+                byte opPrev = rgIl[rgInsn[iIdx].iPos];
                 if (opPrev == 0x2A || opPrev == 0x7A || opPrev == 0xDC || opPrev == 0xDD || opPrev == 0xDE ||
                     (opPrev >= 0x38 && opPrev <= 0x45)) continue;
-                if (opPrev == 0xFE && rgIl[rgInsn[idx].iPos + 1] == 0x11) continue;
+                if (opPrev == 0xFE && rgIl[rgInsn[iIdx].iPos + 1] == 0x11) continue;
                 bool bTgt = false;
                 foreach (var br in rgBr)
                     foreach (int tg in br.rgT)
@@ -591,7 +585,7 @@ internal partial class PeWriterAntheil
         {
             if (iInsIdx < rgIns.Count && iSrc == rgIns[iInsIdx])
             {
-                //恒假分支恰为6字节 与预留量一致
+                //恒假分支恰为6字节 与预留量相同
                 rgNew[iDst++] = 0x16;
                 rgNew[iDst++] = 0x2C; rgNew[iDst++] = 0x03;
                 rgNew[iDst++] = 0x16;
@@ -643,27 +637,35 @@ internal partial class PeWriterAntheil
     #endregion
     #region IL指令表
 
-    //IL指令长度 ECMA-335
+    //IL指令长度按ECMA-335
     private static int IlLen(byte[] rgIl, int i)
     {
         byte b = rgIl[i];
         if (b == 0x45)
         {
+            if (i + 5 > rgIl.Length) return -1;
             int n = BitConverter.ToInt32(rgIl, i + 1);
+            if (n < 0 || n > (rgIl.Length - 5) / 4) return -1;
             return 5 + n * 4;
         }
-        int l = b == 0xFE ? rgOpLen[0x100 + rgIl[i + 1]] : rgOpLen[b];
+        if (b == 0xFE)
+        {
+            if (i + 1 >= rgIl.Length) return -1;
+            int l2 = rgOpLen[0x100 + rgIl[i + 1]];
+            return l2 > 0 ? l2 : 2;//前缀操作码至少占两字节 当一字节会与后续字节错位
+        }
+        int l = rgOpLen[b];
         return l > 0 ? l : 1;
     }
 
-    //IL操作码长度表 运行时从OpCodes反射生成 覆盖全部ECMA-335
+    //IL操作码长度表 运行时从操作码类型反射生成 覆盖全部ECMA-335
     private static readonly int[] rgOpLen = BuildOpLen();
     private static int[] BuildOpLen()
     {
         var rg = new int[0x200];
         foreach (var f in typeof(System.Reflection.Emit.OpCodes).GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static))
         {
-            var op = (System.Reflection.Emit.OpCode)f.GetValue(null);
+            if (f.GetValue(null) is not System.Reflection.Emit.OpCode op) continue;
             int n = OperandLen(op.OperandType);
             if (op.Size == 1 && op.Value >= 0) rg[op.Value] = op.Size + n;
             else if (op.Size == 2) rg[0x100 + (op.Value & 0xFF)] = op.Size + n;
@@ -689,6 +691,8 @@ internal partial class PeWriterAntheil
             case System.Reflection.Emit.OperandType.InlineTok: return 4;
             case System.Reflection.Emit.OperandType.InlineI8:
             case System.Reflection.Emit.OperandType.InlineR: return 8;
+            case System.Reflection.Emit.OperandType.ShortInlineR: return 4;//四字节浮点立即数 ldc.r4 落在这一档 当零长度会错位
+            case System.Reflection.Emit.OperandType.InlineSwitch: return -1;//长度由分支数决定 由 IlLen 单独算
             default: return 0;
         }
     }
@@ -716,7 +720,7 @@ internal partial class PeWriterAntheil
         return n;
     }
 
-    //验证插入后所有短分支偏移不溢出sbyte
+    //验证插入后所有短分支偏移不溢出单字节有符号范围
     private static bool ShortOk(List<int> rgIns, int ip, List<(int iPos, int iLen, int[] rgT)> rgBr)
     {
         var rgT = new List<int>(rgIns) { ip };
@@ -738,7 +742,7 @@ internal partial class PeWriterAntheil
     #endregion
     #region 常量对随机化
 
-    //常量对随机化 改名前按原名收集字段token
+    //常量对随机化 改名前按原名收集字段令牌
     private static Dictionary<string, uint> FieldTokens(byte[] rgD, string[] rgNames)
     {
         var rgMap = new Dictionary<string, uint>(StringComparer.Ordinal);
@@ -765,9 +769,10 @@ internal partial class PeWriterAntheil
             var md = mr.GetMethodDefinition(h);
             if (mr.GetString(md.Name) != ".cctor") continue;
             uCctor = (uint)MetadataTokens.GetToken(h);
-            var mrb = per.GetMethodBody(md.RelativeVirtualAddress);
-            if (mrb == null) continue;
-            byte[] rgIlBytes = mrb.GetILBytes();
+            var mbb = per.GetMethodBody(md.RelativeVirtualAddress);
+            if (mbb == null) continue;
+            byte[]? rgIlBytes = mbb.GetILBytes();
+            if (rgIlBytes == null) continue;
             for (int iP = 0; iP + 5 < rgIlBytes.Length; iP++)
             {
                 if (rgIlBytes[iP] != 0x7D) continue;
@@ -793,9 +798,10 @@ internal partial class PeWriterAntheil
             if ((uint)MetadataTokens.GetToken(h) != uCctor) continue;
             var md = mr.GetMethodDefinition(h);
             int iRva = md.RelativeVirtualAddress;
-            var mrb = per.GetMethodBody(iRva);
-            if (mrb == null) continue;
-            byte[] rgIlBytes = mrb.GetILBytes();
+            var mbb = per.GetMethodBody(iRva);
+            if (mbb == null) continue;
+            byte[]? rgIlBytes = mbb.GetILBytes();
+            if (rgIlBytes == null) continue;
             bool bChanged = false;
             for (int iP = 0; iP + 5 < rgIlBytes.Length; iP++)
             {
@@ -822,7 +828,7 @@ internal partial class PeWriterAntheil
         {
             var md = mr.GetMethodDefinition(h);
             string sName = mr.GetString(md.Name);
-            if (sName == "W1" || sName == "X4" || sName == "X5" || sName == "TCheck" || sName == "X2" || sName == "X3Comp" || sName == "VerifyBodies")
+            if (Array.IndexOf(BootNames.Encrypted, sName) >= 0)
                 rg.Add(0x06000000u | (uint)MetadataTokens.GetRowNumber(mr, h));
         }
         return rg;

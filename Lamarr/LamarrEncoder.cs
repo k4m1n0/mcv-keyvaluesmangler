@@ -8,7 +8,7 @@ namespace Lamarr
     {
         #region 常量字段
 
-        //hash表条目数 平衡碰撞率与内存占用
+        //哈希表条目数 平衡碰撞率与内存占用
         private const int iDictSize = 0x8000;
         private const int iIdxSize  = 0x8000;
         private const int iDictMsk = iDictSize - 1;
@@ -58,7 +58,7 @@ namespace Lamarr
 
         private int EncodeInternal(byte[] rgOut, ref uint pcbOut, byte[] rgIn, uint cbIn)
         {
-            //输入末尾补1字节0 match到末尾时读取rgIn[cbIn]=0
+            //输入末尾补一个零字节 匹配到末尾时按零读取
             if (rgIn.Length <= cbIn)
             {
                 byte[] rgPadded = new byte[cbIn + 1];
@@ -141,7 +141,7 @@ namespace Lamarr
                 UpdateHash(uCurMatchCnt);
                             }
 
-            //尾部未满8个item的tag填充
+            //尾部未满8个条目的标签填充
             if (bBitMsk != 0) { bThisTag |= bBitMsk; bThisTag |= (byte)(bBitMsk - 1); }
             if ((iTagNib & 1) != 0)
             {
@@ -156,13 +156,13 @@ namespace Lamarr
 
         private bool CheckCopyChunk(uint uCurMatchCnt)
         {
-            //iUCData溢出或iCpyTag超阈值触发flush bValid防止rewind循环
+            //计数溢出或标签超阈值触发刷新 标志位防止回绕循环
             if (iCpyTag != 0 && cbUCData > 0xFFF8)
                 return true;
 
             uint i = uInPtr - (uProcessedData + uCurMatchCnt);
             uint cbCompressed = (uint)(iOutPos - iUCTagPos);
-            //bValid防FlushUCChunk后回绕导致的级联触发
+            //标志位防止刷新后回绕导致的级联触发
             bool bValid = uInPtr > uProcessedData;
 
             if (bThisTag != 0)
@@ -207,7 +207,7 @@ namespace Lamarr
         #endregion
         #region 匹配编码
 
-        //短距离用1bit分两档 长距离用2bit分四档 第四档20bit编码要求match>=4字节 不够写成literal
+        //短距离用一位分两档 长距离用两位分四档 第四档要求匹配至少4字节 不够则写字面量
         private void EncodeDistance(ref uint uCurMatchCnt)
         {
             if (uInPtr > uDistShort1)
@@ -227,7 +227,7 @@ namespace Lamarr
                 }
                 else
                 {
-                    //距离太远不够4字节 退为literal
+                    //距离太远不够4字节 退为字面量
                     if (uCurMatchCnt < 4)
                     {
                         WriteU8(rgOut, ref iOutPos, ref iCurNib, rgIn[uInPtr]);
@@ -252,7 +252,6 @@ namespace Lamarr
         }
 
 
-        //变长编码 越长的匹配用越多bit
         private void EncodeLength(uint uCurMatchCnt)
         {
             if (uCurMatchCnt < uCntDefault)
@@ -267,7 +266,7 @@ namespace Lamarr
         }
 
 
-        //链搜索上限4096 防碰撞退化
+        //链搜索上限4096防碰撞退化
         private uint FindMatch()
         {
             uint uCurPtr = uInPtr;
@@ -282,7 +281,7 @@ namespace Lamarr
 
             uint uHash = Hash(uInPtr);
 
-            //rgIn[uCurPtr-1..uCurPtr+2]==rgIn[uCurPtr..uCurPtr+3] -> 连续相同字节
+            //前后四个字节相同 说明是连续相同字节
             if (uRemaining >= 4 && Read32LE(rgIn, uCurPtr) == Read32LE(rgIn, uCurPtr - 1))
             {
                 uint uRem = cbIn - 4 - uCurPtr;
@@ -346,7 +345,7 @@ namespace Lamarr
         }
 
 
-        //压缩体积超过原始时直接复制 省bit
+        //压缩体积超过原始时直接复制 省位
         private void FlushUCChunk()
         {
             uint cbCopy = cbUCData >> 3;
@@ -486,7 +485,7 @@ namespace Lamarr
             return (u16 + ((u32 >> iHashBits) & 0xFFFF)) & iDictMsk;
         }
 
-        //距离/长度择优 uCurPos>0x880后优先短距离匹配省bit
+        //距离与长度择优 位置超过阈值后优先短距离匹配省位
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static bool IsBetterMatch(uint uCurPos, uint uNewDist, uint uNewLen,
                                           uint uOldDist, uint uOldLen)
@@ -497,7 +496,7 @@ namespace Lamarr
             return (uOldDist << 3) > uNewDist;
         }
 
-        //小端32位读 JIT在x64上优化为单条mov
+        //小端32位读 在目标平台上会被优化为单条搬移
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static uint Read32LE(byte[] rg, uint uOff)
         {

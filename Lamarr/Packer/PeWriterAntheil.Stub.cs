@@ -6,7 +6,7 @@ using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
 
-namespace Lamarr.NativePack;
+namespace Lamarr.Packer;
 
 internal partial class PeWriterAntheil
 {
@@ -37,7 +37,11 @@ internal partial class PeWriterAntheil
                                 w.WriteStartObject();
                                 foreach (var f in fw.EnumerateObject())
                                 {
-                                    if (f.NameEquals("version")) w.WriteString("version", sRtcVersion);
+                                    if (f.NameEquals("version"))//仅调用方要求时改写框架版本 否则保持已发布值
+                                    {
+                                        if (!string.IsNullOrEmpty(sRtcVersion)) w.WriteString("version", sRtcVersion);
+                                        else f.WriteTo(w);
+                                    }
                                     else f.WriteTo(w);
                                 }
                                 w.WriteEndObject();
@@ -50,7 +54,11 @@ internal partial class PeWriterAntheil
                             w.WriteStartObject();
                             foreach (var f in op.Value.EnumerateObject())
                             {
-                                if (f.NameEquals("version")) w.WriteString("version", sRtcVersion);
+                                if (f.NameEquals("version"))
+                                {
+                                    if (!string.IsNullOrEmpty(sRtcVersion)) w.WriteString("version", sRtcVersion);
+                                    else f.WriteTo(w);
+                                }
                                 else f.WriteTo(w);
                             }
                             w.WriteEndObject();
@@ -60,19 +68,22 @@ internal partial class PeWriterAntheil
                             w.WritePropertyName("configProperties");
                             w.WriteStartObject();
                             foreach (var cp in op.Value.EnumerateObject())
+                            {
+                                if (sTiered == "off" && cp.NameEquals("System.Runtime.TieredCompilation")) continue;//统一写一次 同名键出现两次宿主行为不确定
                                 cp.WriteTo(w);
-                            //分层只在显式off时写false 缺省保留默认
-                            if (sTiered == "off") w.WriteBoolean("System.Runtime.TieredCompilation", false);
+                            }
+                            if (sTiered == "off") w.WriteBoolean("System.Runtime.TieredCompilation", false);//分层只在显式off时写false 缺省保留默认
                             w.WriteEndObject();
                         }
                         else if (op.NameEquals("rollForward"))
                         {
-                            w.WriteString("rollForward", "LatestMajor");
+                            if (sRollForward != null) w.WriteString("rollForward", sRollForward);//调用方给值优先 载荷已发布值保留 都没有才写默认策略
+                            else op.WriteTo(w);
                             bRoll = true;
                         }
                         else op.WriteTo(w);
                     }
-                    if (!bRoll) w.WriteString("rollForward", "LatestMajor");
+                    if (!bRoll) w.WriteString("rollForward", sRollForward ?? sRollForwardDefault);
                     w.WriteEndObject();
                 }
                 else p.WriteTo(w);
@@ -80,49 +91,48 @@ internal partial class PeWriterAntheil
             w.WriteEndObject();
             w.Flush();
         }
+        Console.WriteLine($"  rtc_tiered: {(sTiered == "off" ? "off" : "on (default)")} (nothing forced at runtime; RtcTiered=off writes TieredCompilation=false)");//stub不改写DOTNET_TieredCompilation 缺省即运行时默认
         return ms.ToArray();
     }
 
-    //剔除依赖项
-    private byte[] StripDepsDependencies(byte[] rgDeps)
+    private byte[] StripDepsDependencies(byte[] rgDeps)//剔除依赖项
     {
         using var doc = JsonDocument.Parse(rgDeps);
-        var root = doc.RootElement;
+        var jeRoot = doc.RootElement;
         var rgStripAll = new HashSet<string>(rgStripDeps, StringComparer.OrdinalIgnoreCase);
 
-        //剔除无runtime的依赖包
-        if (root.TryGetProperty("targets", out var rgTargets))
-            foreach (var tfm in rgTargets.EnumerateObject())
-                foreach (var pkg in tfm.Value.EnumerateObject())
+        if (jeRoot.TryGetProperty("targets", out var rgTargets))//剔除无runtime的依赖包
+            foreach (var jpTfm in rgTargets.EnumerateObject())
+                foreach (var jpPkg in jpTfm.Value.EnumerateObject())
                 {
                     bool bHasRuntime = false;
-                    foreach (var iPos in pkg.Value.EnumerateObject())
+                    foreach (var iPos in jpPkg.Value.EnumerateObject())
                         if (iPos.Name == "runtime" || iPos.Name == "runtimeTargets") { bHasRuntime = true; break; }
                     if (!bHasRuntime)
-                        rgStripAll.Add(pkg.Name.Split('/')[0]);
+                        rgStripAll.Add(jpPkg.Name.Split('/')[0]);
                 }
 
         using var ms = new MemoryStream();
         using (var w = new Utf8JsonWriter(ms))
         {
             w.WriteStartObject();
-            foreach (var prop in root.EnumerateObject())
+            foreach (var jpProp in jeRoot.EnumerateObject())
             {
-                if (prop.Name == "targets")
+                if (jpProp.Name == "targets")
                 {
                     w.WritePropertyName("targets");
                     w.WriteStartObject();
-                    foreach (var tfm in prop.Value.EnumerateObject())
+                    foreach (var jpTfm in jpProp.Value.EnumerateObject())
                     {
-                        w.WritePropertyName(tfm.Name);
+                        w.WritePropertyName(jpTfm.Name);
                         w.WriteStartObject();
-                        foreach (var pkg in tfm.Value.EnumerateObject())
+                        foreach (var jpPkg in jpTfm.Value.EnumerateObject())
                         {
-                            if (rgStripAll.Contains(pkg.Name.Split('/')[0]))
+                            if (rgStripAll.Contains(jpPkg.Name.Split('/')[0]))
                                 continue;
-                            w.WritePropertyName(pkg.Name);
+                            w.WritePropertyName(jpPkg.Name);
                             w.WriteStartObject();
-                            foreach (var iPos in pkg.Value.EnumerateObject())
+                            foreach (var iPos in jpPkg.Value.EnumerateObject())
                             {
                                 if (iPos.Name == "dependencies")
                                 {
@@ -148,23 +158,23 @@ internal partial class PeWriterAntheil
                     }
                     w.WriteEndObject();
                 }
-                else if (prop.Name == "libraries")
+                else if (jpProp.Name == "libraries")
                 {
                     w.WritePropertyName("libraries");
                     w.WriteStartObject();
-                    foreach (var lib in prop.Value.EnumerateObject())
+                    foreach (var jpLib in jpProp.Value.EnumerateObject())
                     {
-                        if (rgStripAll.Contains(lib.Name.Split('/')[0]))
+                        if (rgStripAll.Contains(jpLib.Name.Split('/')[0]))
                             continue;
-                        w.WritePropertyName(lib.Name);
-                        lib.Value.WriteTo(w);
+                        w.WritePropertyName(jpLib.Name);
+                        jpLib.Value.WriteTo(w);
                     }
                     w.WriteEndObject();
                 }
                 else
                 {
-                    w.WritePropertyName(prop.Name);
-                    prop.Value.WriteTo(w);
+                    w.WritePropertyName(jpProp.Name);
+                    jpProp.Value.WriteTo(w);
                 }
             }
             w.WriteEndObject();
@@ -172,7 +182,6 @@ internal partial class PeWriterAntheil
         return ms.ToArray();
     }
 
-    //判断dll是否托管PE 含CLR头
     private bool IsManagedDll(int i, long[] rgRel, long[] rgSz, long[] rgCsz)
     {
         if (rgCsz[i] > 0) return false;
@@ -183,7 +192,7 @@ internal partial class PeWriterAntheil
         if (iPe + 0x18 > rgSz[i] || BitConverter.ToUInt32(rgPayload, (int)lAbs + iPe) != 0x4550)
             return false;
         ushort usMagic = BitConverter.ToUInt16(rgPayload, (int)lAbs + iPe + 24);
-        int iDdOff = usMagic == 0x20B ? 112 : 96;//PE32+/PE32数据目录偏移不同
+        int iDdOff = usMagic == 0x20B ? 112 : 96;//PE32+与PE32的数据目录偏移不同
         long lClr = lAbs + iPe + 24 + iDdOff + 14 * 8;
         if (lClr + 8 > lAbs + rgSz[i])
             return false;
@@ -197,9 +206,13 @@ internal partial class PeWriterAntheil
 
     private void PatchStubVars(string sOutPath)
     {
-        int iPrefMajor = GetPayloadMajor();
+        int iPrefMajor = iPayloadMajor;//PREFMAJ取自载荷TFM主版本 不从刚写出的runtimeconfig文本里回读
 
-        ScrambleBuffers(rgStubCode, new Random(Environment.TickCount ^ (int)DateTime.UtcNow.Ticks));
+        int iScrEnd = IndexOf(rgStubCode, Encoding.ASCII.GetBytes("##STRST##"));//顺序有意义 指纹扰乱器改写指令形状的字节分不清代码与数据 所以先跑在原始代码上再跑API表随机化 两者都要在 ##KBSJB## 被消费之前
+        if (Environment.GetEnvironmentVariable("LAMARR_NO_STUB_FP") != "1")
+            ScrambleFingerprint(rgStubCode, NewRng(0x22u), false, 0, iScrEnd >= 0 ? iScrEnd : rgStubCode.Length);
+        if (Environment.GetEnvironmentVariable("LAMARR_NO_STUB_SCRAMBLE") != "1")
+            ScrambleBuffers(rgStubCode, NewRng(0x21u));
 
         ReplaceMarker(rgStubCode, "##APPNAME##", Encoding.Unicode.GetBytes(sMainName), 256);
         ReplaceMarker(rgStubCode, "##PREFMAJ##", BitConverter.GetBytes((uint)iPrefMajor), 8);
@@ -209,24 +222,18 @@ internal partial class PeWriterAntheil
         if (iOff < 0)
             throw new InvalidOperationException("gHeaderOff marker not found in stub");
         Array.Copy(BitConverter.GetBytes(lNewBundleHeaderOffset), 0, rgStubCode, iOff, 8);
-        //stub固定imm派生化 TEA delta/Murmur乘子
-        uint uImmK = DeriveBranch(rgHead, 24, 16, 0x13579BDFu);
+        uint uImmK = DeriveBranch(rgHead, 24, 16, 0x13579BDFu);//stub固定imm派生化TEA delta/Murmur乘子
         ReplaceAllImm(rgStubCode, new byte[] { 0xB9, 0x79, 0x37, 0x9E }, 0x9E3779B9u ^ (uImmK & 0xFFFFu));
         ReplaceAllImm(rgStubCode, new byte[] { 0xF5, 0x79, 0x2B, 0x6D }, 0x6D2B79F5u ^ (uImmK >> 16));
-        //等长等语义指纹随机化 stub全表 跳过数据区(##STRST##起)
-        int iScrEnd = IndexOf(rgStubCode, Encoding.ASCII.GetBytes("##STRST##"));
-        ScrambleFingerprint(rgStubCode, new Random(Environment.TickCount ^ (int)DateTime.UtcNow.Ticks), false, 0, iScrEnd >= 0 ? iScrEnd : rgStubCode.Length);
-        //API字符串区加密 与stub start解密一致
-        int iSS = IndexOf(rgStubCode, Encoding.ASCII.GetBytes("##STRST##"));
+        int iSS = IndexOf(rgStubCode, Encoding.ASCII.GetBytes("##STRST##"));//等长行为不变的指纹随机化 stub全表跳过数据区 自##STRST##起API字符串区加密 与stub start解密对应
         int iSE = IndexOf(rgStubCode, Encoding.ASCII.GetBytes("##STREN##"));
-        if (iSS >= 0 && iSE > iSS + 8)
+        if (iSS >= 0 && iSE > iSS + 8 && Environment.GetEnvironmentVariable("LAMARR_NO_STUB_APISTR") != "1")
         {
             uint uStrKey = DeriveBranch(rgHead, 40, 16, 0x2B7E1516u);
             int iKey = IndexOf(rgStubCode, new byte[] { 0xED, 0x5E, 0xDE, 0xC0, 0xED, 0x5E, 0xDE, 0xC0 });
             if (iKey >= 0)
             {
-                //低4字节uStrKey 高4字节派生填充
-                byte[] rgK8 = new byte[8];
+                byte[] rgK8 = new byte[8];//低4字节uStrKey 高4字节派生填充
                 BitConverter.GetBytes(uStrKey).CopyTo(rgK8, 0);
                 BitConverter.GetBytes(uStrKey ^ 0x9E3779B9u ^ (uImmK & 0xFFFFu)).CopyTo(rgK8, 4);
                 Array.Copy(rgK8, 0, rgStubCode, iKey, 8);
@@ -245,39 +252,23 @@ internal partial class PeWriterAntheil
         Console.WriteLine($"  pref_major: {iPrefMajor}");
         Console.WriteLine($"  header_offset: 0x{lNewBundleHeaderOffset:X}");
 
-        //校验stub模板标记是否全部替换
-        if (IndexOf(rgStubCode, Encoding.ASCII.GetBytes("##APPNAME##")) >= 0 ||
+        if (IndexOf(rgStubCode, Encoding.ASCII.GetBytes("##APPNAME##")) >= 0 ||//校验stub模板标记 是否全部替换
             IndexOf(rgStubCode, Encoding.ASCII.GetBytes("##PREFMAJ##")) >= 0)
             throw new InvalidOperationException("stub template markers were not fully replaced");
     }
 
-    private static int ParseMajorFromRtc(string sRtc)
-    {
-        var iM = System.Text.RegularExpressions.Regex.Match(sRtc, "\"tfm\"\\s*:\\s*\"net(\\d+)");
-        if (iM.Success && int.TryParse(iM.Groups[1].Value, out int iMaj) && iMaj > 0)
-            return iMaj;
-        var m2 = System.Text.RegularExpressions.Regex.Match(sRtc, "\"version\"\\s*:\\s*\"(\\d+)\\.(\\d+)");
-        return m2.Success && int.TryParse(m2.Groups[1].Value, out int iV2) && iV2 > 0 ? iV2 : 0;
-    }
-
-    private int GetPayloadMajor()
-    {
-        if (iNewRtcIdx < 0) return 0;
-        int iOff = (int)rgBundleOffsets[iNewRtcIdx];
-        int iLen = (int)rgBundleSz[iNewRtcIdx];
-        if (iOff < 0 || iLen <= 0 || iOff + iLen > rgBundleData.Length) return 0;
-        return ParseMajorFromRtc(Encoding.UTF8.GetString(rgBundleData, iOff, iLen));
-    }
-
-    //全0缓冲随机化 但gFall/gBest必须保持0(efb标志) 填充从##STREN##标记9B后align8开始
-    private static void ScrambleBuffers(byte[] rgB, Random rng)
+    private static void ScrambleBuffers(byte[] rgB, Random rng)//全0缓冲随机化 gFall/gBest须保持0 efb标志填充自##STREN##标记9B后align8起
     {
         int iSE = IndexOf(rgB, Encoding.ASCII.GetBytes("##STREN##"));
         int iKB = IndexOf(rgB, Encoding.ASCII.GetBytes("##KBSJB##"));
-        if (iSE < 0 || iKB < 0 || iKB <= iSE) return;
-        int iStart = (iSE + 9 + 7) & ~7;//gDotnetRootW起(标记9B后align8)
+        if (iSE < 0 || iKB < 0 || iKB <= iSE)
+            throw new InvalidOperationException($"stub buffer markers missing (iSE={iSE} iKB={iKB}): the .asm marker pair changed");
+        int iStart = (iSE + 9 + 7) & ~7;//gDotnetRootW起
         int iFall = iStart + 520 * 5 + 640;//gFindData尾
         int iEnd2 = iFall + 140 + 140;//gBest尾 = gPadBuf起
+        //两段范围按.asm缓冲区尺寸写死 尺寸变会涂到活数据 先断言整段在##KBSJB##前
+        if (iStart <= iSE + 8 || iEnd2 < iFall || iFall > iKB || iEnd2 > iKB)
+            throw new InvalidOperationException($"stub buffer map out of range (start={iStart} fall={iFall} best={iEnd2} kbsjb={iKB}): update the offsets together with the .asm buffers");
         int iCnt = 0;
         for (int i = iStart; i < iFall && i < rgB.Length; i++) { rgB[i] = (byte)rng.Next(256); iCnt++; }
         for (int i = iEnd2; i < iKB && i < rgB.Length; i++) { rgB[i] = (byte)rng.Next(256); iCnt++; }
@@ -326,6 +317,8 @@ internal partial class PeWriterAntheil
     private void WriteFile(string sOutPath)
     {
         uint uNewHdrs = AlignUp(uSizeOfHdrs, uFileAlign);
+        if (Environment.GetEnvironmentVariable("LAMARR_LAYOUT") == "1")//构建侧布局打印 只走stdout 不进产物
+            Console.WriteLine($"[layout] hdrs={uNewHdrs} stubRaw={uStubRaw} stubRawSize={uStubRawSize} stubCode={rgStubCode.Length} markerRaw={lMarkerRaw} lamAppRaw={uLamAppRaw} lamAppRawSize={uLamAppRawSize} lamApp={rgLamApp.Length} bundleStart={lBundleStart} bundleData={rgBundleData.Length} newHeader={rgNewHeader.Length} payload={rgPayload.Length}");
 
         uint uStubRva = AlignUp(0x1000, uSectAlign);
         uint uLamAppRva = AlignUp(uStubRva + (uint)rgStubCode.Length, uSectAlign);
@@ -333,6 +326,11 @@ internal partial class PeWriterAntheil
 
         byte[] rgHdrs = new byte[uNewHdrs];
         Array.Copy(rgPayload, 0, rgHdrs, 0, Math.Min(uSizeOfHdrs, rgHdrs.Length));
+        PeScrub.Scrub(rgHdrs);//产物头部清除构建特征 之后才写节表等字段
+        //桩没有重定位表与LoadConfig 这几个标志位置零
+        //0x0040 DYNAMIC_BASE 0x0020 HIGH_ENTROPY_VA 0x4000 GUARD_CF
+        ushort usDllChar = (ushort)(BitConverter.ToUInt16(rgHdrs, iOptOff + 70) & ~(0x0040 | 0x0020 | 0x4000));
+        BitConverter.GetBytes(usDllChar).CopyTo(rgHdrs, iOptOff + 70);
 
         BitConverter.GetBytes((ushort)2).CopyTo(rgHdrs, iPeOff + 6);
         BitConverter.GetBytes(uNewImg).CopyTo(rgHdrs, iOptOff + 56);
@@ -382,8 +380,13 @@ internal partial class PeWriterAntheil
     #region 流IO辅助
 
     private static uint AlignUp(uint uV, uint uA) => uA == 0 ? uV : (uV + uA - 1) & ~(uA - 1);
-    private static readonly Random _rndPad = new Random(Environment.TickCount ^ (int)DateTime.UtcNow.Ticks);
-    private static void Pad(FileStream fs, int iN) { byte[] rg = new byte[Math.Max(0, iN)]; _rndPad.NextBytes(rg); fs.Write(rg, 0, rg.Length); }
+    //填充字节不得随时钟变或依赖调用顺序 每区按自身偏移与长度单独派生一条流
+    private Random PadRng(FileStream fs, int iN)
+    {
+        ulong uIdx = ((ulong)(uint)Math.Max(0, iN) << 32) ^ (ulong)fs.Position;
+        return NewRng(unchecked((uint)(uIdx ^ (uIdx >> 32))));
+    }
+    private void Pad(FileStream fs, int iN) { byte[] rg = new byte[Math.Max(0, iN)]; PadRng(fs, iN).NextBytes(rg); fs.Write(rg, 0, rg.Length); }
 
     private static void WriteU32(Stream sStream, uint uV) { sStream.Write(BitConverter.GetBytes(uV), 0, 4); }
     private static void WriteI32(Stream sStream, int iV) { sStream.Write(BitConverter.GetBytes(iV), 0, 4); }
@@ -392,6 +395,7 @@ internal partial class PeWriterAntheil
     private static void WriteStr(Stream sStream, string sV)
     {
         byte[] rgB = Encoding.UTF8.GetBytes(sV);
+        if (rgB.Length >= 0x8000) throw new InvalidOperationException($"bundle string too long for the 2 byte prefix: {rgB.Length}");//前缀只有7加8位 再长就会静默截断
         if (rgB.Length < 0x80) sStream.WriteByte((byte)rgB.Length);
         else { sStream.WriteByte((byte)(0x80 | (rgB.Length >> 8))); sStream.WriteByte((byte)rgB.Length); }
         sStream.Write(rgB, 0, rgB.Length);

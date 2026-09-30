@@ -1,5 +1,5 @@
 param(
-    [Parameter(Mandatory)][string]$AsmDir,
+    [string]$AsmDir = '',
     [Parameter(Mandatory)][string]$OutDir,
     [ValidateSet('antheil','native')][string]$Packer = 'antheil',
     [switch]$Pack,
@@ -7,30 +7,218 @@ param(
     [string]$InputPath,
     [string]$Output,
     [string]$Boot,
+    [string]$Shim,
     [string]$Decoder,
     [string]$JitHook,
     [string]$Pheropod,
+    [string]$Engine,
+    [string]$Seed,
     [string]$Mode,
-    [string]$AppName = 'WeaponDamageCalc',
-    [string]$PackerTfm = 'net8.0-windows',
-    [string]$CompressDeps = 'true',
+    [string]$AppName = '',
+    [string]$PackerTfm = '',
+    [switch]$Configure,
+    [switch]$Fresh,
     [string]$EncryptDeps = '',
     [string]$NoCompressDeps = '',
     [string]$MethodDict = '',
-    [string]$RtcVersion = '5.0.0',
-    [string]$RtcTiered = ''
+    [string]$RtcVersion = '',
+    [string]$PayloadMajor = '',
+    [string]$RtcRollForward = '',
+    [string]$RtcTiered = '',
+    [string]$Escrow = '',
+    [string]$Replay = '',
+    # plain manifest, a reader can take vmSeed without LAMARR_ESCROW_PASS
+    [switch]$EscrowPlain,
+    # dev-only code between ;%triage:begin and ;%triage:end, stripped from release builds
+    [switch]$TriageKnobs,
+    [switch]$SkipAsm,
+    [switch]$NoMorph,
+    [switch]$SlotMorph,
+    [switch]$ForceAsm,
+    [string]$SlotSeed = '5EED0001',
+    [string]$StubVersion = '',
+    [switch]$SkipResidue
 )
 $ErrorActionPreference = 'Stop'
-$ASM_DIR, $OUT_DIR = $AsmDir, $OutDir | ForEach-Object { $_.Trim().TrimEnd('\', '"') }
-New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+function get_msbuild_prop([string]$sProj, [string[]]$rgName) {
+    $rgArg = @()
+    foreach ($sName in (@($rgName) + 'MSBuildProjectName')) { $rgArg += ('-getProperty:' + $sName) }
+    $sJson = (& dotnet msbuild $sProj @rgArg '-nologo' | Out-String)
+    if ($LASTEXITCODE -ne 0) { throw ('msbuild -getProperty failed: ' + $sProj) }
+    try { return (ConvertFrom-Json $sJson).Properties } catch { throw ('msbuild -getProperty returned unexpected output: ' + $sJson) }
+}
+function get_payload_project([string]$sSearchRoot) {
+    $rgProj = @(Get-ChildItem -Path $sSearchRoot -Filter '*.csproj' -File | Where-Object { (Get-Content $_.FullName -Raw) -match 'PayloadPack\.targets' })
+    if ($rgProj.Count -ne 1) { throw ('payload project unresolved under ' + $sSearchRoot) }
+    return $rgProj[0].FullName
+}
+if (-not $TriageKnobs -and $env:LAMARR_TRIAGE_KNOBS -eq '1') { $TriageKnobs = $true }
+$ASM_DIR = $AsmDir.Trim().TrimEnd('\', '"')
+$OUT_DIR = $OutDir.Trim().TrimEnd('\', '"')
+if (!$ASM_DIR) { $ASM_DIR = $PSScriptRoot }
+New-Item -ItemType Directory -Force -Path $OUT_DIR | Out-Null
+$RC_EXE = $null
+foreach ($d in @(Get-ChildItem (Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin') -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending)) {
+    $sRc = Join-Path $d.FullName 'x64\rc.exe'
+    if (Test-Path $sRc) { $RC_EXE = $sRc; break }
+}
+if (!$RC_EXE) { $c = Get-Command rc.exe -ErrorAction SilentlyContinue; if ($c) { $RC_EXE = $c.Source } }
+$EMPTY_RES = Join-Path $OUT_DIR 'empty.res'
+if ($RC_EXE) {
+    $sEmptyRc = Join-Path $OUT_DIR 'empty.rc'
+    Set-Content -NoNewline -Encoding Ascii -Path $sEmptyRc -Value ''
+    & $RC_EXE /nologo /fo $EMPTY_RES $sEmptyRc | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "rc(empty.res) failed ($LASTEXITCODE)" }
+}
+$STUB_RES = ''
+if ($StubVersion -and $RC_EXE) {
+    $rgVer = @($StubVersion.Split('.'))
+    while ($rgVer.Count -lt 4) { $rgVer += '0' }
+    $sVerResRc = Join-Path $OUT_DIR 'stub_ver.rc'
+    $sVerRes = Join-Path $OUT_DIR 'stub_ver.res'
+    $rgLine = @(
+        '1 VERSIONINFO'
+        ('FILEVERSION ' + ($rgVer[0..3] -join ','))
+        ('PRODUCTVERSION ' + ($rgVer[0..3] -join ','))
+        'FILEFLAGSMASK 0x3fL'
+        'FILEFLAGS 0x0L'
+        'FILEOS 0x40004L'
+        'FILETYPE 0x2L'
+        'FILESUBTYPE 0x0L'
+        'BEGIN'
+        '  BLOCK "StringFileInfo"'
+        '  BEGIN'
+        '    BLOCK "040904b0"'
+        '    BEGIN'
+        '      VALUE "CompanyName", "LamarrPacker"'
+        '      VALUE "FileDescription", "LamarrPacker"'
+        ('      VALUE "FileVersion", "' + $StubVersion + '"')
+        '      VALUE "InternalName", "lamarr_stub"'
+        '      VALUE "OriginalFilename", "lamarr_stub.dll"'
+        '      VALUE "ProductName", "LamarrPacker"'
+        ('      VALUE "ProductVersion", "' + $StubVersion + '"')
+        '    END'
+        '  END'
+        '  BLOCK "VarFileInfo"'
+        '  BEGIN'
+        '    VALUE "Translation", 0x409, 1200'
+        '  END'
+        'END'
+    )
+    Set-Content -Encoding Ascii -Path $sVerResRc -Value $rgLine
+    & $RC_EXE /nologo /fo $sVerRes $sVerResRc | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "rc(stub_ver.res) failed ($LASTEXITCODE)" }
+    $STUB_RES = $sVerRes
+}
+
+# seeds derive from the run seed, a new release seed yields new native code
+# no implicit random seed: with -Seed omitted the build falls back to a fixed one so it stays byte reproducible
+if (!$Seed) { $Seed = '5EED000100000000'; Write-Host "-- Seed not given, using the fixed fallback $Seed (pass -Seed to make a release unique)" }
+$MORPH_BASE = [int64]7
+foreach ($ch in $Seed.ToCharArray()) { $MORPH_BASE = (($MORPH_BASE * 131) + [int][char]$ch) % 2147483647 }
+function morph_seed([string]$tag) {
+    $h = $MORPH_BASE
+    foreach ($ch in $tag.ToCharArray()) { $h = (($h * 131) + [int][char]$ch) % 2147483647 }
+    return [int]($h + 1)
+}
+
+# names must derive from the seed or two runs differ byte for byte
+function seed_token([string]$tag) {
+    [uint64]$h = 2166136261
+    foreach ($b in [Text.Encoding]::ASCII.GetBytes("$Seed|$tag")) { $h = (($h -bxor $b) * 16777619) % 4294967296 }
+    return $h.ToString('x8')
+}
+
+# seed free token, used when a target is built pristine so its bytes never depend on the run seed
+function fixed_token([string]$tag) {
+    [uint64]$h = 2166136261
+    foreach ($b in [Text.Encoding]::ASCII.GetBytes($tag)) { $h = (($h -bxor $b) * 16777619) % 4294967296 }
+    return $h.ToString('x8')
+}
+
+# newest match of a wildcard path, the MSVC and SDK layouts carry a version component
+function find_latest([string]$sGlob) {
+    return Get-ChildItem $sGlob -EA SilentlyContinue | Sort-Object FullName -Desc | Select-Object -First 1 -Exp FullName
+}
+
+# anchor syntax in asm sources: ;%poly:opseq ;%poly:alt ;%poly:end ;%poly:junk
+function invoke_morph {
+    param(
+        [Parameter(Mandatory)][string]$AsmPath,
+        [Parameter(Mandatory)][string]$OutPath,
+        [int]$Seed = -1
+    )
+    if ($Seed -lt 0) { $Seed = 0x5EED0001 }
+    $rng = [System.Random]::new($Seed)
+    Write-Host "-- Doing morph: seed=$Seed out=$OutPath"
+    $JUNK_POOL = @(
+        'nop'
+        'mov r8, r8'
+        'mov r9, r9'
+        'mov r10, r10'
+        'xchg r11, r11'
+        'lea r12, [r12*1+0]'
+        'lea r13, [r13*1+0]'
+        'lea r14, [r14*1+0]'
+        'db 66h,0Fh,1Fh,44h,00h,00h'
+        'db 0Fh,1Fh,44h,00h,00h'
+        'db 0Fh,1Fh,84h,00h,00h,00h,00h,00h'
+        'db 66h,2Eh,0Fh,1Fh,84h,00h,00h,00h,00h,00h'
+    )
+    $lines = @(Get-Content -Path $AsmPath -Encoding ASCII)
+    # the slot directory is located by this tag comment, deleting it silently breaks slot regeneration
+    $bSlotDir = $false
+    $bSlotTag = $false
+    foreach ($ln in $lines) {
+        if ($ln -match 'z0_slot_dir\s*:') { $bSlotDir = $true }
+        if ($ln.Trim() -eq '; ##5A17C0DE##') { $bSlotTag = $true }
+    }
+    if ($bSlotDir -and -not $bSlotTag) { throw ($AsmPath + ' carries a slot directory without its ##5A17C0DE## tag line') }
+    $out = New-Object System.Collections.Generic.List[string]
+    $i = 0
+    while ($i -lt $lines.Count) {
+        $t = $lines[$i].Trim()
+        if ($t.StartsWith(';%poly:')) {
+            if ($t -eq ';%poly:junk') {
+                $nJunk = $rng.Next(0, 6)
+                for ($j = 0; $j -lt $nJunk; $j++) { $out.Add('    ' + $JUNK_POOL[$rng.Next(0, $JUNK_POOL.Count)]) }
+                $i++
+                while ($i -lt $lines.Count) {
+                    $tl = $lines[$i].Trim()
+                    if ($tl -eq ';%poly:end') { $i++; break }
+                    $out.Add($lines[$i]); $i++
+                }
+                continue
+            }
+            $i++
+            $cur = New-Object System.Collections.Generic.List[string]
+            $variants = New-Object System.Collections.Generic.List[object]
+            while ($i -lt $lines.Count) {
+                $tl = $lines[$i].Trim()
+                if ($tl -eq ';%poly:end') { $variants.Add($cur); $i++; break }
+                if ($tl -eq ';%poly:alt') { $variants.Add($cur); $cur = New-Object System.Collections.Generic.List[string]; $i++; continue }
+                $cur.Add($lines[$i]); $i++
+            }
+            if ($variants.Count -eq 0) { throw 'morph: empty variant block' }
+            $iPick = $rng.Next(0, $variants.Count)
+            if ($env:LAMARR_MORPH_TRACE -eq '1') { Write-Host ("-- Morph block@" + $i + " pick=" + $iPick + "/" + $variants.Count) }
+            $sel = $variants[$iPick]
+            foreach ($sl in $sel) { $out.Add($sl) }
+            continue
+        }
+        $out.Add($lines[$i])
+        $i++
+    }
+    Set-Content -Path $OutPath -Value $out.ToArray() -Encoding ASCII
+    Write-Host ("-- Wrote " + $OutPath + " lines=" + $out.Count)
+}
 
 $ML64_EXE = $null
 $VSWHERE = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 if (Test-Path $VSWHERE) {
     $MSVC_ROOT = & $VSWHERE -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>$null
     if ($MSVC_ROOT) {
-        $ML64_EXE = Get-ChildItem (Join-Path $MSVC_ROOT 'VC\Tools\MSVC\*\bin\Hostx64\x64\ml64.exe') -EA SilentlyContinue |
-            Sort-Object FullName -Desc | Select-Object -First 1 -Exp FullName
+        $ML64_EXE = find_latest (Join-Path $MSVC_ROOT 'VC\Tools\MSVC\*\bin\Hostx64\x64\ml64.exe')
     }
 }
 if (!$ML64_EXE -and $env:VCToolsInstallDir) {
@@ -46,94 +234,162 @@ if (!$ML64_EXE) {
 }
 
 $LINK_EXE = Join-Path (Split-Path $ML64_EXE) 'link.exe'
+
+if ($Pack -or $Configure) {
+    if (!$PackerTfm) {
+        $sPackerProj = Join-Path $PSScriptRoot '..\Packer\Packer.csproj'
+        if (Test-Path $sPackerProj) { $PackerTfm = (get_msbuild_prop $sPackerProj @('PackerTfm')).PackerTfm }
+        if (!$PackerTfm -and -not $Fresh) {
+            $rgGen = @(Get-ChildItem -Path (Join-Path $PSScriptRoot '..\Packer\bin\Release') -Filter 'LamarrPacker.exe' -Recurse -File -ErrorAction SilentlyContinue)
+            if ($rgGen.Count -eq 1) { $PackerTfm = Split-Path (Split-Path $rgGen[0].FullName -Parent) -Leaf }
+        }
+        if (!$PackerTfm) { throw 'PackerTfm unresolved: pass -PackerTfm or build Lamarr\Packer\Packer.csproj first' }
+    }
+    if (!$AppName) {
+        if ($InputPath) { $AppName = [IO.Path]::GetFileNameWithoutExtension($InputPath) }
+        elseif ($PublishDir -and -not $Fresh) {
+            $rgExe = @(Get-ChildItem -Path $PublishDir -Filter '*.exe' -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike '*_packed.exe' })
+            if ($rgExe.Count -eq 1) { $AppName = [IO.Path]::GetFileNameWithoutExtension($rgExe[0].Name) }
+        }
+        if (!$AppName) {
+            $sPayload = get_payload_project (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
+            $AppName = (get_msbuild_prop $sPayload @('AssemblyName')).AssemblyName
+        }
+        if (!$AppName) { throw 'AppName unresolved: pass -AppName or -InputPath' }
+    }
+    Write-Host ('-- Configuring done (app=' + $AppName + ' packerTfm=' + $PackerTfm + ' fresh=' + $(if ($Fresh) { 'ON' } else { 'OFF' }) + ')')
+    if ($Configure) {
+        $sRepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+        $sPayloadProj = get_payload_project $sRepoRoot
+        $sCfgArgs = @('-D', $sRepoRoot, '-Configure', '-Target', $sPayloadProj, '--mode', $Packer)
+        if ($Fresh) { $sCfgArgs += '-Fresh' }
+        & (Join-Path $PSScriptRoot "..\Packer\bin\Release\$PackerTfm\LamarrPacker.exe") @sCfgArgs
+        exit $LASTEXITCODE
+    }
+}
 if (!(Test-Path $LINK_EXE)) { throw "link.exe not found next to ml64: $LINK_EXE" }
 
 $K32_LIB = $null
 $KITS_ROOT = "${env:ProgramFiles(x86)}\Windows Kits\10\Lib"
 if (Test-Path $KITS_ROOT) {
-    $K32_LIB = Get-ChildItem (Join-Path $KITS_ROOT '*\um\x64\kernel32.lib') -EA SilentlyContinue |
-        Sort-Object FullName -Desc | Select-Object -First 1 -Exp FullName
+    $K32_LIB = find_latest (Join-Path $KITS_ROOT '*\um\x64\kernel32.lib')
 }
 if (!$K32_LIB) { throw 'kernel32.lib not found (Windows SDK needed)' }
 
-Write-Host "[build-asm] STATUS ml64 = $ML64_EXE`n[build-asm] out : $OUT_DIR"
+Write-Host "-- Found ml64: $ML64_EXE`n-- OutDir: $OUT_DIR"
 
-function New-StubVariant([string]$AsmPath, [string]$OutPath) {
-    $lines = Get-Content $AsmPath
-    $out = New-Object System.Collections.Generic.List[string]
-    foreach ($ln in $lines) {
-        if ($ln -match '^\S+.*\bPROC\b') {
-            $n = Get-Random -Minimum 0 -Maximum 4
-            for ($i = 0; $i -lt $n; $i++) {
-                $out.Add('        db 66h,0Fh,1Fh,44h,00h,00h')
-            }
-        }
-        $out.Add($ln)
-    }
-    Set-Content -Path $OutPath -Value $out -Encoding ASCII
-}
-
-function build_stub_dll([string]$AsmName, [string]$DllName, [switch]$Page, [string]$Exports, [string]$RenameExport, [switch]$Variant)
+function build_stub_dll([string]$AsmName, [string]$DllName, [switch]$Page, [string]$Exports, [string]$RenameExport, [switch]$RenameExports, [switch]$Nodefaultlib, [string[]]$ExportRaw = @(), [string]$TempTag = '', [switch]$Variant, [string]$Res = '')
 {
     $ASM_PATH = Join-Path $ASM_DIR $AsmName
     if (!(Test-Path $ASM_PATH)) { throw "asm not found: $ASM_PATH" }
-    $OBJ_FILE = Join-Path $OUT_DIR (($DllName -replace '\.dll$', '') + '.obj')
+    $sBase = $DllName -replace '\.dll$', ''
+    $OBJ_FILE = Join-Path $OUT_DIR ($sBase + '.obj')
     $DLL_FILE = Join-Path $OUT_DIR $DllName
+    $rgTmp = @()
     $SRC_FILE = $ASM_PATH
-    if ($Variant) {
-        $SRC_FILE = Join-Path $OUT_DIR (($DllName -replace '\.dll$', '') + '_var.asm')
-        New-StubVariant $ASM_PATH $SRC_FILE
+    $bPristine = ($NoMorph -or $Packer -ne 'antheil')
+    if ($Variant -and -not $bPristine) {
+        $SRC_FILE = Join-Path $OUT_DIR ($sBase + '_var.asm')
+        invoke_morph -AsmPath $ASM_PATH -OutPath $SRC_FILE -Seed (morph_seed $DllName)
+    }
+    elseif ($Variant) {
+        Write-Host "-- Doing link: $DllName (pristine sources, no per-seed variant)"
     }
     $LINK_EXPORT = 'Iamdec'
-    if ($RenameExport)
-    {
-        $LINK_EXPORT = 'x' + (Get-Random -Minimum 10000 -Maximum 99999).ToString()
-        $SRC_FILE = Join-Path $OUT_DIR (($DllName -replace '\.dll$', '') + '_rnd.asm')
-        (Get-Content -Raw $ASM_PATH) -replace [regex]::Escape($RenameExport), $LINK_EXPORT | Set-Content -NoNewline -Encoding Ascii $SRC_FILE
+    $RENAME_LIST = @()
+    if ($RenameExport) { $RENAME_LIST = @($RenameExport) }
+    elseif ($Exports) { $RENAME_LIST = @($Exports.Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
+    $TXT = Get-Content -Raw $SRC_FILE
+    if ($RenameExport -or ($Exports -and $RenameExports)) {
+        $NEW_LIST = @()
+        foreach ($sym in $RENAME_LIST) {
+            $NEW = 'x' + (seed_token("rename:$sym"))
+            $TXT = $TXT -replace [regex]::Escape($sym), $NEW
+            if ($sym -eq $RenameExport) { $LINK_EXPORT = $NEW }
+            $NEW_LIST += $NEW
+        }
+        $RENAME_LIST = $NEW_LIST
     }
+    if ($TriageKnobs) {
+        $TXT = [regex]::Replace($TXT, '(?m)^;%triage:(begin|end)[ \t]*\r?\n', '')
+    }
+    else {
+        $TXT = [regex]::Replace($TXT, '(?ms)^;%triage:begin[ \t]*\r?\n.*?^;%triage:end[ \t]*\r?\n', '')
+    }
+    $REL_SRC = Join-Path $OUT_DIR ($sBase + '_rel.asm')
+    Set-Content -NoNewline -Encoding Ascii -Path $REL_SRC -Value $TXT
+    if ($SRC_FILE -ne $ASM_PATH) { $rgTmp += $SRC_FILE }
+    $rgTmp += $REL_SRC
+    $SRC_FILE = $REL_SRC
     & $ML64_EXE /nologo /c ("/Fo" + $OBJ_FILE) $SRC_FILE
     if ($LASTEXITCODE -ne 0) { throw "ml64($AsmName) failed ($LASTEXITCODE)" }
-    $LINK_ARGS = New-Object System.Collections.Generic.List[string]
-    $LINK_ARGS.Add('/nologo'); $LINK_ARGS.Add('/dll'); $LINK_ARGS.Add('/noentry'); $LINK_ARGS.Add('/machine:x64'); $LINK_ARGS.Add('/subsystem:console')
-    if ($Page) { $LINK_ARGS.Add('/export:' + $LINK_EXPORT); $LINK_ARGS.Add('/nodefaultlib') }
-    if ($Exports) { foreach ($e in $Exports.Split(',')) { if ($e.Trim()) { $LINK_ARGS.Add('/export:' + $e.Trim()) } } }
-    $LINK_ARGS.Add('/out:' + $DLL_FILE)
+    # no PE timestamp, two links of one seed match byte for byte
+    $LINK_ARGS = [System.Collections.Generic.List[string]]@('/nologo', '/dll', '/noentry', '/machine:x64',
+        '/subsystem:console', '/emittoolversioninfo:no', '/Brepro')
+    if ($Page) { $LINK_ARGS.Add('/export:' + $LINK_EXPORT) }
+    if ($Page -or $Nodefaultlib) { $LINK_ARGS.Add('/nodefaultlib') }
+    if ($Exports) {
+        # ordinals follow the export list, the caller picks the compressor by ordinal
+        for ($i = 0; $i -lt $RENAME_LIST.Count; $i++) { $LINK_ARGS.Add('/export:' + $RENAME_LIST[$i] + ',@' + ($i + 1)) }
+    }
+    foreach ($e in $ExportRaw) { $LINK_ARGS.Add('/export:' + $e) }
+    # /Brepro folds the output name into the digest, so the temp tag is fixed per target
+    $sTag = if ($TempTag) { $TempTag } else { "dll:$DllName" }
+    # pristine targets must not depend on the run seed, so their output name stays seed free too
+    $TMP_TOKEN = if ($bPristine) { fixed_token $sTag } else { seed_token $sTag }
+    $RAND_DLL = Join-Path $OUT_DIR ('t' + $TMP_TOKEN + '.dll')
+    $LINK_ARGS.Add('/out:' + $RAND_DLL)
+    if ($Res) { $LINK_ARGS.Add($Res) }
     $LINK_ARGS.Add($OBJ_FILE)
     if ($Page) { $LINK_ARGS.Add($K32_LIB) }
     & $LINK_EXE $LINK_ARGS.ToArray()
     if ($LASTEXITCODE -ne 0) { throw "link($DllName) failed ($LASTEXITCODE)" }
-    if ($SRC_FILE -ne $ASM_PATH) { Remove-Item $SRC_FILE -Force -ErrorAction SilentlyContinue }
-    Write-Host "[build-asm] STATUS built: $DLL_FILE"
+    Move-Item -Force $RAND_DLL $DLL_FILE
+    foreach ($f in $rgTmp) { Remove-Item $f -Force -ErrorAction SilentlyContinue }
+    Write-Host ("-- Built " + $DllName + ": " + $DLL_FILE)
 }
 
-build_stub_dll 'lamarr_stub.asm' 'lamarr_stub.dll'
+
+if (-not $SkipAsm)
+{
+build_stub_dll 'lamarr_stub.asm' 'lamarr_stub.dll' -Variant -Res $STUB_RES
 if ($Packer -eq 'antheil')
 {
     build_stub_dll 'antheil_stub.asm' 'antheil_stub.dll' -Variant
-    build_stub_dll 'antheil_paged.asm' 'Iamdec.dll' -Page -RenameExport Iamdec
-    build_stub_dll 'antlion_deco.asm' 'z0.dll' -Exports 'z0_init,z0_read,z0_align,z0_size'
+    build_stub_dll 'antheil_paged.asm' 'Iamdec.dll' -Page -RenameExport Iamdec -Variant
+    build_stub_dll 'antlion_deco.asm' 'z0.dll' -Exports 'z0_init,z0_read,z0_align,z0_size,z0_deflate' -RenameExports -Variant
+    # @1 returns the handover table, @2 arms the hook, names must match what the boot decodes
+    build_stub_dll 'jithook.asm' 'jithook.dll' -ExportRaw @('JitHookTable,@1,NONAME', 'InstallJitHook,@2,NONAME') -Nodefaultlib -TempTag 'jit' -Variant
+}
 }
 
-if ($Packer -eq 'antheil')
-{
-    $JIT_ASM = Join-Path $ASM_DIR 'jithook.asm'
-    if (!(Test-Path $JIT_ASM)) { throw "asm not found: $JIT_ASM" }
-    $JIT_OBJ = Join-Path $OUT_DIR 'jithook.obj'
-    $JIT_DLL = Join-Path $OUT_DIR 'jithook.dll'
-    & $ML64_EXE /nologo /c ("/Fo" + $JIT_OBJ) $JIT_ASM
-    if ($LASTEXITCODE -ne 0) { throw "ml64(jithook.asm) failed ($LASTEXITCODE)" }
-    & $LINK_EXE /nologo /dll /noentry /machine:x64 /subsystem:console `
-        /export:InstallJitHook /export:SetJitHookKey /export:AddPayloadSig /export:VerifyJitHook /export:SetAntiDebugFlag /export:SetJitSlots `
-        /nodefaultlib ("/out:" + $JIT_DLL) $JIT_OBJ
-    if ($LASTEXITCODE -ne 0) { throw "link(jithook.dll) failed ($LASTEXITCODE)" }
-    Write-Host "[build-asm] STATUS built: $JIT_DLL"
-}
 
 if ($Pack)
 {
     $ErrorActionPreference = 'Continue'
-    $PACKER_EXE = Join-Path $ASM_DIR "bin\Release\$PackerTfm\LamarrNativePack.exe"
-    if (!(Test-Path $PACKER_EXE)) { throw "packer not found: $PACKER_EXE" }
+    $PACKER_EXE = Join-Path $PSScriptRoot "..\Packer\bin\Release\$PackerTfm\LamarrPacker.exe"
+    if (!(Test-Path $PACKER_EXE)) { throw "packer not found: $PACKER_EXE (build it with -p:PackerTfm=$PackerTfm or pass -PackerTfm matching the TFM it was built for)" }
+
+    if (!$SkipAsm -and !$ForceAsm) {
+        $rgOut = @('lamarr_stub.dll', 'antheil_stub.dll', 'Iamdec.dll', 'z0.dll', 'jithook.dll') |
+            ForEach-Object { Join-Path $OUT_DIR $_ } | Where-Object { Test-Path $_ }
+        if ($rgOut.Count -gt 0) {
+            $sNewest = (Get-ChildItem -Path $ASM_DIR -Filter '*.asm' -File | Sort-Object LastWriteTime -Descending | Select-Object -First 1).LastWriteTime
+            $sOldest = ($rgOut | ForEach-Object { (Get-Item $_).LastWriteTime } | Sort-Object | Select-Object -First 1)
+            if ($sOldest -gt $sNewest) { $SkipAsm = $true; Write-Host '-- Reusing the existing asm output, pass -ForceAsm to rebuild' }
+        }
+    }
+
+    if ($SlotMorph) {
+        # equal length slot rewrite through the packer, same implementation the pack path uses
+        foreach ($sDll in @('Iamdec.dll', 'jithook.dll', 'lamarr_stub.dll', 'antheil_stub.dll')) {
+            $sPath = Join-Path $OUT_DIR $sDll
+            if (!(Test-Path $sPath)) { continue }
+            Write-Host ("-- Slot morph: " + $sDll)
+            & $PACKER_EXE '--slot-morph' $sPath '--seed' $SlotSeed '--tag' $sDll '--check'
+            if ($LASTEXITCODE -ne 0) { throw ("slot morph failed on " + $sDll) }
+        }
+    }
 
     $STUB_DLL = Join-Path $OUT_DIR ($(if ($Packer -eq 'antheil') { 'antheil_stub.dll' } else { 'lamarr_stub.dll' }))
     if (!$InputPath -and !$PublishDir) { throw '-InputPath (or -PublishDir) required when -Pack is used' }
@@ -144,29 +400,44 @@ if ($Pack)
     }
 
     $PACK_ARGS = @('--stub', $STUB_DLL, '--input', $InputPath, '--output', $Output)
-    if ($CompressDeps -eq 'true') { $PACK_ARGS += @('--compress-deps') }
     if ($EncryptDeps) { $PACK_ARGS += @('--encrypt-deps', $EncryptDeps) }
     if (!$MethodDict) { $m = Join-Path $ASM_DIR 'boot_method_names.txt'; if (Test-Path $m) { $MethodDict = $m } }
+    Write-Host "-- Method dict: $MethodDict"
     if ($MethodDict) { $PACK_ARGS += @('--method-dict', $MethodDict) }
     if ($NoCompressDeps) { $PACK_ARGS += @('--no-compress-deps', $NoCompressDeps) }
     if ($Boot)    { $PACK_ARGS += @('--boot', $Boot) }
+    if ($Shim)    { $PACK_ARGS += @('--shim', $Shim) }
     if ($Decoder) { $PACK_ARGS += @('--decoder', $Decoder) }
     if ($JitHook) { $PACK_ARGS += @('--jithook', $JitHook) }
     if ($Pheropod) { $PACK_ARGS += @('--pheropod', $Pheropod) }
+    if ($Engine) { $PACK_ARGS += @('--engine', $Engine) }
+    if ($Seed) { $PACK_ARGS += @('--seed', $Seed) }
     if ($Mode)    { $PACK_ARGS += @('--mode', $Mode) }
     if ($RtcVersion) { $PACK_ARGS += @('--rtc-version', $RtcVersion) }
+    if ($PayloadMajor) { $PACK_ARGS += @('--payload-major', $PayloadMajor) }
+    if ($RtcRollForward) { $PACK_ARGS += @('--rtc-rollforward', $RtcRollForward) }
     if ($RtcTiered) { $PACK_ARGS += @('--rtc-tiered', $RtcTiered) }
+    if ($Escrow) { $PACK_ARGS += @('--escrow', $Escrow) }
+    if ($EscrowPlain) { $PACK_ARGS += @('--escrowPlain') }
+    if ($Replay) { $PACK_ARGS += @('--replay', $Replay) }
 
     $RETRY_LOG = Join-Path $env:TEMP 'lamarr_pack_retry.log'
     $EXIT_CODE = 1
+    # retry the packer, its output goes to %TEMP%\lamarr_pack_retry.log
     # MSBuild Exec force me
     for ($i = 0; $i -lt 3; $i++) {
         & $PACKER_EXE @PACK_ARGS *> $RETRY_LOG
         $EXIT_CODE = $LASTEXITCODE
-        if ($EXIT_CODE -eq 0) { Write-Host "[build-asm] STATUS pack ok"; break }
-        Write-Host "[build-asm] STATUS packer exit=$EXIT_CODE, retry $($i+1)/3..."
+        if ($EXIT_CODE -eq 0) { Write-Host "-- Packed: $Output"; break }
+        Write-Host "-- Packer exit=$EXIT_CODE (retry $($i+1)/3)"
         if (Test-Path $RETRY_LOG) { Get-Content $RETRY_LOG | Select-Object -Last 6 }
         Start-Sleep -Seconds 1
     }
     if ($EXIT_CODE -ne 0) { exit 1 }
+
+    Write-Host "-- Generating done ($AppName)"
+    if (-not $SkipResidue -and (Test-Path $Output)) {
+        & (Join-Path $PSScriptRoot 'pe.ps1') -Residue -Path $Output -CheckPeFingerprint -CheckPeDebugDir -AsmAscii -Quiet
+        if ($LASTEXITCODE -ne 0) { throw "residue gate FAILED on $Output (see pe.ps1 output); use -SkipResidue to override" }
+    }
 }

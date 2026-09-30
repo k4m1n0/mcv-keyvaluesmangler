@@ -5,21 +5,33 @@ using System.Reflection.PortableExecutable;
 using System.Text;
 using System.IO;
 
-namespace Lamarr.NativePack;
+namespace Lamarr.Packer;
 
 public static class BootRenamer
 {
     private static readonly char[] rgFirst = "abcdefghijklmnopqrstuvwxyz".ToCharArray();
     private static readonly char[] rgChar = "abcdefghijklmnopqrstuvwxyz123456789".ToCharArray();
-    private static readonly Random rnd = new Random();
-    private static readonly string[] rgPairMethods = { "SelfCheck", "VerifyBodies", "CheckElapsed", "TCheck" };
+    private static Random rnd = new Random(0x5EED5EED);//SetSeed前的固定流 漏调得到同一份名字 不随时钟变
+
+    //构建期随机化由运行种子派生 同一个种子两次构建得到同一份名字
+    public static void SetSeed(ulong uSeed)
+    {
+        unchecked
+        {
+            ulong u = uSeed ^ ((ulong)0x51u * 0x9E3779B97F4A7C15UL);
+            u ^= u >> 30; u *= 0xBF58476D1CE4E5B9UL; u ^= u >> 27; u *= 0x94D049BB133111EBUL; u ^= u >> 31;
+            rnd = new Random((int)u ^ (int)(u >> 32));
+        }
+    }
+    private static readonly string[] rgDictPick = BootNames.DictPicked;
 
     public static byte[] Rename(byte[] rgD, string sDictPath = "")
     {
         var rgDict = LoadDict(sDictPath);
         var rgDictNames = new HashSet<string>();
-        //随机挑一个加密自校验方法改用字典词条
-        rgDictNames.Add(rgPairMethods[rnd.Next(rgPairMethods.Length)]);
+        //受加密保护的校验方法里抽一个换成词表长名 名字与用途脱钩
+        string sPick = rgDictPick[rnd.Next(rgDictPick.Length)];
+        rgDictNames.Add(sPick);
         uint uLfa = BitConverter.ToUInt32(rgD, 0x3C);
         int iPe = (int)uLfa;
         if (iPe <= 0 || iPe + 0x60 >= rgD.Length || BitConverter.ToUInt32(rgD, iPe) != 0x4550)
@@ -42,89 +54,89 @@ public static class BootRenamer
         int iCur = iStm + 4;
         int iStrings = -1, iTables = -1, iStringsSize = 0, iStringsHdr = -1, iMetaEnd = 0;
         var rgAfterHdrs = new List<int>();
+        var rgStreamHdr = new List<(int iHdr, uint uOff)>();
         for (int i = 0; i < usStreams; i++)
         {
             int iHdr = iCur;
             uint uOff = BitConverter.ToUInt32(rgD, iCur);
             int iSz = BitConverter.ToInt32(rgD, iCur + 4);
             int iNl = 0;
-            while (rgD[iCur + 8 + iNl] != 0) iNl++;
+            while (iCur + 8 + iNl < rgD.Length && rgD[iCur + 8 + iNl] != 0) iNl++;
             string sName = Encoding.ASCII.GetString(rgD, iCur + 8, iNl);
             if (sName == "#Strings") { iStrings = (int)uOff; iStringsSize = iSz; iStringsHdr = iHdr; }
             if (sName == "#~") iTables = (int)uOff;
-            if (iStringsHdr >= 0 && iHdr != iStringsHdr) rgAfterHdrs.Add(iHdr);
+            rgStreamHdr.Add((iHdr, uOff));
             int iEnd = iMetaOff + (int)uOff + iSz;
             if (iEnd > iMetaEnd) iMetaEnd = iEnd;
             iCur += 8 + iNl + 1;
             iCur = (iCur + 3) & ~3;
         }
         if (iStrings < 0 || iTables < 0) throw new InvalidDataException("no #Strings/#~ stream");
+        //只有数据落在#Strings堆尾之后的流才随追加后移 流头在堆前而数据在堆前的不能加偏移
+        foreach (var (iHdrS, uOffS) in rgStreamHdr)
+            if (iHdrS != iStringsHdr && (int)uOffS >= iStrings + iStringsSize) rgAfterHdrs.Add(iHdrS);
 
         int iHeap = iMetaOff + iStrings;
 
         //框架引用不可改名
         var rgProt = new HashSet<int>();
-        using (var ms = new MemoryStream(rgD, writable: false))
-        using (var per = new PEReader(ms))
+        using var ms = new MemoryStream(rgD, writable: false);
+        using var per = new PEReader(ms);
+        var mr = per.GetMetadataReader();
+        foreach (var h in mr.TypeReferences)
         {
-            var mr = per.GetMetadataReader();
-            foreach (var h in mr.TypeReferences)
-            {
-                var tr = mr.GetTypeReference(h);
-                rgProt.Add(MetadataTokens.GetHeapOffset(tr.Name));
-                if (!tr.Namespace.IsNil) rgProt.Add(MetadataTokens.GetHeapOffset(tr.Namespace));
-            }
-            foreach (var h in mr.MemberReferences)
-            {
-                var mref = mr.GetMemberReference(h);
-                rgProt.Add(MetadataTokens.GetHeapOffset(mref.Name));
-            }
+            var tr = mr.GetTypeReference(h);
+            rgProt.Add(MetadataTokens.GetHeapOffset(tr.Name));
+            if (!tr.Namespace.IsNil) rgProt.Add(MetadataTokens.GetHeapOffset(tr.Namespace));
+        }
+        foreach (var h in mr.MemberReferences)
+        {
+            var mref = mr.GetMemberReference(h);
+            rgProt.Add(MetadataTokens.GetHeapOffset(mref.Name));
         }
 
-        //PInvoke/Runtime/构造器名受CLR约束
+        //平台调用与运行时及构造器名受CLR约束
         var rgCand = new List<int>();
-        using (var ms = new MemoryStream(rgD, writable: false))
-        using (var per = new PEReader(ms))
+        using var ms2 = new MemoryStream(rgD, writable: false);
+        using var per2 = new PEReader(ms2);
+        var mr2 = per2.GetMetadataReader();
+        foreach (var h in mr2.MethodDefinitions)
         {
-            var mr = per.GetMetadataReader();
-            foreach (var h in mr.MethodDefinitions)
+            var md = mr2.GetMethodDefinition(h);
+            if ((md.Attributes & MethodAttributes.PinvokeImpl) != 0) continue;
+            if (((int)md.ImplAttributes & 3) == 3) continue;
+            string sM = mr2.GetString(md.Name);
+            if (sM == "Main") continue;
+            if (sM == ".ctor" || sM == ".cctor") continue;
+            int iOff = MetadataTokens.GetHeapOffset(md.Name);
+            if (!rgProt.Contains(iOff)) rgCand.Add(iOff);
+        }
+        foreach (var h in mr2.FieldDefinitions)
+        {
+            var fd = mr2.GetFieldDefinition(h);
+            int iOff = MetadataTokens.GetHeapOffset(fd.Name);
+            if (!rgProt.Contains(iOff)) rgCand.Add(iOff);
+        }
+        foreach (var h in mr2.MethodDefinitions)
+        {
+            var md2 = mr2.GetMethodDefinition(h);
+            foreach (var ph in md2.GetParameters())
             {
-                var md = mr.GetMethodDefinition(h);
-                if ((md.Attributes & MethodAttributes.PinvokeImpl) != 0) continue;
-                if (((int)md.ImplAttributes & 3) == 3) continue;
-                string sM = mr.GetString(md.Name);
-                if (sM == "Main") continue;
-                if (sM == ".ctor" || sM == ".cctor") continue;
-                int iOff = MetadataTokens.GetHeapOffset(md.Name);
+                var pd = mr2.GetParameter(ph);
+                if (pd.Name.IsNil) continue;
+                int iOff = MetadataTokens.GetHeapOffset(pd.Name);
                 if (!rgProt.Contains(iOff)) rgCand.Add(iOff);
             }
-            foreach (var h in mr.FieldDefinitions)
+        }
+        foreach (var h in mr2.TypeDefinitions)
+        {
+            var td = mr2.GetTypeDefinition(h);
+            int iOff = MetadataTokens.GetHeapOffset(td.Name);
+            if (!rgProt.Contains(iOff)) rgCand.Add(iOff);
+            if (!td.Namespace.IsNil)
             {
-                var fd = mr.GetFieldDefinition(h);
-                int iOff = MetadataTokens.GetHeapOffset(fd.Name);
-                if (!rgProt.Contains(iOff)) rgCand.Add(iOff);
-            }
-            foreach (var h in mr.MethodDefinitions)
-            {
-                var md2 = mr.GetMethodDefinition(h);
-                foreach (var ph in md2.GetParameters())
-                {
-                    var pd = mr.GetParameter(ph);
-                    if (pd.Name.IsNil) continue;
-                    int iOff = MetadataTokens.GetHeapOffset(pd.Name);
-                    if (!rgProt.Contains(iOff)) rgCand.Add(iOff);
-                }
-            }
-            foreach (var h in mr.TypeDefinitions)
-            {
-                var td = mr.GetTypeDefinition(h);
-                int iOff = MetadataTokens.GetHeapOffset(td.Name);
-                if (!rgProt.Contains(iOff)) rgCand.Add(iOff);
-                if (!td.Namespace.IsNil)
-                {
-                    int iNs = MetadataTokens.GetHeapOffset(td.Namespace);
-                    if (!rgProt.Contains(iNs)) rgCand.Add(iNs);
-                }
+                int iNs = MetadataTokens.GetHeapOffset(td.Namespace);
+                if (!rgProt.Contains(iNs)) rgCand.Add(iNs);
             }
         }
 
@@ -133,12 +145,11 @@ public static class BootRenamer
         var rgList = new List<int>();
         foreach (int iC in rgCand) if (rgSeen.Add(iC)) rgList.Add(iC);
 
-        //覆盖前量取长度
         var rgAll = new Dictionary<int, int>();
         foreach (int iP in rgProt) if (!rgAll.ContainsKey(iP)) rgAll[iP] = StrLen(rgD, iHeap, iP);
         foreach (int iC in rgList) if (!rgAll.ContainsKey(iC)) rgAll[iC] = StrLen(rgD, iHeap, iC);
 
-        //#Strings后缀共享 与保护串冲突者保留 与候选冲突者按分量紧凑覆盖
+        //字符串堆的后缀共享与保护串冲突者保留 其余候选按连续区间紧凑覆盖
         var rgSkip = new HashSet<int>();
         var rgL = new List<int>(rgList);
         rgL.Sort();
@@ -171,6 +182,8 @@ public static class BootRenamer
             rgGrp.Add(rgGroup);
         }
         var rgUsed = new HashSet<string>();
+        bool bPickSeen = false, bPickApplied = false;
+        string sPickNew = "";
         foreach (var rgG in rgGrp)
         {
             int iBound = rgG[rgG.Count - 1] + rgAll[rgG[rgG.Count - 1]];
@@ -183,19 +196,23 @@ public static class BootRenamer
                 string sOld = Encoding.ASCII.GetString(rgD, iHeap + iOff, Math.Min(iLen, 64)).TrimEnd('\0');
                 bool bDict = rgDict.Length > 0 && rgDictNames.Contains(sOld);
                 string sNew = bDict ? PickDict(rgDict, rgUsed) : MakeName(Math.Min(iLen, iMax), rgUsed);
+                if (bDict) bPickSeen = true;
                 byte[] rgB = Encoding.ASCII.GetBytes(sNew);
                 if (bDict && rgB.Length + 1 > iMax)
                 {
-                    //长词条追加到#Strings堆尾 方法名引用改向 原地清空原名
+                    //长词条追加到字符串堆尾 方法名引用改向 原地清空原名
                     int iNew = AppendDictName(rgD, iHeap, iStringsSize, rgB, rgAfterHdrs, iStringsHdr, iMetaEnd, iCliOff, out int iNeed);
                     if (iNew >= 0)
                     {
                         RemapMethodName(rgD, iMetaOff, iTables, iOff, iNew);
                         iStringsSize += iNeed;
                         iMetaEnd += iNeed;
+                        bPickApplied = true;
+                        sPickNew = sNew;
                         rgB = Encoding.ASCII.GetBytes(MakeName(Math.Min(iLen, iMax), rgUsed));
                     }
                 }
+                else if (bDict) { bPickApplied = true; sPickNew = sNew; }
                 if (rgB.Length + 1 > iMax)
                 {
                     sNew = MakeName(1, rgUsed);
@@ -207,6 +224,15 @@ public static class BootRenamer
                 iBound = iOff;
             }
         }
+        //词表存在而抽取没落到方法上必须停下 静默退化会变成随机短名 什么鬼阿
+        if (rgDict.Length > 0)
+        {
+            if (!bPickSeen) throw new InvalidDataException($"dict pick target not in the candidate set {sPick}");
+            if (!bPickApplied) throw new InvalidDataException($"dict pick not applied {sPick}");
+            Console.WriteLine($"dict name {sPick} -> {sPickNew}");
+        }
+        else
+            Console.WriteLine("no dict, all method names renamed to random short names");
         return rgD;
     }
 
@@ -216,10 +242,11 @@ public static class BootRenamer
         try
         {
             var rg = new List<string>();
+            var rgSeen = new HashSet<string>(StringComparer.Ordinal);
             foreach (var sLine in File.ReadAllLines(sPath))
             {
                 string sT = sLine.Trim().TrimStart('﻿');
-                if (sT.Length > 0 && !sT.StartsWith('#')) rg.Add(sT);
+                if (sT.Length > 0 && !sT.StartsWith('#') && rgSeen.Add(sT)) rg.Add(sT);
             }
             return rg.ToArray();
         }
@@ -243,7 +270,7 @@ public static class BootRenamer
     private static uint ReadU32(byte[] rgD, int iOff) => BitConverter.ToUInt32(rgD, iOff);
     private static ushort ReadU16(byte[] rgD, int iOff) => BitConverter.ToUInt16(rgD, iOff);
 
-    //词条追加到#Strings堆尾并把后续流后移 更新流头 失败返回-1
+    //词条追加到字符串堆尾并把后续流后移 更新流头 失败返回-1
     private static int AppendDictName(byte[] rgD, int iHeap, int iStringsSize, byte[] rgWord, List<int> rgAfterHdrs, int iStringsHdr, int iMetaEnd, int iCliOff, out int iNeed)
     {
         iNeed = (rgWord.Length + 1 + 3) & ~3;
@@ -260,7 +287,6 @@ public static class BootRenamer
         return iStringsSize;
     }
 
-    //把MethodDef表的Name列改向新heap偏移
     private static void RemapMethodName(byte[] rgD, int iMetaOff, int iTables, int iOld, int iNew)
     {
         int iTbl = iMetaOff + iTables;
@@ -280,22 +306,22 @@ public static class BootRenamer
             if (w == 4) WriteU32(rgD, iRow + 8, uV);
             else WriteU16(rgD, iRow + 8, (ushort)uV);
         }
+        int nHit = 0;
         for (int r = 0; r < rgRows[6]; r++)
         {
             int iRow = iPos + r * iRowSz;
-            if (ReadName(iRow) == (uint)iOld)
-            {
-                WriteName(iRow, (uint)iNew);
-                return;
-            }
+            if (ReadName(iRow) != (uint)iOld) continue;//同一个堆偏移可能被多个方法共用 全部改向
+            WriteName(iRow, (uint)iNew);
+            nHit++;
         }
+        if (nHit == 0) throw new InvalidDataException($"dict pick row not found in MethodDef (heap offset 0x{iOld:X})");
     }
 
     private static int RowSize(int t, int[] rgRows, byte bHS)
     {
         int strW = (bHS & 1) != 0 ? 4 : 2;
-        int guidW = (bHS & 2) != 0 ? 4 : 2;
-        int blobW = (bHS & 4) != 0 ? 4 : 2;
+        int iGuidW = (bHS & 2) != 0 ? 4 : 2;
+        int iBlobW = (bHS & 4) != 0 ? 4 : 2;
         int tdx(int tg) => rgRows[tg] < 65536 ? 2 : 4;
         int cdx(params int[] tags)
         {
@@ -305,13 +331,13 @@ public static class BootRenamer
         }
         return t switch
         {
-            0 => 2 + strW + 3 * guidW,                  //Module
+            0 => 2 + strW + 3 * iGuidW,                  //Module
             1 => cdx(0, 0x1A, 0x23, 1, 0x1B) + 2 * strW,//TypeRef
             2 => 4 + 2 * strW + cdx(2, 1, 0x1B) + tdx(4) + tdx(6),//TypeDef
             3 => tdx(4),                                //FieldPtr
-            4 => 2 + strW + blobW,                      //Field
+            4 => 2 + strW + iBlobW,                      //Field
             5 => tdx(6),                                //MethodPtr
-            6 => 4 + 2 + 2 + strW + blobW + tdx(8),     //MethodDef
+            6 => 4 + 2 + 2 + strW + iBlobW + tdx(8),     //MethodDef
             _ => 0,
         };
     }
@@ -356,4 +382,3 @@ public static class BootRenamer
         return -1;
     }
 }
-

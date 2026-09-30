@@ -23,10 +23,10 @@ internal static class Program
             if (rgLamApp.Length < 8)
                 return Fail(".lamapp section too small");
 
-            //magic "Lamarr!!" + count + entry table + names + 压缩块
+            //容器头部含标记与条目数 后面是条目表与名字表与压缩块
             byte[] rgMain = ParseLamApp(rgLamApp);
 
-            //依赖已全部进.lamapp，CoreCLR在bundle里找不到 -> 走Resolving从这里喂
+            //依赖已全部进容器 运行时找不到会走解析回调 由这里提供
             AssemblyLoadContext.Default.Resolving += (_, name) =>
             {
                 if (name.Name != null && sCache.TryGetValue(name.Name + ".dll", out var bytes))
@@ -97,7 +97,7 @@ internal static class Program
 
     private static byte[] ReadLamAppSection()
     {
-        //读自身exe的.lamapp段 数据区在末尾
+        //读自身镜像的容器段 数据区在末尾
 #if NET6_0_OR_GREATER
         string sSelf = Environment.ProcessPath ?? throw new InvalidOperationException("ProcessPath unavailable");
 #else

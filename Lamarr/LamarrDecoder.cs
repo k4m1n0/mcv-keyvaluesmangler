@@ -5,7 +5,6 @@ namespace Lamarr;
 
 public static class LamarrDecoder
 {
-    //编码阈值
     private const uint uCntDefault = 0x12;
     private const uint uCnt1Byte = 0xFF + uCntDefault;
     private const uint uCnt2Byte = 0xFFFF + uCnt1Byte;
@@ -19,7 +18,7 @@ public static class LamarrDecoder
         //首字节直接复制 格式要求
         rgOut[0] = rgIn[0];
 
-        //一个tag byte用8个bit管后续8个item bit=1是match bit=0是literal
+        //一个标签字节用8个位管后续8个条目 位为一表示匹配 为零表示字面量
         while (uInPos < (cbIn - (uint)iCurNib))
         {
             int iBC;
@@ -42,7 +41,7 @@ public static class LamarrDecoder
                         : ReadLE32Safe(rgIn, uInPos, cbIn) & 0xFFFFF;
                     uInPos++;
 
-                    //outPos<0x881用短距离编码 少1bit分两个bucket
+                    //输出位置小于该阈值时用短距离编码 少一个位分两档
                     if (uOutPos < 0x881)
                     {
                         uDist = uCFlag >> 1;
@@ -74,7 +73,7 @@ public static class LamarrDecoder
                     uInPos += (uint)iCurNib;
                     iCurNib ^= 1;
 
-                    //4bit<15直接+3 得到3..17
+                    //四位值小于15时直接加3得到3到17
                     if ((uRCnt & 0xF) != 0xF)
                     {
                         uRCnt = (uRCnt & 0xF) + 3;
@@ -82,7 +81,7 @@ public static class LamarrDecoder
                     else
                     {
                         uInPos++;
-                        //4bit=15 读1字节扩展
+                        //四位值等于15时读一个字节扩展
                         if (uRCnt != 0xFFF)
                         {
                             uRCnt = (uRCnt >> 4) + 0x12;
@@ -94,7 +93,7 @@ public static class LamarrDecoder
                             else
                                 uRCnt = (uint)(ReadLE16Safe(rgIn, uInPos, cbIn) + uCnt1Byte);
                             uInPos += 2;
-                            //哨兵值0x111+0xFFFF 触发非压缩块回退
+                            //哨兵值触发非压缩块回退
                             if (uRCnt == uCnt2Byte)
                             {
                                 uint uCopyCnt;
@@ -141,7 +140,7 @@ public static class LamarrDecoder
         return 0;
     }
 
-    //逐字节尽力读 缺位补0 允许部分越界
+    //逐字节尽力读 缺位补零 允许部分越界
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static ushort ReadLE16Safe(byte[] rgBuf, uint uOff, uint cbIn)
     {

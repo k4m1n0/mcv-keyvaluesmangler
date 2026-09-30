@@ -105,8 +105,8 @@ internal static class Program
         var rgParams = asmEntry.GetParameters();
         object[] rgInvokeArgs = rgParams.Length switch
         {
-            0 => [],
-            _ => [rgArgs]
+            0 => Array.Empty<object>(),
+            _ => new object[] { rgArgs }
         };
 
         object? oRet = asmEntry.Invoke(null, rgInvokeArgs);

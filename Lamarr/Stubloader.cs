@@ -7,7 +7,7 @@ namespace Lamarr;
 
 internal static class StubLoader
 {
-    private static readonly byte[] rgMagic = [0x4C, 0x61, 0x6D, 0x61, 0x72, 0x72, 0x21, 0x21];//Lamarr!!
+    private static readonly byte[] rgMagic = { 0x4C, 0x61, 0x6D, 0x61, 0x72, 0x72, 0x21, 0x21 };//Lamarr!!
 
     private readonly struct Entry
     {
@@ -24,7 +24,7 @@ internal static class StubLoader
         asmPayload = null!;
         rgRawBytes = null!;
 
-        //net5没有Environment.ProcessPath 从进程主模块取自身路径
+        //net5没有进程路径属性 从进程主模块取自身路径
         string sSelfPath = Process.GetCurrentProcess().MainModule?.FileName
             ?? throw new InvalidOperationException("ProcessPath unavailable");
         byte[] rgSelf;
@@ -68,13 +68,12 @@ internal static class StubLoader
             lName += rgTable[i].nameLen;
         }
 
-        //主条目(条目0)整块解码并加载
         byte[]? rgMain = DecompressEntry(rgSelf, lDataStart, new Entry(rgNames[0], rgTable[0].rawLen, rgTable[0].compLen, rgTable[0].compOff));
         if (rgMain == null) return false;
         rgRawBytes = rgMain;
         asmPayload = AssemblyLoadContext.Default.LoadFromStream(new MemoryStream(rgMain));
 
-        //依赖惰性加载 主程序集请求哪个解哪个
+        //依赖按需解压 主程序集要哪个解哪个
         var rgDeps = new Dictionary<string, Entry>(StringComparer.OrdinalIgnoreCase);
         for (int i = 1; i < iCount; i++)
         {
