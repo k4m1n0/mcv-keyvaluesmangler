@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -17,14 +18,16 @@ internal static class Program
     const int iErrUnknownCmd = 4;
     const int iErrException = 5;
 
-    static int Main(string[] rgArgs)
+    internal static int Main(string[] rgArgs)
     {
+        Triage.Banner(rgArgs);//只在确实设了triage旋钮且命令会产生产物时打一行
         if (rgArgs.Length == 0)
         {
             ShowHelp();
             return iErrUsage;
         }
-        if (HasFlag(rgArgs, "--help") || HasFlag(rgArgs, "-h") || HasFlag(rgArgs, "/?"))
+        int iDash = Array.IndexOf(rgArgs, "--");//--之后的token一律视为值
+        if (HasFlag(rgArgs, "--help"))
         {
             ShowHelp();
             return iOk;
@@ -34,20 +37,164 @@ internal static class Program
             ShowVersion();
             return iOk;
         }
-        string? sWorkDir = Opt(rgArgs, "-D");//相对路径与自动发现的基准
+        //退役守卫 故意保留以响亮报错 不静默忽略
+        if (Opt(rgArgs, "--seed") != null || HasFlag(rgArgs, "--seed"))
+        {
+            Console.Error.WriteLine("[key] --seed is not supported: pass --key <64hex> or --key-file <path>");
+            return iErrUsage;
+        }
+        if (HasFlag(rgArgs, "--escrowPlain"))
+        {
+            Console.Error.WriteLine("[escrow] --escrowPlain is not supported: a plaintext escrow would hand out the whole recipe; use --diag for non-sensitive diagnostics");
+            return iErrUsage;
+        }
+        //命令是首个命令记号 表外记号一律硬报错 三种构建都做识别与校验
+        string? sCmd = null;
+        int iCmd = -1, iEndScan = iDash < 0 ? rgArgs.Length : iDash;
+        for (int i = 0; i < iEndScan; i++)
+        {
+            if (!IsCommand(rgArgs[i])) continue;
+            sCmd = rgArgs[i]; iCmd = i; break;
+        }
+        if (sCmd == null)
+        {
+            if (HasFlag(rgArgs, "--configure") || HasFlag(rgArgs, "--fresh")) return Configure(rgArgs);
+            Console.Error.WriteLine("[cli] no command given (expected one of: " + string.Join(" ", rgCommands) + ")");
+            ShowHelp();
+            return iErrUsage;
+        }
+        int iVerdict = ValidateTokens(rgArgs, sCmd, iDash);
+        if (iVerdict != iOk) return iVerdict;
+        string? sPos1 = Pos(rgArgs, iCmd);
+        string? sPos2 = sPos1 != null ? Pos(rgArgs, iCmd + 1) : null;
+        string sVerb = sCmd.Equals("--internal", StringComparison.OrdinalIgnoreCase) ? (sPos1 ?? "").ToLowerInvariant() : "";
+        string sSub = sCmd.Equals("--selftest", StringComparison.OrdinalIgnoreCase) ? (sPos1 ?? "").ToLowerInvariant() : "";
+        if (sVerb.Length > 0 && !Array.Exists(rgInternalVerbs, a => a.Equals(sVerb, StringComparison.OrdinalIgnoreCase)))
+        {
+            Console.Error.WriteLine($"[internal] unknown verb: {sVerb} (" + string.Join("|", rgInternalVerbs) + ")");
+            return iErrUsage;
+        }
+#if !LAMARR_ANTHEIL
+        //关闭antheil的构建只有--pack 其余命令在编译期不存在 一律响亮拒绝
+        if (!sCmd.Equals("--pack", StringComparison.OrdinalIgnoreCase))
+        {
+            Console.Error.WriteLine($"[cli] {sCmd} is not in this build (antheil-only): rebuild with -p:LamarrAntheil=1");
+            return iErrUnavailable;
+        }
+#endif
+#if LAMARR_ANTHEIL
+        //命令级动词 每个命令只认自己那几项ValidateTokens已先校验
+        if (sCmd.Equals("--escrow-keygen", StringComparison.OrdinalIgnoreCase))
+        {
+            if (sPos1 == null) { Console.Error.WriteLine("[escrow-keygen] needs <private-key-file> [--pub <public-key-file>]"); return iErrUsage; }
+            EscrowKey.Keygen(sPos1, Opt(rgArgs, "--pub") ?? (sPos1 + ".pub"));//私钥留本机离线 公钥可上构建机
+            return iOk;
+        }
+        if (sCmd.Equals("--escrow-key-info", StringComparison.OrdinalIgnoreCase))
+        {
+            if (sPos1 == null) { Console.Error.WriteLine("[escrow-key-info] needs <key-file>"); return iErrUsage; }
+            EscrowKey.Info(sPos1);
+            return iOk;
+        }
+        if (sCmd.Equals("--keygen", StringComparison.OrdinalIgnoreCase))
+        {
+            if (sPos1 == null) { Console.Error.WriteLine("[keygen] needs <key-file>"); return iErrUsage; }
+            KeyFile.Keygen(sPos1);//带LAMARR-KEY标签的钥匙文件
+            return iOk;
+        }
+        if (sCmd.Equals("--key-info", StringComparison.OrdinalIgnoreCase))
+        {
+            if (sPos1 == null) { Console.Error.WriteLine("[key-info] needs <key-file>"); return iErrUsage; }
+            KeyFile.Info(sPos1);
+            return iOk;
+        }
+        if (sCmd.Equals("--verify", StringComparison.OrdinalIgnoreCase))
+        {
+            string? sArt = Opt(rgArgs, "--artifact");
+            if (sArt == null) { Console.Error.WriteLine("[verify] needs --artifact <exe> [--expect <64hex|@file>]"); return iErrUsage; }
+            if (!File.Exists(sArt)) { Console.Error.WriteLine($"[verify] not found: {sArt}"); return iErrUsage; }
+            string? sExpect = Opt(rgArgs, "--expect");
+            if (sExpect != null && sExpect.StartsWith("@"))//@path从文件读
+            {
+                string sExpPath = sExpect.Substring(1);
+                if (!File.Exists(sExpPath)) { Console.Error.WriteLine($"[verify] --expect @{sExpPath}: file not found"); return iErrUsage; }
+                sExpect = File.ReadAllText(sExpPath).Trim();
+            }
+            //不给--expect时只证明自签后未被改过 不等于官方来源
+            return PeWriterAntheil.VerifySealFile(sArt, sExpect);
+        }
+        if (sCmd.Equals("--selftest", StringComparison.OrdinalIgnoreCase))
+        {
+            if (sSub.Length == 0) { Console.Error.WriteLine("[selftest] needs <name>: escrow|seal|leak"); return iErrUsage; }
+            if (sSub == "escrow")
+            {
+                if (sPos2 == null) { Console.Error.WriteLine("[selftest escrow] needs <dir>"); return iErrUsage; }
+                return PeWriterAntheil.EscrowSelfTest(sPos2);//信封不变量自检 秒级 不需真打包
+            }
+            if (sSub == "seal")
+            {
+                if (sPos2 == null) { Console.Error.WriteLine("[selftest seal] needs <dir>"); return iErrUsage; }
+                return PeWriterAntheil.SealSelfTest(sPos2);//签名锚自检
+            }
+            if (sSub == "leak")
+            {
+                if (sPos2 == null) { Console.Error.WriteLine("[selftest leak] needs <exe> --key <64hex>"); return iErrUsage; }
+                if (!File.Exists(sPos2)) { Console.Error.WriteLine($"[leak] not found: {sPos2}"); return iErrUsage; }
+                string sLeakKeyHex = Opt(rgArgs, "--key") ?? Cfg("LamarrKey") ?? "";
+                if (sLeakKeyHex.Length != 64) { Console.Error.WriteLine("[leak] needs --key <64hex> (the build key that produced the artifact)"); return iErrUsage; }
+                byte[] rgLeakK = Convert.FromHexString(sLeakKeyHex);
+                var rgHit = PeWriterAntheil.MaterialLeak(File.ReadAllBytes(sPos2), rgLeakK, PeWriterAntheil.KdfSeedHex(rgLeakK));
+                Console.WriteLine(rgHit.Count == 0 ? $"[leak] RESULT PASS ({sPos2})" : $"[leak] RESULT FAIL ({string.Join(", ", rgHit)})");
+                return rgHit.Count == 0 ? iOk : iErrCheck;
+            }
+            Console.Error.WriteLine($"[selftest] unknown name: {sPos1} (escrow|seal|leak)");
+            return iErrUsage;
+        }
+        if (sCmd.Equals("--internal", StringComparison.OrdinalIgnoreCase))
+        {
+            if (sVerb.Length == 0)
+            {
+                Console.Error.WriteLine("[internal] needs a verb: shape|pick-isa|carrier|emit-engine|slot-morph|boot-order-check");
+                return iErrUsage;
+            }
+            if (sVerb == "shape")
+            {
+                //取种子口 构建侧用--of-key 重放侧用--of-escrow 都不需要另一侧的东西
+                string? sOfKey = Opt(rgArgs, "--of-key");
+                string? sOfEsc = Opt(rgArgs, "--of-escrow");
+                if (sOfKey != null && sOfEsc != null) { Console.Error.WriteLine("[shape] --of-key and --of-escrow are mutually exclusive"); return iErrUsage; }
+                if (sOfKey != null)
+                {
+                    try
+                    {
+                        string sRaw = sOfKey.Replace("-", "").Replace(" ", "").Trim();
+                        if (sRaw.Length != 64) throw new InvalidOperationException("want 64 hex chars");
+                        Console.WriteLine(PeWriterAntheil.Kdf64(Convert.FromHexString(sRaw), "chain:vmseed").ToString("X16"));//脚本只取第一行
+                    }
+                    catch (Exception eShape) { Console.Error.WriteLine("[shape] " + eShape.Message); return iErrUsage; }
+                    return iOk;
+                }
+                if (sOfEsc != null)
+                {
+                    string sSecSeed = PeWriterAntheil.ReadEscrowJson(sOfEsc, Opt(rgArgs, "--escrow-priv") ?? Cfg("LamarrEscrowKey"));
+                    using var oSeed = JsonDocument.Parse(sSecSeed);
+                    if (!oSeed.RootElement.TryGetProperty("vmSeed", out var eVmSeed) || string.IsNullOrEmpty(eVmSeed.GetString()))
+                    { Console.Error.WriteLine("[shape] the escrow carries no 'vmSeed': cannot derive the shape seed"); return iErrUsage; }
+                    Console.WriteLine(Convert.ToUInt64(eVmSeed.GetString()!, 16).ToString("X16"));//脚本只取第一行
+                    return iOk;
+                }
+                Console.Error.WriteLine("[shape] needs --of-key <64hex> or --of-escrow <escrow> [--escrow-priv <key>]");
+                return iErrUsage;
+            }
+        }
+#endif
+        string? sWorkDir = Opt(rgArgs, "--workdir");//相对路径与自动发现的基准
         if (sWorkDir != null)
         {
             if (!Directory.Exists(sWorkDir)) { Console.Error.WriteLine($"Work dir not found: {sWorkDir}"); return iErrUsage; }
             Directory.SetCurrentDirectory(sWorkDir);
         }
         LoadConfig(rgArgs);
-        string? sCmd = rgArgs[0].StartsWith("-") ? null : rgArgs[0];//首个裸参数即命令
-        if (sCmd != null && !IsMode(sCmd))
-        {
-            Console.Error.WriteLine($"Unknown command: {sCmd}");
-            ShowHelp();
-            return iErrUnknownCmd;
-        }
         string? sStub = Opt(rgArgs, "--stub") ?? Cfg("LamarrStub");
         string? sInput = Opt(rgArgs, "--input") ?? Cfg("LamarrInput");
         string? sOutput = Opt(rgArgs, "--output") ?? Cfg("LamarrOutput");
@@ -59,7 +206,8 @@ internal static class Program
         string? sPheropod = Opt(rgArgs, "--pheropod") ?? Cfg("LamarrPheropod");
         string? sEngine = Opt(rgArgs, "--engine") ?? Cfg("EngineDll");
 #endif
-        string sMode = Opt(rgArgs, "--mode") ?? sCmd ?? Cfg("Packer") ?? "clean";
+        //缺省是managed antheil是编译期可选必须显式请求managed与native与clean永远在
+        string sMode = Opt(rgArgs, "--mode") ?? Cfg("Packer") ?? "managed";
 #if !LAMARR_ANTHEIL
         if (!sMode.Equals("managed", StringComparison.OrdinalIgnoreCase)
             && !sMode.Equals("native", StringComparison.OrdinalIgnoreCase)
@@ -71,181 +219,158 @@ internal static class Program
 #endif
 #if LAMARR_ANTHEIL
         string? sIsaName = Opt(rgArgs, "--isa");
-        string? sSeed = Opt(rgArgs, "--seed") ?? Cfg("LamarrSeed");
-        //自动种子只用一种拼法 换打包器/TFM也不改字节
-        ulong uSeed;
-        try { uSeed = sSeed != null ? ParseSeedHex(sSeed) : unchecked(((ulong)s_rng.Next() << 32 | (uint)s_rng.Next()) & 0x7FFFFFFFFFFFFFFFul); }
-        catch (Exception eSeed) { Console.Error.WriteLine($"[seed] not hex: {sSeed} ({eSeed.GetType().Name})"); return iErrUsage; }
-        if (sSeed == null) Console.WriteLine($"[seed] auto={uSeed:X16} (pass --seed to reproduce this build)");//自选释放种子要留痕 否则无法复现
+        //没有构建种子 离线动词从K派生 这里的随机值只在没给K时供这些动词使用 产物密钥只认--key与--key-file
+        ulong uSeed = unchecked(((ulong)s_rng.Next() << 32 | (uint)s_rng.Next()) & 0x7FFFFFFFFFFFFFFFul);
+        //打包根密钥K由--key或--key-file给出 缺省随机并响亮告警K决定产物密钥 与离线动词的形状种子分开
+        string? sKeyHex = Opt(rgArgs, "--key") ?? Cfg("LamarrKey");
+        string? sKeyFileArg = Opt(rgArgs, "--key-file") ?? Cfg("LamarrKeyFile");
+        bool bKeyGiven = !string.IsNullOrEmpty(sKeyHex) || !string.IsNullOrEmpty(sKeyFileArg);
+        //形状种子S是escrow的vmSeed 16hex 只喂离线动词与重放机K是身份S是形状 两者不许同时出现
+        string? sSeedHex = Opt(rgArgs, "--shape") ?? Cfg("LamarrShape");//对外记号是--shape 内部变量名保持LamarrShape
+        //--replay的源是--escrow且方向由命令决定 --pack的--escrow才是写
+        string? sReplay = sCmd.Equals("--replay", StringComparison.OrdinalIgnoreCase)
+            ? (Opt(rgArgs, "--escrow") ?? Cfg("LamarrReplay"))
+            : null;//用清单里的材料重打包
+        if (!string.IsNullOrEmpty(sSeedHex) && bKeyGiven)
+        {
+            Console.Error.WriteLine("[shape] --shape and --key/--key-file are mutually exclusive (K = identity/sealing, --shape = shape only)");
+            return iErrUsage;
+        }
+        if (!string.IsNullOrEmpty(sReplay) && bKeyGiven)
+        {
+            Console.Error.WriteLine("[replay] --key/--key-file must not be combined with a replay: a reproduction needs no K (pass K only for --pack)");
+            return iErrUsage;
+        }
+        bool bShapeOnly = !string.IsNullOrEmpty(sSeedHex) || Opt(rgArgs, "--of-key") != null;//形状源供内部动词用 与K无关
+        byte[] rgBuildKey = Array.Empty<byte>();//不能预分配32字节 否则Length为0的判断失效 --key的hex会被静默忽略
+        try
+        {
+            if (!string.IsNullOrEmpty(sKeyFileArg))
+            {
+                if (!File.Exists(sKeyFileArg)) { Console.Error.WriteLine($"[key] key file not found: {sKeyFileArg}"); return iErrUsage; }
+                if (!string.IsNullOrEmpty(sKeyHex)) { Console.Error.WriteLine("[key] --key and --key-file are mutually exclusive (pass exactly one)"); return iErrUsage; }//--key与--key-file互斥 只许给一个
+                rgBuildKey = KeyFile.Load(sKeyFileArg);//带LAMARR-KEY标签的钥匙文件 兼容裸hex
+            }
+            if (bKeyGiven)
+            {
+                if (rgBuildKey.Length == 0)
+                {
+                    rgBuildKey = Convert.FromHexString(sKeyHex!.Replace("-", "").Replace(" ", ""));
+                    if (rgBuildKey.Length != 32) { Console.Error.WriteLine("[key] --key/--key-file must be 32 bytes (64 hex chars)"); return iErrUsage; }
+                }
+            }
+            else
+            {
+                rgBuildKey = new byte[32];//必须先分配再填 空数组上直接GetBytes一个字节都写不进去
+                using var oRng = System.Security.Cryptography.RandomNumberGenerator.Create();
+                oRng.GetBytes(rgBuildKey);
+            }
+            //K必须是32字节且非全零 全零就一定没解析成功 硬报错不静默出产物
+            if (rgBuildKey.Length != 32 || Array.TrueForAll(rgBuildKey, b => b == 0))
+            { Console.Error.WriteLine("[key] invalid K (must be 32 non-zero bytes; check --key/--key-file)"); return iErrUsage; }
+            //K指纹16hex不泄密 每次构建打一行且走stdout 因为stderr会让Stop偏好的脚本中止
+            Console.WriteLine($"[key] src={(bKeyGiven ? (!string.IsNullOrEmpty(sKeyFileArg) ? "key-file" : "key") : (bShapeOnly ? "none" : "random"))} fp={Sha512.Fp(rgBuildKey)}{(!bKeyGiven && bShapeOnly ? " (shape-only input: this K is unused)" : "")}");
+        }
+        catch (Exception eKey) { Console.Error.WriteLine($"[key] {eKey.Message}"); return iErrUsage; }
+        //只有--pack与--replay需要K 内部动词与VM自检只用形状种子 警告不得写stderr 否则Stop偏好的脚本会终止
+        bool bPackCmd = sCmd.Equals("--pack", StringComparison.OrdinalIgnoreCase) || sCmd.Equals("--replay", StringComparison.OrdinalIgnoreCase);
+        if (bPackCmd && !bKeyGiven && string.IsNullOrEmpty(sReplay) && !bShapeOnly)
+            Console.Error.WriteLine($"[key] WARN no --key/--key-file: K=random fp={Convert.ToHexString(Sha512.Hash(rgBuildKey))[..16]} -> this artifact is NOT reproducible unless an escrow is written");
+        if (bKeyGiven)
+        {
+            uSeed = PeWriterAntheil.Kdf64(rgBuildKey, "chain:vmseed");
+            A0.Q.uDomainSeed = PeWriterAntheil.DomainSeedOf(uSeed);
+        }//自选释放种子要留痕 否则无法复现
+        if (!string.IsNullOrEmpty(sSeedHex))
+        {
+            try { uSeed = ParseSeedHex(sSeedHex); }
+            catch { Console.Error.WriteLine($"[shape] bad --shape (want 16 hex chars, e.g. the escrow's vmSeed): {sSeedHex}"); return iErrUsage; }
+            Console.WriteLine($"[shape] S={uSeed:X16} (shape-only input: ISA/engine/slots; no K involved)");
+        }
+        //内部动词的形状也可以直接由K派生 --of-key与--internal shape同一算路
+        string? sOfKeyArg = Opt(rgArgs, "--of-key");
+        if (!string.IsNullOrEmpty(sOfKeyArg))
+        {
+            try
+            {
+                byte[] rgOfK = Convert.FromHexString(sOfKeyArg.Replace("-", "").Replace(" ", "").Trim());
+                if (rgOfK.Length != 32) throw new InvalidOperationException("want 64 hex chars");
+                uSeed = PeWriterAntheil.Kdf64(rgOfK, "chain:vmseed");
+                A0.Q.uDomainSeed = PeWriterAntheil.DomainSeedOf(uSeed);
+                Console.WriteLine($"[shape] S={uSeed:X16} (derived from --of-key)");
+            }
+            catch (Exception eOfKey) { Console.Error.WriteLine("[shape] --of-key " + eOfKey.Message); return iErrUsage; }
+        }
+        A0.Q.uDomainSeed = PeWriterAntheil.DomainSeedOf(uSeed);//域常量随种子定 解包与期望值核查这些离线动词也要同一份派生
         string? sRole = Opt(rgArgs, "--role");
         int iRole = sRole != null && sRole.Equals("fake", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
-        string? sOrder = Opt(rgArgs, "--boot-order-check");
+        string? sOrder = sVerb == "boot-order-check" ? sPos2 : null;//内部动词 对任意boot镜像跑顺序校验
         if (sOrder != null)
         {
-            byte[] rgOrder = File.ReadAllBytes(sOrder);//独立入口 对任意boot镜像跑顺序校验
+            byte[] rgOrder = File.ReadAllBytes(sOrder);
             Console.WriteLine($"[boot-order] image={sOrder} bytes={rgOrder.Length}");
             try { PeWriterAntheil.CheckEncryptOrder(rgOrder); }
             catch (Exception eOrder) { Console.WriteLine($"[boot-order] FAIL {eOrder.Message}"); return iErrCheck; }
             return iOk;
         }
-        string? sExpCheck = Opt(rgArgs, "--boot-exp-check");//离线核查期望值块与产物boot是否自洽
-        if (sExpCheck != null) return PeWriterAntheil.CheckBootExp(sExpCheck);
-        if (Array.Exists(rgArgs, a => a.Equals("--pick-isa", StringComparison.OrdinalIgnoreCase)))
+
+        if (sVerb == "pick-isa")
         {
             Console.WriteLine(IsaPool.PoolPick(uSeed, iRole));//打印所选规范名
             return iOk;
         }
-        if (Array.Exists(rgArgs, a => a.Equals("--carrier", StringComparison.OrdinalIgnoreCase)))
+        if (sVerb == "carrier")
         {
             Console.WriteLine(IsaPool.CarrierIsa(uSeed, iRole));//载体ISA池选 没就绪就回退
             return iOk;
         }
-        bool bOpTbl = HasFlag(rgArgs, "--op-table-dump");//打印置换表与逆表并自检保形 可选带一个16进制种子
-        string sOpTbl = Opt(rgArgs, "--op-table-dump") ?? "";
-        if (bOpTbl)
+
+        if (sCmd.Equals("--unpack", StringComparison.OrdinalIgnoreCase))//离线还原产物容器与各region
         {
-            ulong uS = uSeed;
-            try { if (sOpTbl.Length > 0) uS = ParseSeedHex(sOpTbl); }
-            catch { Console.WriteLine($"[op-table] bad hex seed: {sOpTbl}"); return iErrCheck; }
-            Console.Write(OpTable.Dump(uS));
-            bool bOk = OpTable.SelfCheck(uS, out string sBad);
-            Console.WriteLine(bOk ? "[op-table] selfcheck ok (shape-preserving, unused bytes identity)" : $"[op-table] SELFCHECK FAIL {sBad}");
-            return bOk ? iOk : iErrCheck;
-        }
-        bool bKernOps = HasFlag(rgArgs, "--kern-ops");//统计内核字节码里能力格出现几次
-        if (bKernOps)
-        {
-            string sStats = NotenrolleComp.KernOpStats();
-            Console.Write(sStats);
-            return sStats.Contains("RESULT: PASS") ? iOk : iErrCheck;
-        }
-        string? sEngSum = Opt(rgArgs, "--engine-sum");//打印引擎镜像text摘要 同ISA不同种子摘要不同
-        if (sEngSum != null)
-        {
-            Console.WriteLine(PeWriterAntheil.EngineTextSum(File.ReadAllBytes(sEngSum)).ToString("X8"));
-            return iOk;
-        }
-        string? sNames = Opt(rgArgs, "--dump-names");//打印入口层描述性名字(>2字符) 核对改名覆盖
-        if (sNames != null)
-        {
-            PeWriterAntheil.DumpNames(sNames);
-            return iOk;
-        }
-        bool bOpSig = HasFlag(rgArgs, "--op-table-sigma");//打印操作码置换全表每行16个十六进制字节
-        string sOpSig = Opt(rgArgs, "--op-table-sigma") ?? "";
-        if (bOpSig)
-        {
-            ulong uS = uSeed;
-            try { if (sOpSig.Length > 0) uS = ParseSeedHex(sOpSig); }
-            catch { Console.WriteLine($"[op-table] bad hex seed: {sOpSig}"); return iErrCheck; }
-            byte[] rgS = OpTable.BuildSigma(uS);
-            Console.WriteLine($"sigma seed={uS:X16} derived=true triage={OpTable.Triage} groups='{OpTable.GroupMask}'");
-            for (int i = 0; i < 256; i += 16)
-            {
-                var rg = new string[16];
-                for (int k = 0; k < 16; k++) rg[k] = rgS[i + k].ToString("X2");
-                Console.WriteLine(string.Join(" ", rg));
-            }
-            return iOk;
-        }
-        bool bOpRt = HasFlag(rgArgs, "--op-table-rt");//编码侧往返自检 只比对操作码位置 查置换表与载体选择保形
-        string sOpRt = Opt(rgArgs, "--op-table-rt") ?? "";
-        if (bOpRt)
-        {
-            ulong uS = uSeed;
-            try { if (sOpRt.Length > 0) uS = ParseSeedHex(sOpRt); }
-            catch { Console.WriteLine($"[op-table] bad hex seed: {sOpRt}"); return iErrCheck; }
-            string sIsaRt = Opt(rgArgs, "--isa") ?? "ppc";
-            Console.WriteLine($"[op-rt] derived=true triage={OpTable.Triage} isa={sIsaRt} seed={uS:X16}");
-            int iBad = 0;
-            for (int i = 0; i < NotenrolleComp.KernRollCount; i++)
-            {
-                byte[] rgBc = NotenrolleComp.CompileKern(i, uS);
-                OpTable.Begin(uS, sIsaRt);
-                CarrierFmt.Begin(uS);//载体宽度码表
-                byte[] rgEnc = sIsaRt switch
-                {
-                    "rv64" => NotenrolleIsaRv.EncodeLinear(rgBc),
-                    "mips64" => NotenrolleIsaMi.EncodeLinear(rgBc),
-                    "loongarch" => NotenrolleIsaLa.EncodeLinear(rgBc),
-                    "alpha" => NotenrolleIsaAl.EncodeLinear(rgBc),
-                    _ => NotenrolleIsa.EncodeLinear(rgBc),
-                };
-                byte[]? rgDec = sIsaRt switch
-                {
-                    "rv64" => NotenrolleIsaRv.DecodeLinear(rgEnc),
-                    "mips64" => NotenrolleIsaMi.DecodeLinear(rgEnc),
-                    "loongarch" => NotenrolleIsaLa.DecodeLinear(rgEnc),
-                    "alpha" => NotenrolleIsaAl.DecodeLinear(rgEnc),
-                    _ => NotenrolleIsa.DecodeLinear(rgEnc),
-                };
-                if (rgDec == null) { Console.WriteLine($"[op-rt] kern {i} DECODE_NULL"); iBad++; continue; }
-                var rgOps = NotenrolleCfg.Disasm(rgBc);//只对操作码位置过表 操作数字节必须与规范流逐字节相同
-                var rgIsOp = new bool[rgBc.Length];
-                foreach (var t in rgOps) if (t.iPos >= 0 && t.iPos < rgIsOp.Length) rgIsOp[t.iPos] = true;
-                var rgExp = (byte[])rgBc.Clone();
-                for (int k = 0; k < rgExp.Length; k++) if (rgIsOp[k]) rgExp[k] = OpTable.Map(rgBc[k]);
-                int iAt = -1;
-                if (rgBc.Length != rgDec.Length) iAt = Math.Min(rgBc.Length, rgDec.Length);
-                else for (int k = 0; k < rgBc.Length; k++) if (rgExp[k] != rgDec[k]) { iAt = k; break; }
-                if (iAt < 0)
-                {
-                    Console.WriteLine($"[op-rt] kern {i} OK bc={rgBc.Length} enc={rgEnc.Length} ops={rgOps.Count}");
-                    continue;
-                }
-                iBad++;
-                string sA = iAt < rgBc.Length ? rgBc[iAt].ToString("X2") : "EOF";
-                string sB = iAt < rgDec.Length ? rgDec[iAt].ToString("X2") : "EOF";
-                string sC = iAt < rgExp.Length ? rgExp[iAt].ToString("X2") : "EOF";
-                string sTag = iAt < rgIsOp.Length && rgIsOp[iAt] ? " (opcode)" : " (operand)";
-                Console.WriteLine($"[op-rt] kern {i} MISMATCH@{iAt}{sTag} bc={sA} want={sC} dec={sB} bclen={rgBc.Length} declen={rgDec.Length}");
-                int iLo = Math.Max(0, iAt - 6), iHi = Math.Min(rgBc.Length, iAt + 6);
-                Console.WriteLine($@"        bc[..]  = {BitConverter.ToString(rgBc, iLo, iHi - iLo).Replace("-", " ")}");
-                Console.WriteLine($@"        want[]  = {BitConverter.ToString(rgExp, iLo, iHi - iLo).Replace("-", " ")}");
-                Console.WriteLine($@"        dec[]   = {BitConverter.ToString(rgDec, iLo, Math.Min(iHi, rgDec.Length) - iLo).Replace("-", " ")}");
-            }
-            Console.WriteLine(iBad == 0 ? "[op-rt] ALL OK" : $"[op-rt] FAIL {iBad}");
-            for (int i = 0; i < NotenrolleComp.KernRollCount; i++)//操作码直方图
-            {
-                byte[] rgBc = NotenrolleComp.CompileKern(i, uS);
-                var rgOps2 = NotenrolleCfg.Disasm(rgBc);
-                var rgHist = new SortedDictionary<int, int>();
-                foreach (var t in rgOps2)
-                {
-                    int b = rgBc[t.iPos];
-                    rgHist[b] = rgHist.TryGetValue(b, out int iC) ? iC + 1 : 1;
-                }
-                string sHist = string.Join(",", rgHist.Select(kv => $"{kv.Key:X2}x{kv.Value}"));
-                Console.WriteLine($"[op-rt] kern {i} ops={sHist}");
-            }
-            return iBad == 0 ? iOk : iErrCheck;
-        }
-        string? sEmitEngine = Opt(rgArgs, "--emit-engine");//生成引擎汇编写到文件
-        string? sUnpack = Opt(rgArgs, "--unpack");//离线还原产物容器与各region
-        if (sUnpack != null)
-        {
-            string sOutU = Opt(rgArgs, "--out") ?? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(sUnpack))!, "unpack");
-            return PeWriterAntheil.Unpack(sUnpack, sOutU,
+            string? sArtU = Opt(rgArgs, "--artifact");
+            if (sArtU == null) { Console.Error.WriteLine("[unpack] needs --artifact <exe> [--out <dir>] [--scan]"); return iErrUsage; }
+            if (!File.Exists(sArtU)) { Console.Error.WriteLine($"[unpack] not found: {sArtU}"); return iErrUsage; }
+            string sOutU = Opt(rgArgs, "--out") ?? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(sArtU))!, "unpack");
+            return PeWriterAntheil.Unpack(sArtU, sOutU,
                 Array.Exists(rgArgs, a => a.Equals("--scan", StringComparison.OrdinalIgnoreCase)),
-                Opt(rgArgs, "--escrow"));
+                Opt(rgArgs, "--escrow"), Opt(rgArgs, "--escrow-priv") ?? Cfg("LamarrEscrowKey"),
+                Opt(rgArgs, "--key") ?? Cfg("LamarrKey"),
+                Opt(rgArgs, "--native-out"), Opt(rgArgs, "--stub") ?? Cfg("LamarrStub"),
+                Opt(rgArgs, "--boot") ?? Cfg("LamarrBoot"));
         }
         string sCarrierIsa = sIsaName ?? IsaPool.CarrierIsa(uSeed, iRole);//载体ISA需引擎解码与打包端编码都就绪 否则回退ppc
-        if (sEmitEngine != null)
+        if (sVerb == "emit-engine")//生成引擎汇编写到文件 输出路径取--out
         {
+            string? sEmitEngine = Opt(rgArgs, "--out");
+            if (sEmitEngine == null) { Console.Error.WriteLine("[internal emit-engine] needs --out <asm>"); return iErrUsage; }
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(sEmitEngine))!);
             File.WriteAllText(sEmitEngine, PianolaEngine.Generate(uSeed, sCarrierIsa));
             Console.WriteLine($"[emit-engine] -> {sEmitEngine} (seed={uSeed:X16} carrierIsa={sCarrierIsa})");
             return iOk;
         }
-        string? sSlotMorph = Opt(rgArgs, "--slot-morph");//等长插槽重写 打包器与构建链共用同一实现
-        if (sSlotMorph != null)
+        if (sVerb == "slot-morph")//等长插槽重写 打包器与构建链共用同一实现
         {
-            return PeWriterAntheil.SlotMorph(sSlotMorph, Opt(rgArgs, "--out"), uSeed,
-                Opt(rgArgs, "--tag") ?? Path.GetFileNameWithoutExtension(sSlotMorph),
+            if (sPos2 == null) { Console.Error.WriteLine("[internal slot-morph] needs <dll>"); return iErrUsage; }
+            return PeWriterAntheil.SlotMorph(sPos2, Opt(rgArgs, "--out"), uSeed,
+                Opt(rgArgs, "--tag") ?? Path.GetFileNameWithoutExtension(sPos2),
                 Array.Exists(rgArgs, a => a.Equals("--check", StringComparison.OrdinalIgnoreCase)));
         }
-        string? sEscrow = Opt(rgArgs, "--escrow") ?? Cfg("LamarrEscrow");//escrow清单 需显式开启
-        string? sReplay = Opt(rgArgs, "--replay") ?? Cfg("LamarrReplay");//用清单里的vmSeed与head重打包
+        if (sCmd.Equals("--internal", StringComparison.OrdinalIgnoreCase))//命令级把关 表外动词一律拒绝
+        {
+            Console.Error.WriteLine($"[internal] unknown verb: {sVerb}");
+            return iErrUsage;
+        }
+        string? sEscrow = sCmd.Equals("--replay", StringComparison.OrdinalIgnoreCase)
+            ? Opt(rgArgs, "--escrow-out")//重放时顺带再签一份的输出 可选 复制sigEscrow不重签
+            : (Opt(rgArgs, "--escrow") ?? Cfg("LamarrEscrow"));
+        string? sEscrowPub = Opt(rgArgs, "--escrow-pub") ?? Cfg("LamarrEscrowPubKey");
+        string? sEscrowPriv = Opt(rgArgs, "--escrow-priv") ?? Cfg("LamarrEscrowKey");
+        bool bEscrowDiag = Array.Exists(rgArgs, a => a.Equals("--diag", StringComparison.OrdinalIgnoreCase));
+        //本次构建的输入指纹 写escrow时记进密封区 重放时用同一算路现算并比对
+        //指纹只在要写escrow或要重放比对时才需要 否则不必整读一遍几十MB的载荷
+        bool bNeedFp = !string.IsNullOrEmpty(sEscrow) || !string.IsNullOrEmpty(sReplay);
+        string sFpPayload = bNeedFp && !string.IsNullOrEmpty(sInput) && File.Exists(sInput) ? PeWriterAntheil.FpOfFile(sInput) : "";
+        string sFpNative = bNeedFp ? PeWriterAntheil.FpOfFiles(new[] { sBoot ?? "", sShim ?? "", sDecoder ?? "", sJitHook ?? "", sPheropod ?? "", sEngine ?? "" }) : "";
 
         string? sEncryptDeps = Opt(rgArgs, "--encrypt-deps") ?? Cfg("EncryptDeps");
         string? sMethodDict = Opt(rgArgs, "--method-dict") ?? Cfg("LamarrMethodDict");
@@ -256,8 +381,8 @@ internal static class Program
         string? sPayloadMajor = Opt(rgArgs, "--payload-major") ?? Cfg("PayloadMajor");//载荷TFM主版本 它就是stub的PREFMAJ
         int iPayloadMajor = 0;
         if (sPayloadMajor != null) int.TryParse(sPayloadMajor, out iPayloadMajor);
-        string? sRollForward = Opt(rgArgs, "--rtc-rollforward") ?? Cfg("RtcRollForward");//null=沿用载荷值 未发布则用默认策略 取该主版本最新运行时 缺失取更高一级
-        string? sTargetArg = Opt(rgArgs, "-Target") ?? Cfg("LamarrTarget");
+        string? sRollForward = Opt(rgArgs, "--rtc-rollforward") ?? Cfg("RtcRollForward");//null=取载荷值 未发布则用默认策略 取该主版本最新运行时 缺失取更高一级
+        string? sTargetArg = Opt(rgArgs, "--target") ?? Cfg("LamarrTarget");
         if (sTargetArg == null && sInput == null) sTargetArg = DiscoverTarget();//零参数发现 cwd下唯一csproj
         string? sProjDir, sProjName, sProjTfm;
         if (sTargetArg != null)
@@ -288,8 +413,6 @@ internal static class Program
             sOutput = Path.Combine(sProjDir, "bin", "Release", sProjTfm, "win-x64", "publish", $"{sProjName}_packed.exe");//载荷工程发布目录下的产物名
             Console.WriteLine($"[discover] output={sOutput}");
         }
-        if (HasFlag(rgArgs, "-Configure") || HasFlag(rgArgs, "-Fresh"))
-            return Configure(rgArgs);
         if (sStub == null || sInput == null || sOutput == null)
         {
             ShowHelp();
@@ -338,16 +461,49 @@ internal static class Program
             else
             {
                 Console.WriteLine($"  seed: {uSeed:X16}");//坏产物必须能从种子重建
+                if (!string.IsNullOrEmpty(sSeedHex) && string.IsNullOrEmpty(sReplay))
+                {
+                    Console.Error.WriteLine("[shape] --shape is a shape-only input (offline verbs / --replay): a fresh pack needs --key (K); to reproduce an artifact pass --replay --escrow <escrow> --escrow-priv <key>");
+                    return iErrUsage;
+                }
                 var pe = new PeWriterAntheil();
                 pe.LoadStub(sStub);
                 if (!string.IsNullOrEmpty(sMethodDict)) pe.SetMethodDict(sMethodDict);//改名要用它 必须在LoadBoot之前
-                pe.SetVmSeed(uSeed);//种子要在LoadBoot之前 LoadBoot里就生成头部并按派生形状
+                pe.SetBuildKey(rgBuildKey);//种子要在LoadBoot之前 LoadBoot里就生成头部并按派生形状
                 if (!string.IsNullOrEmpty(sReplay))
                 {
-                    var oEsc = JsonDocument.Parse(PeWriterAntheil.ReadEscrowJson(sReplay)).RootElement;//用上一次发布的清单重打包
-                    pe.SetVmSeed(ParseSeedHex(oEsc.GetProperty("vmSeed").GetString()!));
-                    pe.SetReplayHead(Convert.FromHexString(oEsc.GetProperty("head").GetString()!));
-                    Console.WriteLine($"[replay] material from {sReplay} (vmSeed and head)");
+                    string sEscJson = PeWriterAntheil.ReadEscrowJson(sReplay, sEscrowPriv);
+                    var oEsc = JsonDocument.Parse(sEscJson).RootElement;//用上一次发布的清单重打包
+                    string sSeedE = oEsc.TryGetProperty("seed", out var eSd) ? eSd.GetString()! : "";
+                    if (sSeedE.Length == 0) { Console.Error.WriteLine("[replay] escrow carries no 'seed': cannot rebuild byte-identically"); return iErrUsage; }
+                    pe.SetReplayMaterial(ParseSeedHex(oEsc.GetProperty("vmSeed").GetString()!), Convert.FromHexString(oEsc.GetProperty("head").GetString()!), sSeedE);
+                    string sPubBE = oEsc.TryGetProperty("pubB", out var ePb) ? ePb.GetString()! : "";
+                    string sSigE = oEsc.TryGetProperty("sig", out var eSg) ? eSg.GetString()! : "";
+                    if (sPubBE.Length != 64 || sSigE.Length != 128)
+                    {
+                        Console.Error.WriteLine("[replay] escrow carries no finished seal (pubB/sig): it was written by an unsealed build");
+                        return iErrUsage;
+                    }
+                    pe.SetReplaySeal(Convert.FromHexString(sPubBE), Convert.FromHexString(sSigE));//重放时复制成品签名 不需要K
+                    //escrow的来源签名也必须复制 绝不重签 重签需要K而重放机没有K
+                    string sSigEscrowE = oEsc.TryGetProperty(PeWriterAntheil.sEscrowSigField, out var eSe) ? eSe.GetString()! : "";
+                    if (sSigEscrowE.Length != 128)
+                    {
+                        Console.Error.WriteLine("[replay] the source escrow carries no sigEscrow: re-issuing a verifiable escrow needs its signature (regenerate the escrow with the current packer)");
+                        return iErrUsage;
+                    }
+                    pe.SetReplayEscrowSig(sSigEscrowE);
+                    //清痕逆材料也原样复制 材料核心必须与源escrow逐字节相同 否则复制的sigEscrow失效
+                    pe.SetReplayScrub(oEsc.TryGetProperty("scrub", out var eSc) ? eSc.GetRawText() : "");
+                    Console.WriteLine($"[replay] seal copied from escrow (pubB={sPubBE[..16]})");
+                    string? sMis = PeWriterAntheil.EscrowVerifyMismatch(sEscJson, sFpPayload, sMode, sFpNative);
+                    if (sMis != null)
+                    {
+                        Console.Error.WriteLine($"[replay] input verification failed: {sMis}");
+                        Console.Error.WriteLine("[replay] replaying with different inputs would NOT reproduce the artifact; supply the exact inputs recorded in the escrow");
+                        return iErrUsage;
+                    }
+                    Console.WriteLine("[replay] input fingerprints match the escrow (payload/mode/native)");
                 }
                 if (sBoot != null) pe.LoadBoot(sBoot);
                 if (sShim != null) pe.LoadShim(sShim);
@@ -355,7 +511,8 @@ internal static class Program
                 if (sJitHook != null) pe.LoadJitHook(sJitHook);
                 pe.LoadPheropod(sPheropod ?? "");
                 if (sEngine != null) pe.LoadEngine(sEngine);
-                if (sEscrow != null) pe.SetEscrow(sEscrow, Array.Exists(rgArgs, a => a.Equals("--escrowPlain", StringComparison.OrdinalIgnoreCase)));
+                if (sEscrow != null) pe.SetEscrow(sEscrow, sEscrowPub ?? "", bEscrowDiag);
+                pe.SetVerifyInfo(sFpPayload, sMode, sFpNative);//写进escrow密封区 重放侧用同一算路比对
                 if (sRtcVersion != null) pe.SetRtcVersion(sRtcVersion);
                 if (sTiered != null) pe.SetTiered(sTiered);
                 pe.SetPayloadMajor(iPayloadMajor);
@@ -399,48 +556,60 @@ internal static class Program
         string sExe = ExeName();
         Console.Error.WriteLine();
         Console.Error.WriteLine($@"LamarrPacker {Version()} - Lamarr packer
-  tfm={TfmName()} antheil={AntheilFlag()} modes={Modes()}
+  tfm={TfmName()} antheil={AntheilFlag()} triage={Triage.Flag()} modes={Modes()}
 
 Usage:
-  {sExe}.exe <mode> --stub <stub> --input <input.exe> --output <output.exe> [options]
-  {sExe}.exe -Target <payload.csproj|dir|name> --stub <stub> --output <output.exe> [options]
-  {sExe}.exe [<mode>]                zero-arg discovery, sole csproj in cwd plus conventional stub/boot/output
+  {sExe}.exe <command> [positionals] [options]     the command decides the direction of --escrow
+  {sExe}.exe --configure [options]                 write lamarrpack.props and exit
   {sExe}.exe --version | --help
 
-Modes: {Modes()}  (native is an alias of clean)
+Commands: --pack --replay --verify --unpack --keygen --key-info --escrow-keygen --escrow-key-info --selftest --internal
+Every command only accepts its own options; unknown tokens are rejected (no legacy spellings: section 18.5).
 
-Pack options:
-  --stub <path>        stub image (single-file bundle or asm stub)
-  --input <path>       payload, the published exe in every mode
-  --output <path>      output exe
-  --mode <mode>        default clean, a bare first argument is also accepted
-  --boot <dll>         bootstrapper (native antheil)
-  --rtc-version <v> --rtc-tiered <v> --rtc-rollforward <v> --payload-major <n>");
-#if LAMARR_ANTHEIL
-        Console.Error.WriteLine(@"  antheil inputs: --shim <host.dll> --decoder <Iamdec.dll> --jithook <jithook.dll> --pheropod <z0.dll, the packed bait is mutated in place per release seed> --engine <engine.dll>
-                --seed <hex> --method-dict <file> --encrypt-deps <list> --no-compress-deps <list> --escrow <json> --replay <json>");
-#endif
+  --pack    --key <64hex> | --key-file <file>         the build key K (**antheil only**)
+            --escrow <out> --escrow-pub <pub>         write an escrow (the public key is enough)
+            --target <csproj|dir|name>                locate input/output/boot by convention
+            --stub --input --output --mode            explicit paths; --mode defaults to managed
+            --boot --shim --decoder --jithook --pheropod --engine --method-dict
+            --rtc-version --rtc-tiered --rtc-rollforward --payload-major
+            --encrypt-deps --no-compress-deps --compress-deps --diag
+  --replay  --escrow <in> --escrow-priv <key>         recorded materials (a reproduction needs no K)
+            [--escrow-out <out> --escrow-pub <pub>]   also re-issue an escrow (copies sigEscrow)
+            (same option set as --pack)
+  --verify  --artifact <exe> [--expect <64hex|@file>] without --expect: 'unverified' (self-consistency, not provenance)
+  --unpack  --artifact <exe> [--out <dir>] [--scan] [--escrow <in> --escrow-priv <key>] [--key <K>]
+            [--native-out <exe> --stub <lamarr_stub.dll> --boot <LamarrBoot.dll>]   also re-pack the recovered payload (lamarr native)
+            native re-pack = the native producer path (build-side stub+boot; the artifact's own headers/prefix are the donor)
+            ⇒ byte-identical to `--pack --mode native` on the same payload (Lamarr_VM_Design_M1.md §18.16.15)
+  --keygen <file> | --key-info <file>                 the K key file (LAMARR-KEY)
+  --escrow-keygen <priv> [--pub <pub>] | --escrow-key-info <file>
+  --selftest <name>   escrow <dir> | seal <dir> | leak <exe> --key <K>
+  --internal <verb>   build-chain internals (scripts call these; section 18.6.8)
+            shape --of-key <K> | --of-escrow <escrow> --escrow-priv <key>   print the shape seed S
+            pick-isa | carrier [--shape <16hex>] [--role real|fake]
+            emit-engine --out <asm> | slot-morph <dll> [--out <dll>] [--tag <t>] [--check]
+            boot-order-check <img>");
         Console.Error.WriteLine($@"
 Global options:
-  -D <dir>             work dir, basis for relative paths and discovery
-  -Target <path|name>  payload project, locates the input when --input is absent (managed: dll under bin, others: exe under publish)
-  -Configure           merge explicit args into lamarrpack.props and exit
-  -Fresh               rewrite lamarrpack.props from scratch
+  --workdir <dir>      work dir, basis for relative paths and discovery
+  --config <file>      config file to read (cwd first, then next to the exe)
+  --configure          merge explicit args into lamarrpack.props and exit
+  --fresh              rewrite lamarrpack.props from scratch (with --configure)
   --out <dir|file>     config location, default next to the tool exe
-  --config <file>      config file to read, default cwd first then next to the exe
-  --version            print version, tfm, antheil and available modes
-  --help, -h, /?       print this help
-  auto discovery       fills -Target/--stub/--boot/--output from the cwd csproj and conventional paths
+  --version            print version, tfm, antheil, triage, modes
+  --help               print this help
+  (auto discovery fills --target/--stub/--boot/--output from the cwd csproj and conventional paths)
 
 Return codes:
-  0 ok   1 usage   2 self-check failed   3 mode not in this build   4 unknown command   5 exception");
-#if LAMARR_ANTHEIL
-        Console.Error.WriteLine(@"
-Tools:
-  --boot-order-check <img> --boot-exp-check <exe> --pick-isa --carrier
-  --op-table-dump [seed] --op-table-sigma [seed] --op-table-rt [seed] [--isa <name>] --kern-ops
-  --engine-sum <dll> --dump-names <exe> --emit-engine <asm> --unpack <exe> [--out <dir>] [--scan]");
-#endif
+  0 ok   1 usage   2 self-check failed   3 mode/command not in this build   4 unknown command   5 exception   6 pub_B mismatch (--expect: not the same source)");
+        Console.Error.WriteLine($@"
+Examples:
+  {sExe}.exe --pack --key-file K.bin --escrow a.escrow --escrow-pub publisher.pub --mode antheil
+  {sExe}.exe --replay --escrow a.escrow --escrow-priv priv.pem --escrow-out b.escrow --escrow-pub publisher.pub
+  {sExe}.exe --verify --artifact app_packed.exe --expect @publisher.pub
+  {sExe}.exe --selftest escrow %TEMP%\escrow_kat
+  {sExe}.exe --internal shape --of-key <64hex>
+  {sExe}.exe --unpack --artifact app_packed.exe --out unpacked --scan");
         Console.Error.WriteLine();
     }
 
@@ -449,6 +618,7 @@ Tools:
         Console.WriteLine($@"LamarrPacker {Version()}
   tfm     : {TfmName()}
   antheil : {AntheilFlag()}
+  triage  : {Triage.Flag()}
   modes   : {Modes()}");
     }
 
@@ -490,11 +660,11 @@ Tools:
     static int Configure(string[] rgArgs)
     {
         string sPath = OutPath(rgArgs);
-        bool bFresh = HasFlag(rgArgs, "-Fresh");
+        bool bFresh = HasFlag(rgArgs, "--fresh");
         var mp = new SortedDictionary<string, string>(StringComparer.Ordinal);
         if (!bFresh) ReadProps(sPath, mp);
-        Put(mp, "Packer", Opt(rgArgs, "--mode") ?? CmdArg(rgArgs));
-        Put(mp, "LamarrTarget", Opt(rgArgs, "-Target"));
+        Put(mp, "Packer", Opt(rgArgs, "--mode"));
+        Put(mp, "LamarrTarget", Opt(rgArgs, "--target"));
         Put(mp, "LamarrStub", Opt(rgArgs, "--stub"));
         Put(mp, "LamarrInput", Opt(rgArgs, "--input"));
         Put(mp, "LamarrOutput", Opt(rgArgs, "--output"));
@@ -503,7 +673,9 @@ Tools:
         Put(mp, "RtcTiered", Opt(rgArgs, "--rtc-tiered"));
         Put(mp, "RtcRollForward", Opt(rgArgs, "--rtc-rollforward"));
         Put(mp, "PayloadMajor", Opt(rgArgs, "--payload-major"));
-        Put(mp, "LamarrSeed", Opt(rgArgs, "--seed"));//只落显式给的种子 免得随机值进配置
+        //K绝不写进任何输出 配置表会随产物走
+        Put(mp, "LamarrKey", null);
+        Put(mp, "LamarrKeyFile", null);
 #if LAMARR_ANTHEIL
         Put(mp, "ShimDll", Opt(rgArgs, "--shim"));
         Put(mp, "LamarrDecoder", Opt(rgArgs, "--decoder"));
@@ -647,10 +819,121 @@ Tools:
     static ulong ParseSeedHex(string sVal)//0x前缀与裸十六进制都收 与 --op-table-rt 一类开关用同一条规矩
         => Convert.ToUInt64(sVal.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? sVal.Substring(2) : sVal, 16);
 
+    //命令表与每命令封闭的选项集 表外记号一律非法 不留兼容
+    static readonly string[] rgCommands = { "--pack", "--replay", "--verify", "--unpack", "--keygen", "--key-info", "--escrow-keygen", "--escrow-key-info", "--selftest", "--internal" };
+    static readonly string[] rgGlobOpts = { "--workdir", "--config", "--configure", "--fresh", "--help", "--version", "--seed", "--escrowPlain" };
+    static readonly string[] rgPackOpts = { "--target", "--stub", "--input", "--output", "--mode", "--key", "--key-file", "--escrow", "--escrow-pub", "--diag", "--boot", "--shim", "--decoder", "--jithook", "--pheropod", "--engine", "--method-dict", "--rtc-version", "--rtc-tiered", "--rtc-rollforward", "--payload-major", "--encrypt-deps", "--no-compress-deps", "--compress-deps" };
+    static readonly string[] rgReplayOpts = { "--target", "--stub", "--input", "--output", "--mode", "--escrow", "--escrow-priv", "--escrow-out", "--escrow-pub", "--diag", "--boot", "--shim", "--decoder", "--jithook", "--pheropod", "--engine", "--method-dict", "--rtc-version", "--rtc-tiered", "--rtc-rollforward", "--payload-major", "--encrypt-deps", "--no-compress-deps", "--compress-deps" };
+    static readonly string[] rgVerifyOpts = { "--artifact", "--expect" };
+    static readonly string[] rgUnpackOpts = { "--artifact", "--out", "--scan", "--escrow", "--escrow-priv", "--key", "--native-out", "--stub", "--boot" };
+    static readonly string[] rgKeygenOpts = { };
+    static readonly string[] rgEscrowKeygenOpts = { "--pub" };
+    static readonly string[] rgSelftestOpts = { "--key" };
+    static readonly string[] rgInternalOpts = { "--shape", "--of-key", "--of-escrow", "--escrow-priv", "--isa", "--role", "--tag", "--check", "--out" };
+    //不带值的开关 其余选项都吃一个值 用于位置参数计数与--语义
+    static readonly string[] rgNoValue = { "--scan", "--check", "--diag", "--compress-deps", "--configure", "--fresh", "--help", "--version", "--seed", "--escrowPlain" };
+    static bool IsNoValue(string s) => Array.Exists(rgNoValue, a => a.Equals(s, StringComparison.OrdinalIgnoreCase));
+    //--internal的封闭动词表 表外即错 且在入口就拒绝
+    static readonly string[] rgInternalVerbs = { "shape", "pick-isa", "carrier", "emit-engine", "slot-morph", "boot-order-check" };
+
+    static bool IsCommand(string s) => Array.Exists(rgCommands, a => a.Equals(s, StringComparison.OrdinalIgnoreCase));
+
+    static string[] OptsOf(string sCmd)
+    {
+        if (sCmd.Equals("--pack", StringComparison.OrdinalIgnoreCase)) return rgPackOpts;
+        if (sCmd.Equals("--replay", StringComparison.OrdinalIgnoreCase)) return rgReplayOpts;
+        if (sCmd.Equals("--verify", StringComparison.OrdinalIgnoreCase)) return rgVerifyOpts;
+        if (sCmd.Equals("--unpack", StringComparison.OrdinalIgnoreCase)) return rgUnpackOpts;
+        if (sCmd.Equals("--keygen", StringComparison.OrdinalIgnoreCase) || sCmd.Equals("--key-info", StringComparison.OrdinalIgnoreCase)
+            || sCmd.Equals("--escrow-key-info", StringComparison.OrdinalIgnoreCase)) return rgKeygenOpts;
+        if (sCmd.Equals("--escrow-keygen", StringComparison.OrdinalIgnoreCase)) return rgEscrowKeygenOpts;
+        if (sCmd.Equals("--selftest", StringComparison.OrdinalIgnoreCase)) return rgSelftestOpts;
+        if (sCmd.Equals("--internal", StringComparison.OrdinalIgnoreCase)) return rgInternalOpts;
+        return rgKeygenOpts;
+    }
+
+    static int PosMax(string sCmd)
+    {
+        if (sCmd.Equals("--keygen", StringComparison.OrdinalIgnoreCase) || sCmd.Equals("--key-info", StringComparison.OrdinalIgnoreCase)
+            || sCmd.Equals("--escrow-keygen", StringComparison.OrdinalIgnoreCase) || sCmd.Equals("--escrow-key-info", StringComparison.OrdinalIgnoreCase)) return 1;
+        if (sCmd.Equals("--selftest", StringComparison.OrdinalIgnoreCase) || sCmd.Equals("--internal", StringComparison.OrdinalIgnoreCase)) return 2;
+        return 0;
+    }
+
+    //位置参数必须紧跟命令 裸token才算位置参数
+    static string? Pos(string[] rgArgs, int i) => (i + 1 >= 0 && i + 1 < rgArgs.Length && !rgArgs[i + 1].StartsWith("-")) ? rgArgs[i + 1] : null;
+
+    static bool IsName(string? sPos, string sWant) => sPos != null && sPos.Equals(sWant, StringComparison.OrdinalIgnoreCase);
+
+    static string[] Merge(params string[][] rgAll)
+    {
+        var lst = new List<string>();
+        foreach (string[] rg in rgAll) lst.AddRange(rg);
+        return lst.ToArray();
+    }
+
+    static int Distance(string sA, string sB)//编辑距离 用于给出最接近的合法记号建议
+    {
+        int[] rgPrev = new int[sB.Length + 1];
+        int[] rgCur = new int[sB.Length + 1];
+        for (int j = 0; j <= sB.Length; j++) rgPrev[j] = j;
+        for (int i = 1; i <= sA.Length; i++)
+        {
+            rgCur[0] = i;
+            for (int j = 1; j <= sB.Length; j++)
+            {
+                int iCost = sA[i - 1] == sB[j - 1] ? 0 : 1;
+                rgCur[j] = Math.Min(Math.Min(rgCur[j - 1] + 1, rgPrev[j] + 1), rgPrev[j - 1] + iCost);
+            }
+            int[] rgTmp = rgPrev; rgPrev = rgCur; rgCur = rgTmp;
+        }
+        return rgPrev[sB.Length];
+    }
+
+    //选项集封闭与位置参数个数 表外记号即硬报错并给出最接近建议与--help提示
+    static int ValidateTokens(string[] rgArgs, string sCmd, int iDash)
+    {
+        string[] rgAllow = OptsOf(sCmd);
+        string[] rgAll = Merge(rgAllow, rgGlobOpts, rgCommands);
+        int iEnd = iDash < 0 ? rgArgs.Length : iDash;
+        int iPos = 0;
+        for (int i = 0; i < iEnd; i++)
+        {
+            string s = rgArgs[i];
+            if (!s.StartsWith("-")) { iPos++; continue; }
+            if (IsCommand(s)) continue;//命令本身不吃值
+            bool bAllowed = Array.Exists(rgGlobOpts, a => a.Equals(s, StringComparison.OrdinalIgnoreCase))
+                         || Array.Exists(rgAllow, a => a.Equals(s, StringComparison.OrdinalIgnoreCase));
+            if (bAllowed)
+            {
+                if (!IsNoValue(s)) i++;//跳过它的值 值不参与位置参数计数
+                continue;
+            }
+            string sGuess = "";
+            int iBest = int.MaxValue;
+            foreach (string sCand in rgAll)
+            {
+                int iD = Distance(s, sCand);
+                if (iD < iBest) { iBest = iD; sGuess = sCand; }
+            }
+            Console.Error.WriteLine($"[cli] unknown option for {sCmd}: {s}");
+            if (iBest <= 3) Console.Error.WriteLine($"[cli] did you mean {sGuess}?");
+            Console.Error.WriteLine("[cli] the option set is closed: see --help");
+            return iErrUsage;
+        }
+        if (iPos > PosMax(sCmd))
+        {
+            Console.Error.WriteLine($"[cli] too many positional arguments for {sCmd} (max {PosMax(sCmd)})");
+            return iErrUsage;
+        }
+        return iOk;
+    }
+
     static string? Opt(string[] rgArgs, string sName)
     {
         int i = Array.FindIndex(rgArgs, a => a.Equals(sName, StringComparison.OrdinalIgnoreCase));
         if (i < 0 || i + 1 >= rgArgs.Length) return null;
+        if (rgArgs[i + 1] == "--" && i + 2 < rgArgs.Length) return rgArgs[i + 2];//--之后一律视为值 便于传以-开头的路径
         string sVal = rgArgs[i + 1];
         return sVal.StartsWith("--") ? null : sVal;//值不能是另一个长开关
     }

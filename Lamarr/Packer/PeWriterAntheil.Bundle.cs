@@ -15,7 +15,7 @@ internal partial class PeWriterAntheil
     private long FindMarkerOffset(byte[] rgB)
     {
         for (int i = 0; i + 40 <= rgB.Length; i++)
-            if (rgB[i + 8] == rgSignature[0] && MatchSig(rgB, i + 8))
+            if (rgB[i + 8] == rgSignatureDotnet[0] && MatchSig(rgB, i + 8))
                 return BitConverter.ToInt64(rgB, i);
         return -1;
     }
@@ -23,7 +23,7 @@ internal partial class PeWriterAntheil
     private bool MatchSig(byte[] rgB, int iOff)
     {
         for (int j = 0; j < 32; j++)
-            if (rgB[iOff + j] != rgSignature[j]) return false;
+            if (rgB[iOff + j] != rgSignatureDotnet[j]) return false;
         return true;
     }
 
@@ -58,6 +58,7 @@ internal partial class PeWriterAntheil
 private void RebuildBundle(string sSeed)
     {
         rgKBsjb = GenKBsjb(sSeed);
+        rgSigOut = GenAnchorSig(sSeed);//标记记录与入口层校验与shim搜索键都等于本产物的派生锚点 与##KBSJB##域分离
         int iPos = (int)lBundleHeaderOffset;
         uint uMajor = ReadU32(rgPayload, ref iPos);
         ReadU32(rgPayload, ref iPos);
@@ -120,7 +121,7 @@ private void RebuildBundle(string sSeed)
         }
 
         BuildLamApp(rgRel, rgSz, rgCsz, rgName, rgDepIdx, sSeed);
-        if (Environment.GetEnvironmentVariable("LAMARR_LAYOUT") == "1")//构建侧条目清单 只走stdout 不进产物
+        if (bLayout)//构建侧条目清单 只走stdout 不进产物
             Console.WriteLine($"[layout] major={uMajor} iN={iN} bundleId={sBundleId} keep={rgKeepIdx.Count} dep={rgDepIdx.Count} deps=" +
                 string.Join(",", rgDepIdx.ConvertAll(i => $"{i}:{rgName[i]}:{rgSz[i]}:{rgCsz[i]}")));
 
@@ -165,7 +166,7 @@ private void RebuildBundle(string sSeed)
             int j = rng.Next(i + 1);
             (rgRegions[i], rgRegions[j]) = (rgRegions[j], rgRegions[i]);
         }
-        if (Environment.GetEnvironmentVariable("LAMARR_LAYOUT") == "1")//构建侧区域清单 只走stdout
+        if (bLayout)//构建侧区域清单 只走stdout
         {
             var sTypes = string.Join(",", rgRegions.ConvertAll(r => r.iType + "-" + r.data.Length));
             Console.WriteLine($"[layout] regions gx={iGx} gi={iGi} count={rgRegions.Count} types={sTypes}");
@@ -262,29 +263,17 @@ private static byte[] PolyTag(byte[] rgSeedKey, byte[] rgComp, int iLen)
         return u ^ (u >> 31);
     }
 
-    private static byte[] GenHead(ulong uSeed)//根材料由运行种子派生 清单里的头材料会覆盖它
-    {
-        byte[] rgB = new byte[64];
-        ulong u = NextShape(uSeed ^ 0x2545F4914F6CDD1DUL);
-        for (int i = 0; i < 64; i++)
-        {
-            if ((i & 7) == 0) u = NextShape(u);
-            rgB[i] = (byte)(u >> ((i & 7) * 8));
-        }
-        return rgB;
-    }
+    //头材料是域分离哈希的输出 不可逆 用splitmix链就能从产物头部反推出uVmSeed 而它驱动载体ISA与运行期表
+    private static byte[] GenHead(byte[] rgK) => Sha512.Hash(KdfLabel(rgK, "chain:head"));
 
-    private static string DeriveSeed(byte[] rgH)//四路FNV乱序
-    {
-        uint uA = 0x811C9DC5, uB = 0x15050001, uC = 0x1234567u, uD = 0x9E3779B9u;
-        for (int k = 0; k < 64; k++)
-        {
-            byte b = rgH[(k * 23 + 7) & 63];
-            if ((k & 1) == 0) { uA ^= b; uA *= uPermMul; uC ^= b; uC *= uPermMul; }
-            else { uB ^= b; uB *= uPermMul; uD ^= b; uD *= uPermMul; }
-        }
-        return uA.ToString("X8") + uB.ToString("X8") + uC.ToString("X8") + uD.ToString("X8");
-    }
+    //根密钥K是32B 只在打包进程内存在 写escrow时才留档 产物里不得出现任何KdfLabel输出
+    internal static byte[] KdfLabel(byte[] rgK, string sLabel)
+        => Sha512.Hash(Encoding.ASCII.GetBytes("lamarr-m1|" + sLabel + "|"), rgK, null);
+
+    internal static ulong Kdf64(byte[] rgK, string sLabel) => BitConverter.ToUInt64(KdfLabel(rgK, sLabel), 0);
+
+    //输出是32个大写hex 下游SeedKey与LamKey与GenKBsjb都按这个形状取用
+    internal static string KdfSeedHex(byte[] rgK) => Convert.ToHexString(KdfLabel(rgK, "chain:seed")).Substring(0, 32);
 
     private static uint DeriveBranch(byte[] rgH, int iOff, int iLen, uint uSalt)//分支种子从密钥区子段派生 给VM壳与诱饵与垃圾
     {
@@ -297,6 +286,9 @@ private static byte[] PolyTag(byte[] rgSeedKey, byte[] rgComp, int iLen)
         }
         return uA ^ (uB << 7) ^ (uB >> 9);
     }
+
+    //锚点键必须与stub的##KBSJB##域分离 否则产物里会出现两处相同的32B 扫描先命中stub那份会把前8字节当头部偏移
+    private static byte[] GenAnchorSig(string sSeed) => GenKBsjb(sSeed + "|anchor");
 
     private static byte[] GenKBsjb(string sSeed)//假BSJB头密钥由种子派生随机生成 写入stub的##KBSJB##槽
     {
@@ -358,6 +350,40 @@ private static uint Fnv1a(byte[] rgD)
         return uH;
     }
 
+    //入口层与VM内核共用的材料 两侧必须喂同一串字节
+    internal static byte[] VmMaterial(byte[] rgHead, uint uDomainSeed)
+    {
+        byte[] rgMat = new byte[32];
+        BitConverter.GetBytes(uDomainSeed).CopyTo(rgMat, 0);
+        int n = Math.Min(28, rgHead.Length);
+        Array.Copy(rgHead, 0, rgMat, 4, n);
+        return rgMat;
+    }
+
+    //主压缩流第二层用的内核输出 种子内核对roll头32B的材料算得
+    internal static byte[] VmSeedKeyOf(byte[] rgRoll)
+    {
+        byte[] rgMat = new byte[32];
+        Array.Copy(rgRoll, 0, rgMat, 0, Math.Min(32, rgRoll.Length));
+        return SeedKey(rgMat);
+    }
+
+    internal static ulong Fnv64Of(byte[] rg, int cb)//构建侧判据用 对同一段材料算同一个哈希
+    {
+        ulong u = 0xCBF29CE484222325uL;
+        for (int i = 0; i < cb; i++) { u ^= rg[i]; u *= 0x100000001B3uL; }
+        return u;
+    }
+
+    //入口层折叠量 掩码内核与种子内核在各自材料上的输出 打包器用明文回声对出同一值
+    internal static uint VmMaskEcho(byte[] rgHead, uint uDomainSeed, uint uRollKey)
+        => (uint)MethodEncryptor.MaskOf(MaskKeyOf(VmMaterial(rgHead, uDomainSeed)))
+           ^ BitConverter.ToUInt32(SeedKey(VmMaterial(rgHead, uRollKey)), 0);
+
+    //前置内核在域种子材料上的输出回声Host侧由入口层那枚单内核容器执行得到同一个值
+    internal static uint PreKernEcho(byte[] rgHead, uint uDomainSeed)
+        => (uint)MethodEncryptor.MaskOf(MaskKeyOf(VmMaterial(rgHead, uDomainSeed)));
+
     internal static uint EngineTextSum(byte[]? rgDll) => rgDll == null ? 0u : PianolaEngine.TextSum(rgDll);//对引擎镜像.text做滚动摘要
 
     private static uint MixAdj(byte[] rgKey)
@@ -400,7 +426,7 @@ private static uint Fnv1a(byte[] rgD)
         return uH;
     }
 
-    private static uint LamMix(uint u)//混合器只用已有常量对 两步异或移位与两个奇数乘都是双射 下标不同pad不同
+    private static uint LamMix(uint u)//混合器只用已有常量对 两步异或移位与两个奇数乘都是一一对应 下标不同pad不同
     {
         u ^= u >> 16; u *= (uLLCA ^ uLLCB);
         u ^= u >> 13; u *= (uLQCA ^ uLQCB);
@@ -483,7 +509,7 @@ private static uint Fnv1a(byte[] rgD)
         }
         else
         {
-            rgBundleSz[iKMain] = rgShim.Length + rgBoot.Length + A0.Q.iTailLen;
+            rgBundleSz[iKMain] = rgShim.Length + (rgRoll?.Length ?? 0) + (rgEngine?.Length ?? 0) + (rgPreKern?.Length ?? 0) + rgBoot.Length + A0.Q.iTailLen;
             rgEnt[iKMain] = BuildShimEntry(rgBundleSz[iKMain], rgBundleSz);
         }
         for (int k = 0; k < iM; k++)

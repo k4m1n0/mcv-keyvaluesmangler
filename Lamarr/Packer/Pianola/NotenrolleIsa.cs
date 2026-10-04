@@ -55,7 +55,7 @@ public static class NotenrolleIsa
             PutW(w, XF((uint)rd, X_BSWAP, (uint)CarrierFmt.NoiseReg(), (uint)CarrierFmt.Dup(iWidth)));
             return;
         }
-        if (byOpC >= 0xF0 && byOpC <= 0xF3)//NOT eqv单目同上
+        if (byOpC >= 0xF0 && byOpC <= 0xF3)//NOT eqv单目
         {
             int rd = iPair & 15;
             PutW(w, XF((uint)rd, X_EQV, (uint)CarrierFmt.NoiseReg(), (uint)CarrierFmt.Dup(iWidth)));

@@ -1,8 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <PackerTfm Condition="'$(PackerTfm)'=='' And '$(LamarrTfm)'!=''">$(LamarrTfm)</PackerTfm>
-    <PackerTfm Condition="'$(PackerTfm)'=='' And '$(PianolaTfm)'!=''">$(PianolaTfm)</PackerTfm>
     <PackerTfm Condition="'$(PackerTfm)'==''">net5.0-windows</PackerTfm>
     <TargetFramework>$(PackerTfm)</TargetFramework>
     <LangVersion>latest</LangVersion>
@@ -19,13 +17,18 @@
     <DebugSymbols Condition="'$(Configuration)' == 'Release'">false</DebugSymbols>
     <TreatWarningsAsErrors Condition="'$(Configuration)'=='Release'">true</TreatWarningsAsErrors>
     <LamarrAntheil Condition="'$(LamarrAntheil)'==''">0</LamarrAntheil>
+    <LamarrTriageKnobs Condition="'$(LamarrTriageKnobs)'==''">0</LamarrTriageKnobs>
   </PropertyGroup>
   <PropertyGroup Condition="'$(LamarrAntheil)'=='1'">
     <DefineConstants>$(DefineConstants);LAMARR_ANTHEIL</DefineConstants>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(LamarrTriageKnobs)'=='1'">
+    <DefineConstants>$(DefineConstants);LAMARR_TRIAGE</DefineConstants>
+  </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\BundleWriter.cs" Link="BundleWriter.cs" />
     <Compile Include="..\LamarrEncoder.cs" Link="LamarrEncoder.cs" />
+    <Compile Include="..\LamarrDecoder.cs" Link="LamarrDecoder.cs" />
   </ItemGroup>
   <ItemGroup>
     <AssemblyMetadata Include="LamarrAntheil" Value="$(LamarrAntheil)" />

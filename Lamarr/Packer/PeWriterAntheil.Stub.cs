@@ -209,9 +209,16 @@ internal partial class PeWriterAntheil
         int iPrefMajor = iPayloadMajor;//PREFMAJ取自载荷TFM主版本 不从刚写出的runtimeconfig文本里回读
 
         int iScrEnd = IndexOf(rgStubCode, Encoding.ASCII.GetBytes("##STRST##"));//顺序有意义 指纹扰乱器改写指令形状的字节分不清代码与数据 所以先跑在原始代码上再跑API表随机化 两者都要在 ##KBSJB## 被消费之前
-        if (Environment.GetEnvironmentVariable("LAMARR_NO_STUB_FP") != "1")
+#if LAMARR_TRIAGE
+        bool bNoStubFp = Environment.GetEnvironmentVariable("LAMARR_NO_STUB_FP") == "1";
+        bool bNoStubScramble = Environment.GetEnvironmentVariable("LAMARR_NO_STUB_SCRAMBLE") == "1";
+        bool bNoStubApiStr = Environment.GetEnvironmentVariable("LAMARR_NO_STUB_APISTR") == "1";
+#else
+        bool bNoStubFp = false, bNoStubScramble = false, bNoStubApiStr = false;//发行构建里stub三项都不可关
+#endif
+        if (!bNoStubFp)
             ScrambleFingerprint(rgStubCode, NewRng(0x22u), false, 0, iScrEnd >= 0 ? iScrEnd : rgStubCode.Length);
-        if (Environment.GetEnvironmentVariable("LAMARR_NO_STUB_SCRAMBLE") != "1")
+        if (!bNoStubScramble)
             ScrambleBuffers(rgStubCode, NewRng(0x21u));
 
         ReplaceMarker(rgStubCode, "##APPNAME##", Encoding.Unicode.GetBytes(sMainName), 256);
@@ -227,7 +234,7 @@ internal partial class PeWriterAntheil
         ReplaceAllImm(rgStubCode, new byte[] { 0xF5, 0x79, 0x2B, 0x6D }, 0x6D2B79F5u ^ (uImmK >> 16));
         int iSS = IndexOf(rgStubCode, Encoding.ASCII.GetBytes("##STRST##"));//等长行为不变的指纹随机化 stub全表跳过数据区 自##STRST##起API字符串区加密 与stub start解密对应
         int iSE = IndexOf(rgStubCode, Encoding.ASCII.GetBytes("##STREN##"));
-        if (iSS >= 0 && iSE > iSS + 8 && Environment.GetEnvironmentVariable("LAMARR_NO_STUB_APISTR") != "1")
+        if (iSS >= 0 && iSE > iSS + 8 && !bNoStubApiStr)
         {
             uint uStrKey = DeriveBranch(rgHead, 40, 16, 0x2B7E1516u);
             int iKey = IndexOf(rgStubCode, new byte[] { 0xED, 0x5E, 0xDE, 0xC0, 0xED, 0x5E, 0xDE, 0xC0 });
@@ -266,7 +273,7 @@ internal partial class PeWriterAntheil
         int iStart = (iSE + 9 + 7) & ~7;//gDotnetRootW起
         int iFall = iStart + 520 * 5 + 640;//gFindData尾
         int iEnd2 = iFall + 140 + 140;//gBest尾 = gPadBuf起
-        //两段范围按.asm缓冲区尺寸写死 尺寸变会涂到活数据 先断言整段在##KBSJB##前
+        //两段范围按.asm缓冲区尺寸固定 尺寸变会涂到活数据 先断言整段在##KBSJB##前
         if (iStart <= iSE + 8 || iEnd2 < iFall || iFall > iKB || iEnd2 > iKB)
             throw new InvalidOperationException($"stub buffer map out of range (start={iStart} fall={iFall} best={iEnd2} kbsjb={iKB}): update the offsets together with the .asm buffers");
         int iCnt = 0;
@@ -317,26 +324,45 @@ internal partial class PeWriterAntheil
     private void WriteFile(string sOutPath)
     {
         uint uNewHdrs = AlignUp(uSizeOfHdrs, uFileAlign);
-        if (Environment.GetEnvironmentVariable("LAMARR_LAYOUT") == "1")//构建侧布局打印 只走stdout 不进产物
+        if (bLayout)//构建侧布局打印 只走stdout 不进产物
             Console.WriteLine($"[layout] hdrs={uNewHdrs} stubRaw={uStubRaw} stubRawSize={uStubRawSize} stubCode={rgStubCode.Length} markerRaw={lMarkerRaw} lamAppRaw={uLamAppRaw} lamAppRawSize={uLamAppRawSize} lamApp={rgLamApp.Length} bundleStart={lBundleStart} bundleData={rgBundleData.Length} newHeader={rgNewHeader.Length} payload={rgPayload.Length}");
 
         uint uStubRva = AlignUp(0x1000, uSectAlign);
         uint uLamAppRva = AlignUp(uStubRva + (uint)rgStubCode.Length, uSectAlign);
-        uint uNewImg = AlignUp(uLamAppRva + (uint)rgLamApp.Length, uSectAlign);
+        //第3节是载荷的.rsrc 整节继承VERSION与MANIFEST 载荷无资源节时保持2节且DD2为0
+        bool bRes = rgResPayload?.Length > 0;
+        uint uResRvaNew = AlignUp(uLamAppRva + (uint)rgLamApp.Length, uSectAlign);
+        uint uResRaw = 0;
+        if (bRes)
+        {
+            uResRaw = AlignUp((uint)(lBundleStart + rgBundleData.Length + rgNewHeader.Length), uFileAlign);
+            RebaseRes(uResRvaNew - uResRva);//资源树data entry存绝对RVA 换段后整体平移
+        }
+        uint uNewImg = bRes
+            ? AlignUp(uResRvaNew + uResLen, uSectAlign)
+            : AlignUp(uLamAppRva + (uint)rgLamApp.Length, uSectAlign);
 
         byte[] rgHdrs = new byte[uNewHdrs];
         Array.Copy(rgPayload, 0, rgHdrs, 0, Math.Min(uSizeOfHdrs, rgHdrs.Length));
+        //清痕前把外层头区的原值记进escrow密封区donor头就是打包输入的宿主apphost 靠它才能与同载荷native打包逐字节相同
+        CaptureArtifactScrub(rgHdrs);
         PeScrub.Scrub(rgHdrs);//产物头部清除构建特征 之后才写节表等字段
         //桩没有重定位表与LoadConfig 这几个标志位置零
         //0x0040 DYNAMIC_BASE 0x0020 HIGH_ENTROPY_VA 0x4000 GUARD_CF
         ushort usDllChar = (ushort)(BitConverter.ToUInt16(rgHdrs, iOptOff + 70) & ~(0x0040 | 0x0020 | 0x4000));
         BitConverter.GetBytes(usDllChar).CopyTo(rgHdrs, iOptOff + 70);
 
-        BitConverter.GetBytes((ushort)2).CopyTo(rgHdrs, iPeOff + 6);
+        BitConverter.GetBytes((ushort)(bRes ? 3 : 2)).CopyTo(rgHdrs, iPeOff + 6);
         BitConverter.GetBytes(uNewImg).CopyTo(rgHdrs, iOptOff + 56);
         BitConverter.GetBytes(uStubRva + uStubEntryOff).CopyTo(rgHdrs, iOptOff + 16);
         BitConverter.GetBytes(uFileAlign).CopyTo(rgHdrs, iOptOff + 36);
         Array.Clear(rgHdrs, iOptOff + 0x70, Math.Min(16 * 8, rgHdrs.Length - (iOptOff + 0x70)));
+        if (bRes)
+        {
+            //DD2必须在16个数据目录清零之后写 否则会被一起清掉
+            BitConverter.GetBytes(uResRvaNew + uResDirOff).CopyTo(rgHdrs, iOptOff + 0x70 + 2 * 8);
+            BitConverter.GetBytes(uResDirSize).CopyTo(rgHdrs, iOptOff + 0x70 + 2 * 8 + 4);
+        }
         BitConverter.GetBytes(uStubRawSize).CopyTo(rgHdrs, iOptOff + 4);
         BitConverter.GetBytes(uLamAppRawSize).CopyTo(rgHdrs, iOptOff + 8);
 
@@ -345,6 +371,7 @@ internal partial class PeWriterAntheil
         Array.Clear(rgHdrs, iSecOff, Math.Min(usSecCount * 40, rgHdrs.Length - iSecOff));
         WriteSection(rgHdrs, iSecOff, ".text", uStubRva, (uint)rgStubCode.Length, uStubRawSize, uStubRaw);
         WriteSection(rgHdrs, iSecOff + 40, ".rdata", uLamAppRva, (uint)rgLamApp.Length, uLamAppRawSize, uLamAppRaw);
+        if (bRes) WriteSection(rgHdrs, iSecOff + 80, ".rsrc", uResRvaNew, uResLen, AlignUp(uResLen, uFileAlign), uResRaw);
 
         using var fs = new FileStream(sOutPath, FileMode.Create);
         fs.Write(rgHdrs, 0, rgHdrs.Length);
@@ -353,7 +380,7 @@ internal partial class PeWriterAntheil
         Pad(fs, (int)(uStubRawSize - rgStubCode.Length));
         byte[] rgMarker = new byte[40];
         BitConverter.GetBytes(lNewBundleHeaderOffset).CopyTo(rgMarker, 0);
-        Array.Copy(rgSignature, 0, rgMarker, 8, 32);
+        Array.Copy(rgSigOut, 0, rgMarker, 8, 32);
         fs.Write(rgMarker, 0, 40);
         Pad(fs, (int)(uLamAppRaw - (lMarkerRaw + 40)));
         fs.Write(rgLamApp, 0, rgLamApp.Length);
@@ -361,6 +388,11 @@ internal partial class PeWriterAntheil
         Pad(fs, (int)(lBundleStart - (uLamAppRaw + uLamAppRawSize)));
         fs.Write(rgBundleData, 0, rgBundleData.Length);
         fs.Write(rgNewHeader, 0, rgNewHeader.Length);
+        if (bRes)
+        {
+            Pad(fs, (int)(uResRaw - (lBundleStart + rgBundleData.Length + rgNewHeader.Length)));
+            fs.Write(rgResPayload!, 0, (int)uResLen);
+        }
         fs.Flush(true);
     }
 
@@ -378,6 +410,27 @@ internal partial class PeWriterAntheil
 
     #endregion
     #region 流IO辅助
+
+    //资源树的data entry存绝对RVA 换了段基址要整体平移 目录内偏移相对资源目录起点 保持不变
+    private void RebaseRes(uint uDelta)
+    {
+        if (rgResPayload == null) return;
+        Walk(uResDirOff, 0);
+        //两个分支都以资源目录基址为基准 子目录偏移与数据项偏移都相对它 另加深度上限以免畸形资源树爆栈
+        void Walk(uint uDirOff, int iDepth)
+        {
+            if (iDepth > 8) throw new InvalidOperationException("resource directory nesting too deep (corrupt .rsrc?)");
+            uint uN = (uint)(BitConverter.ToUInt16(rgResPayload, (int)uDirOff + 12) + BitConverter.ToUInt16(rgResPayload, (int)uDirOff + 14));
+            for (uint i = 0; i < uN; i++)
+            {
+                uint uEnt = uDirOff + 16 + i * 8;
+                uint uOff = BitConverter.ToUInt32(rgResPayload, (int)uEnt + 4);
+                if ((uOff & 0x80000000u) != 0) { Walk(uResDirOff + (uOff & 0x7FFFFFFFu), iDepth + 1); continue; }
+                uint uDe = uResDirOff + uOff;
+                BitConverter.GetBytes(BitConverter.ToUInt32(rgResPayload, (int)uDe) + uDelta).CopyTo(rgResPayload, (int)uDe);
+            }
+        }
+    }
 
     private static uint AlignUp(uint uV, uint uA) => uA == 0 ? uV : (uV + uA - 1) & ~(uA - 1);
     //填充字节不得随时钟变或依赖调用顺序 每区按自身偏移与长度单独派生一条流

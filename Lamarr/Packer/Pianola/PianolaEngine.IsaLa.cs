@@ -5,10 +5,10 @@ public static partial class PianolaEngine
 {
     static void EmitIsaDecodeLa(StringBuilder sb)
     {
-        sb.AppendLine("; ---- ISA carrier decode, valid LoongArch64 words to internal bytecode ----");
+        sb.AppendLine("; ISA carrier decode, valid LoongArch64 words to internal bytecode");
         sb.AppendLine("dec_entry:");
         sb.AppendLine("    mov rsi, rcx");
-        sb.AppendLine("    lea r14, [rdi+1000h]   ; internal bytecode write pointer: VM code window");
+        sb.AppendLine("    lea r14, [rdi+1000h] ; internal bytecode write pointer: VM code window");
         sb.AppendLine("dec_loop:");
         sb.AppendLine("    lea rax, [r14+16]");
         sb.AppendLine("    sub rax, rdi");
@@ -16,16 +16,17 @@ public static partial class PianolaEngine
         sb.AppendLine("    ja h_bad");
         sb.AppendLine("    mov eax, dword ptr [rsi]");
         sb.AppendLine("    bswap eax");
-        sb.AppendLine("    imul r12d, r12d, 1664525");
-        sb.AppendLine("    add r12d, 1013904223");
-        sb.AppendLine("    xor eax, r12d");
+        
+        sb.AppendLine("    call a_rest ; ChaCha12 at-rest keystream word to edx");
+        sb.AppendLine("    xor eax, edx");
+        sb.AppendLine("    xor r15d, eax ; fold the decoded word into the chain state");
         sb.AppendLine("    add rsi, 4");
         sb.AppendLine("    cmp eax, 4C000020h");//jirl $zero,$ra,0
         sb.AppendLine("    je d_blr");
         sb.AppendLine("    cmp eax, 4C000021h");//jirl $ra,$ra,0
         sb.AppendLine("    je d_bctr");
         sb.AppendLine("    mov r11d, eax");
-        sb.AppendLine("    shr r11d, 22           ; dispatch on high bits, ld/st");
+        sb.AppendLine("    shr r11d, 22 ; dispatch on high bits, ld/st");
         foreach (var e in new (int, string)[] {
             (0xA0,"d_ld0"),(0xA1,"d_ld1"),(0xA2,"d_ld2"),(0xA3,"d_ld3"),
             (0xA4,"d_st0"),(0xA5,"d_st1"),(0xA6,"d_st2"),(0xA7,"d_st3") })
@@ -34,7 +35,7 @@ public static partial class PianolaEngine
             sb.AppendLine("    je " + e.Item2);
         }
         sb.AppendLine("    mov r11d, eax");
-        sb.AppendLine("    shr r11d, 25           ; dispatch on high bits, lu12i/ori/pcaddu12i");
+        sb.AppendLine("    shr r11d, 25 ; dispatch on high bits, lu12i/ori/pcaddu12i");
         sb.AppendLine("    cmp r11d, 0Ah");
         sb.AppendLine("    je d_lis");
         sb.AppendLine("    cmp r11d, 01h");//ori只作为MOVIMM的第二个字使用
@@ -59,35 +60,36 @@ public static partial class PianolaEngine
         sb.AppendLine("d_lis:");
         sb.AppendLine("    mov r11d, dword ptr [rsi]");
         sb.AppendLine("    bswap r11d");
-        sb.AppendLine("    imul r12d, r12d, 1664525");
-        sb.AppendLine("    add r12d, 1013904223");
-        sb.AppendLine("    xor r11d, r12d");
+        
+        sb.AppendLine("    call a_rest ; ChaCha12 at-rest keystream word to edx");
+        sb.AppendLine("    xor r11d, edx");
+        sb.AppendLine("    xor r15d, r11d ; fold the decoded word into the chain state");
         sb.AppendLine("    add rsi, 4");
         sb.AppendLine("    mov r10d, r11d");
         sb.AppendLine("    shr r10d, 25");
-        sb.AppendLine("    cmp r10d, 01h          ; must be ori");
+        sb.AppendLine("    cmp r10d, 01h ; must be ori");
         sb.AppendLine("    jne h_bad");
         sb.AppendLine("    mov ecx, eax");
-        sb.AppendLine("    and ecx, 31            ; rd");
+        sb.AppendLine("    and ecx, 31 ; rd");
         sb.AppendLine("    cmp ecx, 15");
         sb.AppendLine("    ja h_bad");
         sb.AppendLine("    mov r8d, r11d");
         sb.AppendLine("    shr r8d, 5");
-        sb.AppendLine("    and r8d, 31            ; A3: the ori rj field carries width code + noise");
+        sb.AppendLine("    and r8d, 31 ; the ori rj field carries width code + noise");
         sb.AppendLine("    shr r8d, 3");
         sb.AppendLine("    and r8d, 3");
         sb.AppendLine("    lea r10, [d_wcode]");
-        sb.AppendLine("    movzx r8d, byte ptr [r10+r8]   ; width code -> internal width");
+        sb.AppendLine("    movzx r8d, byte ptr [r10+r8] ; width code to internal width");
         sb.AppendLine("    cmp r8d, 2");
         sb.AppendLine("    ja h_bad");
         sb.AppendLine("    mov edx, eax");
         sb.AppendLine("    shr edx, 5");
         sb.AppendLine("    and edx, 0FFFFFh");
-        sb.AppendLine("    shl edx, 12            ; hi20<<12");
+        sb.AppendLine("    shl edx, 12 ; hi20<<12");
         sb.AppendLine("    mov r9d, r11d");
         sb.AppendLine("    shr r9d, 10");
         sb.AppendLine("    and r9d, 0FFFh");
-        sb.AppendLine("    or edx, r9d            ; uV");
+        sb.AppendLine("    or edx, r9d ; uV");
         sb.AppendLine("    jmp d_mi_emit");
         foreach (var e in new (string, int)[] { ("d_ld0",0x10),("d_ld1",0x11),("d_ld2",0x12),("d_ld3",0x13),
                                                 ("d_st0",0x14),("d_st1",0x15),("d_st2",0x16),("d_st3",0x17) })
@@ -106,10 +108,10 @@ public static partial class PianolaEngine
     {
         sb.AppendLine("d_pair:");
         sb.AppendLine("    mov ecx, eax");
-        sb.AppendLine("    and ecx, 0Fh           ; rd");
+        sb.AppendLine("    and ecx, 0Fh ; rd");
         sb.AppendLine("    mov r10d, eax");
         sb.AppendLine("    shr r10d, 5");
-        sb.AppendLine("    and r10d, 0Fh          ; rj");
+        sb.AppendLine("    and r10d, 0Fh ; rj");
         sb.AppendLine("    shl r10d, 4");
         sb.AppendLine("    or ecx, r10d");
         sb.AppendLine("    mov byte ptr [r14], cl");
@@ -117,10 +119,10 @@ public static partial class PianolaEngine
         sb.AppendLine("    jmp dec_loop");
         sb.AppendLine("d_pcadd:");
         sb.AppendLine("    mov ecx, eax");
-        sb.AppendLine("    and ecx, 31            ; tag");
+        sb.AppendLine("    and ecx, 31 ; tag");
         sb.AppendLine("    mov edx, eax");
         sb.AppendLine("    shr edx, 5");
-        sb.AppendLine("    and edx, 0FFFFFh       ; payload");
+        sb.AppendLine("    and edx, 0FFFFFh ; payload");
         sb.AppendLine("    test ecx, ecx");
         sb.AppendLine("    je d_payjmp");
         sb.AppendLine("    cmp ecx, 1");
@@ -144,7 +146,7 @@ public static partial class PianolaEngine
         sb.AppendLine("    mov byte ptr [r14], 1Eh");
         sb.AppendLine("    inc r14");
         sb.AppendLine("    mov ecx, edx");
-        sb.AppendLine("    shr ecx, 16            ; cond");
+        sb.AppendLine("    shr ecx, 16 ; cond");
         sb.AppendLine("    mov byte ptr [r14], cl");
         sb.AppendLine("    inc r14");
         sb.AppendLine("    mov word ptr [r14], dx");
@@ -156,14 +158,14 @@ public static partial class PianolaEngine
     {
         sb.AppendLine("d_3r:");
         sb.AppendLine("    mov r10d, eax");
-        sb.AppendLine("    shr r10d, 15           ; kB");
+        sb.AppendLine("    shr r10d, 15 ; kB");
         sb.AppendLine("    cmp r10d, 27h");
         sb.AppendLine("    je d_movreg");
         sb.AppendLine("    cmp r10d, 24h");
         sb.AppendLine("    je d_cmp");
         sb.AppendLine("    cmp r10d, 39h");
         sb.AppendLine("    je d_not");
-        sb.AppendLine($"    cmp r10d, {NotenrolleIsaLa.B_BSWAP >> 15:X}h          ; A3/W3: revb form -> BSWAP");
+        sb.AppendLine($"    cmp r10d, {NotenrolleIsaLa.B_BSWAP >> 15:X}h ; revb form maps to BSWAP");
         sb.AppendLine("    je d_bswap");
         for (int k = 0; k < Fam.Length; k++)//kB 从编码器的族表推出 表只有一份且与 Fam 同序
         {
@@ -181,9 +183,9 @@ public static partial class PianolaEngine
         sb.AppendLine("    jmp d_pair");
         sb.AppendLine("d_not:");
         sb.AppendLine("    mov ecx, eax");
-        sb.AppendLine("    and ecx, 0Fh           ; rd = the register (A3: no width bit in it)");
+        sb.AppendLine("    and ecx, 0Fh ; rd = the register (no width bit in it)");
         sb.AppendLine("    mov edx, eax");
-        sb.AppendLine("    shr edx, 13            ; rk[4:3] = width code (word bits 14:13)");
+        sb.AppendLine("    shr edx, 13 ; rk[4:3] = width code (word bits 14:13)");
         sb.AppendLine("    and edx, 3");
         sb.AppendLine("    lea r11, [d_wcode]");
         sb.AppendLine("    movzx r8d, byte ptr [r11+rdx]");
@@ -203,9 +205,9 @@ public static partial class PianolaEngine
         }
         sb.AppendLine("d_alu:");
         sb.AppendLine("    mov ecx, eax");
-        sb.AppendLine("    and ecx, 0Fh           ; rd (A3: no width bit in it)");
+        sb.AppendLine("    and ecx, 0Fh ; rd (no width bit in it)");
         sb.AppendLine("    mov edx, eax");
-        sb.AppendLine("    shr edx, 13            ; rk[4:3] = width code (word bits 14:13)");
+        sb.AppendLine("    shr edx, 13 ; rk[4:3] = width code (word bits 14:13)");
         sb.AppendLine("    and edx, 3");
         sb.AppendLine("    lea r11, [d_wcode]");
         sb.AppendLine("    movzx r8d, byte ptr [r11+rdx]");
@@ -213,10 +215,10 @@ public static partial class PianolaEngine
         sb.AppendLine("    mov byte ptr [r14], r9b");
         sb.AppendLine("    inc r14");
         sb.AppendLine("    mov r10d, eax");
-        sb.AppendLine("    and r10d, 0Fh          ; rd");
+        sb.AppendLine("    and r10d, 0Fh ; rd");
         sb.AppendLine("    mov ecx, eax");
         sb.AppendLine("    shr ecx, 5");
-        sb.AppendLine("    and ecx, 0Fh           ; rj");
+        sb.AppendLine("    and ecx, 0Fh ; rj");
         sb.AppendLine("    shl ecx, 4");
         sb.AppendLine("    or ecx, r10d");
         sb.AppendLine("    mov byte ptr [r14], cl");
@@ -224,13 +226,13 @@ public static partial class PianolaEngine
         sb.AppendLine("    jmp dec_loop");
         sb.AppendLine("d_bswap:");
         sb.AppendLine("    mov ecx, eax");
-        sb.AppendLine("    and ecx, 0Fh           ; rd");
+        sb.AppendLine("    and ecx, 0Fh ; rd");
         sb.AppendLine("    mov edx, eax");
-        sb.AppendLine("    shr edx, 13            ; rk[4:3] = width code");
+        sb.AppendLine("    shr edx, 13 ; rk[4:3] = width code");
         sb.AppendLine("    and edx, 3");
         sb.AppendLine("    lea r11, [d_wcode]");
         sb.AppendLine("    movzx r8d, byte ptr [r11+rdx]");
-        sb.AppendLine("    mov r9d, 18h           ; BSWAP family base");
+        sb.AppendLine("    mov r9d, 18h ; BSWAP family base");
         sb.AppendLine("    add r9d, r8d");
         sb.AppendLine("    mov byte ptr [r14], r9b");
         sb.AppendLine("    inc r14");

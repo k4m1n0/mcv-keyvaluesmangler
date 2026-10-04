@@ -62,7 +62,11 @@ internal partial class PeWriterAntheil
             }
         }
         if (iTva == 0 || iTroff == 0) return rgB;
+#if LAMARR_TRIAGE
         string sOnly = Environment.GetEnvironmentVariable("LAMARR_MOVE_ONLY") ?? "";
+#else
+        string sOnly = "";//发行构建不可限定搬移目标
+#endif
         var rgPlain = new HashSet<string>(BootNames.MoveInjected);
         var rgAll = new List<MReloc>();
         using var ms = new MemoryStream(rgB, writable: false);
@@ -115,10 +119,15 @@ internal partial class PeWriterAntheil
             if (!m.bPlain || m.iHdr != 12) continue;
             int iOff = iTroff + (m.iRva - iTva);
             byte[]? rgD;
-            if (Environment.GetEnvironmentVariable("LAMARR_MOVE_NOPONLY") == "1")
+            bool bNopOnly = false;
+            int iNop = 6;
+#if LAMARR_TRIAGE
+            bNopOnly = Environment.GetEnvironmentVariable("LAMARR_MOVE_NOPONLY") == "1";
+            if (int.TryParse(Environment.GetEnvironmentVariable("LAMARR_MOVE_NOP") ?? "", out int iNopTriage)) iNop = iNopTriage;
+#endif
+            if (bNopOnly)
             {
-                //纯移动模式下末尾追加空操作 数量由环境变量控制
-                int iNop = int.TryParse(Environment.GetEnvironmentVariable("LAMARR_MOVE_NOP") ?? "", out int iV) ? iV : 6;
+                //纯移动模式下末尾追加空操作 数量由环境变量控制 发行构建里这条分支不可达
                 rgD = new byte[m.iCs + iNop];
                 Array.Copy(rgB, iOff + m.iHdr, rgD, 0, m.iCs);
             }
@@ -743,6 +752,39 @@ if (iGrowth > 0 && iMd >= 0)
     #region 常量对随机化
 
     //常量对随机化 改名前按原名收集字段令牌
+    //一个镜像可能有多个cctor 每个cctor各写自己那份字段初值
+    private static void WriteCctorAll(byte[] rgD, Dictionary<uint, uint> rgNew)
+    {
+        int iPe = BitConverter.ToInt32(rgD, 0x3C);
+        ushort usNumSec = BitConverter.ToUInt16(rgD, iPe + 6);
+        ushort usOptSize = BitConverter.ToUInt16(rgD, iPe + 20);
+        using var ms = new MemoryStream(rgD, writable: false);
+        using var per = new PEReader(ms);
+        var mr = per.GetMetadataReader();
+        foreach (var h in mr.MethodDefinitions)
+        {
+            var md = mr.GetMethodDefinition(h);
+            if (mr.GetString(md.Name) != ".cctor") continue;
+            int iRva = md.RelativeVirtualAddress;
+            var mbb = per.GetMethodBody(iRva);
+            byte[]? rgIlBytes = mbb?.GetILBytes();
+            if (rgIlBytes == null) continue;
+            bool bChanged = false;
+            for (int iP = 0; iP + 5 < rgIlBytes.Length; iP++)
+            {
+                if (rgIlBytes[iP] != 0x80 && rgIlBytes[iP] != 0x7D) continue;
+                uint uTok = BitConverter.ToUInt32(rgIlBytes, iP + 1);
+                if (!rgNew.TryGetValue(uTok, out uint uV)) continue;
+                if (iP >= 5 && rgIlBytes[iP - 5] == 0x20) { BitConverter.GetBytes(uV).CopyTo(rgIlBytes, iP - 4); bChanged = true; }
+            }
+            if (!bChanged) continue;
+            int iOff = RvaToOffset(rgD, iPe, usOptSize, usNumSec, (uint)iRva);
+            if (iOff < 0) continue;
+            int iHdr = (rgD[iOff] & 3) == 2 ? 1 : 12;
+            Array.Copy(rgIlBytes, 0, rgD, iOff + iHdr, rgIlBytes.Length);
+        }
+    }
+
     private static Dictionary<string, uint> FieldTokens(byte[] rgD, string[] rgNames)
     {
         var rgMap = new Dictionary<string, uint>(StringComparer.Ordinal);
@@ -768,20 +810,21 @@ if (iGrowth > 0 && iMd >= 0)
         {
             var md = mr.GetMethodDefinition(h);
             if (mr.GetString(md.Name) != ".cctor") continue;
-            uCctor = (uint)MetadataTokens.GetToken(h);
             var mbb = per.GetMethodBody(md.RelativeVirtualAddress);
             if (mbb == null) continue;
             byte[]? rgIlBytes = mbb.GetILBytes();
             if (rgIlBytes == null) continue;
+            bool bHit = false;//一个镜像可能有多个cctor 取真正写目标字段的那个
             for (int iP = 0; iP + 5 < rgIlBytes.Length; iP++)
             {
-                if (rgIlBytes[iP] != 0x7D) continue;
+                if (rgIlBytes[iP] != 0x80 && rgIlBytes[iP] != 0x7D) continue;//stsfld/stfld 静态字段走0x80
                 uint uTok = BitConverter.ToUInt32(rgIlBytes, iP + 1);
                 if (!rgVal.ContainsKey(uTok)) continue;
-                if (iP >= 5 && rgIlBytes[iP - 5] == 0x20) rgVal[uTok] = BitConverter.ToUInt32(rgIlBytes, iP - 4);
-                else if (iP >= 2 && rgIlBytes[iP - 2] == 0x1F) rgVal[uTok] = (uint)(sbyte)rgIlBytes[iP - 1];
-                else if (iP >= 1 && rgIlBytes[iP - 1] >= 0x16 && rgIlBytes[iP - 1] <= 0x1E) rgVal[uTok] = (uint)(rgIlBytes[iP - 1] - 0x16);
+                if (iP >= 5 && rgIlBytes[iP - 5] == 0x20) { rgVal[uTok] = BitConverter.ToUInt32(rgIlBytes, iP - 4); bHit = true; }
+                else if (iP >= 2 && rgIlBytes[iP - 2] == 0x1F) { rgVal[uTok] = (uint)(sbyte)rgIlBytes[iP - 1]; bHit = true; }
+                else if (iP >= 1 && rgIlBytes[iP - 1] >= 0x16 && rgIlBytes[iP - 1] <= 0x1E) { rgVal[uTok] = (uint)(rgIlBytes[iP - 1] - 0x16); bHit = true; }
             }
+            if (bHit) uCctor = (uint)MetadataTokens.GetToken(h);
         }
     }
 
@@ -805,7 +848,7 @@ if (iGrowth > 0 && iMd >= 0)
             bool bChanged = false;
             for (int iP = 0; iP + 5 < rgIlBytes.Length; iP++)
             {
-                if (rgIlBytes[iP] != 0x7D) continue;
+                if (rgIlBytes[iP] != 0x80 && rgIlBytes[iP] != 0x7D) continue;//stsfld/stfld 静态字段走0x80
                 uint uTok = BitConverter.ToUInt32(rgIlBytes, iP + 1);
                 if (!rgNew.TryGetValue(uTok, out uint uV)) continue;
                 if (iP >= 5 && rgIlBytes[iP - 5] == 0x20) { BitConverter.GetBytes(uV).CopyTo(rgIlBytes, iP - 4); bChanged = true; }

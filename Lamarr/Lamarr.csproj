@@ -2,7 +2,6 @@
 
   <PropertyGroup>
     <LamarrTfm Condition="'$(LamarrTfm)'=='' And '$(PackerTfm)'!=''">$(PackerTfm)</LamarrTfm>
-    <LamarrTfm Condition="'$(LamarrTfm)'=='' And '$(PianolaTfm)'!=''">$(PianolaTfm)</LamarrTfm>
     <LamarrTfm Condition="'$(LamarrTfm)'==''">net8.0-windows</LamarrTfm>
     <OutputType>WinExe</OutputType>
     <TargetFramework>$(LamarrTfm)</TargetFramework>

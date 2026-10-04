@@ -20,3 +20,6 @@
 *.exe
 *.escrow.json
 /escrow
+*.key
+*.pub
+/keys

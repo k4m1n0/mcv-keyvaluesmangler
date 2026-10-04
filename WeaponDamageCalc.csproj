@@ -49,13 +49,14 @@
   </Target>
 
   <Target Name="LamarrPack" AfterTargets="Publish" Condition="'$(Packer)' == 'managed' And '$(SelfContained)' != 'true' And '$(Configuration)' != 'Debug'">
-    <Exec Command="&quot;$(ProjectDir)Lamarr\Packer\bin\$(Configuration)\$(PackerTfm)\LamarrPacker.exe&quot; --stub &quot;$(PublishDir)Lamarr.exe&quot; --input &quot;$(ProjectDir)bin\$(Configuration)\$(TargetFramework)\win-x64\$(AssemblyName).dll&quot; --output &quot;$(PublishDir)$(AssemblyName)_packed.exe&quot; --mode managed" />
+    <Exec Command="&quot;$(ProjectDir)Lamarr\Packer\bin\$(Configuration)\$(PackerTfm)\LamarrPacker.exe&quot; --pack --stub &quot;$(PublishDir)Lamarr.exe&quot; --input &quot;$(ProjectDir)bin\$(Configuration)\$(TargetFramework)\win-x64\$(AssemblyName).dll&quot; --output &quot;$(PublishDir)$(AssemblyName)_packed.exe&quot; --mode managed" />
     <Copy SourceFiles="$(PublishDir)$(AssemblyName)_packed.exe" DestinationFiles="$(PublishDir)$(AssemblyName).exe" OverwriteReadOnlyFiles="true" />
     <Delete Files="$(PublishDir)$(AssemblyName)_packed.exe" />
   </Target>
 
   <ItemGroup>
     <Compile Remove="Lamarr\**" />
+    <Compile Remove="publish\**" />
     <EmbeddedResource Remove="Lamarr\**" />
     <None Remove="publish\**" />
   </ItemGroup>

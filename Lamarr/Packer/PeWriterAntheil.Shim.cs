@@ -15,8 +15,50 @@ internal partial class PeWriterAntheil
 
     private static readonly HashSet<string> rgShimKeepNames = new(StringComparer.Ordinal)//改名器按CLR约定跳过的名字 Main/.ctor/.cctor 不算残留
     {
-        "Main", ".ctor", ".cctor"
+        "Main", ".ctor", ".cctor",
+        "vAlloc", "vProt", "vFree",//入口层映射引擎与收尾卸载要用的三个内核API 改名器不动P/Invoke导入名 这三个名字本身不泄露结构
+        "Invoke", "BeginInvoke", "EndInvoke"//vRun委托的编译器成员 框架名 改名器不碰 同样不泄露结构
     };
+
+    //域种子与入口层明文摘要写进入口层镜像的.cctor初值 占位值形态不对会静默不写 所以写完逐字段回读确认
+    //roll钥匙不落在镜像里 尾部存的是掩码后的值 运行时剥掉即可 静态镜像里不留明文钥匙
+    private void PatchShimSecrets()
+    {
+        if (rgRollEnt == null || rgEngineEnt == null) throw new InvalidOperationException("entry layer: roll/engine blobs missing before the shim patch");
+        var rgWant = new Dictionary<string, uint>
+        {
+            ["uDomainSeed"] = A0.Q.uDomainSeed,
+            ["uRollSum"] = A0.Q.Hash32(rgRollEnt, 0, rgRollEnt.Length) ^ A0.Q.uRollSumMask,
+            ["uEngSum"] = A0.Q.Hash32(rgEngineEnt, 0, rgEngineEnt.Length) ^ A0.Q.uEngSumMask,
+        };
+        var rgFld = FieldTokens(rgShim!, rgWant.Keys.ToArray());
+        foreach (var sName in rgWant.Keys) if (!rgFld.ContainsKey(sName)) throw new InvalidOperationException($"entry layer: {sName} field missing");
+        var rgNew = new Dictionary<uint, uint>();
+        foreach (var kv in rgFld) rgNew[kv.Value] = rgWant[kv.Key];
+        WriteCctorAll(rgShim!, rgNew);
+        foreach (var kv in rgFld)
+        {
+            uint uGot = CctorImm(rgShim!, kv.Value);
+            if (uGot != rgWant[kv.Key]) throw new InvalidOperationException($"entry layer: {kv.Key} patch did not take (got=0x{uGot:X8} want=0x{rgWant[kv.Key]:X8})");
+        }
+        PatchShimMarker();
+    }
+
+    //入口层镜像里那份公开的.NET bundle签名会被替换成本产物的派生锚点键shim按标记记录搜 两边必须同时换
+    private void PatchShimMarker()
+    {
+        if (rgSigOut == null) throw new InvalidOperationException("entry layer: rgSigOut not derived before the marker patch (call order: LoadBoot must precede the shim patch)");
+        int iHit = -1, nHit = 0;
+        for (int i = 0; i + 32 <= rgShim!.Length; i++)
+        {
+            if (rgShim[i] != rgSignatureDotnet[0]) continue;
+            if (!rgShim.AsSpan(i, 32).SequenceEqual(rgSignatureDotnet)) continue;//整段比较
+            nHit++;
+            if (iHit < 0) iHit = i;
+        }
+        if (nHit != 1) throw new InvalidOperationException($"entry layer: .NET bundle signature appears {nHit} time(s) in the shim image, expected exactly 1");
+        Array.Copy(rgSigOut, 0, rgShim, iHit, 32);
+    }
 
     private void PrepareShim()
     {
@@ -38,7 +80,11 @@ internal partial class PeWriterAntheil
             Console.WriteLine("[entrylayer] STATUS triage: rename disabled (LAMARR_NO_RENAME=1), hygiene checks skipped");
             return;
         }
+#if LAMARR_TRIAGE
         bool bTriageShim = Environment.GetEnvironmentVariable("LAMARR_TRIAGE_SHIM") == "1";//构建期二分用 带Debug特征 不参与发行
+#else
+        bool bTriageShim = false;//发行构建里残渣一律不能放行
+#endif
         string sText = Encoding.ASCII.GetString(rgShim!);
         string sUtf16 = Encoding.Unicode.GetString(rgShim!);
         foreach (string s in rgShimForbidden)

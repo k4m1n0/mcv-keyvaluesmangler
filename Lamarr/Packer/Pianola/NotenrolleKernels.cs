@@ -1,6 +1,6 @@
 namespace Lamarr.Packer;
 
-public static class KernLayout//M尾部16字节是引擎保留区roll密钥 .text地址 .text长度内核数据只能用前面
+public static class KernLayout//尾部16字节是引擎保留区 存roll密钥与.text地址与.text长度 内核数据只能用前面的空间
 {
     public const int Seed = 0x00;//材料占32B
     public const int SeedLen = 32;
@@ -26,7 +26,7 @@ public static class KernLayout//M尾部16字节是引擎保留区roll密钥 .tex
     public const ulong K_MaskXor = 0x9E3779B97F4A7C15UL;
 }
 
-public static class NotenrolleKernels
+public static partial class NotenrolleKernels
 {
     public static byte[] SeedKeyN()//16轮uint环 逐字节读Seed写Key
     {
@@ -55,7 +55,7 @@ public static class NotenrolleKernels
             c.OpSet(rG, "xor", NotenrolleFront.V(rY));
             c.OpSet(rI, "add", NotenrolleFront.C(1));
         });
-        c.Set(0, NotenrolleFront.V(rG));//返回uG
+        c.Set(0, NotenrolleFront.V(rG));
         return c.Finish();
     }
 
@@ -168,7 +168,7 @@ public static class NotenrolleKernels
         a.Alu("add", 2, 7, 9);
         a.Cmp(7, 3);
         a.Jcc(3, "dloop");            //cs = 无符号小于i < n继续
-        a.MovReg(0, 0);               //返回值0
+        a.MovReg(0, 0);
         return a.Finish();
     }
 
@@ -212,4 +212,161 @@ public static class NotenrolleKernels
         return c.Finish();
     }
 
+    //摘要内核 单元7 材料在M[0..v3) 头4字节是进入的32位FNV-1a状态 逐字节续算 返回新状态在v0
+    public static byte[] FnvUnitN()
+    {
+        var c = new NotenrolleFront.Core();
+        int rH = c.Var(0, 32), rI = c.Var(1, 32), rY = c.Var(4, 32);
+        c.Ld(32, 0, null, rH);//进入状态
+        c.Set(rI, NotenrolleFront.C(4));//数据从第4字节起
+        c.While("cs", NotenrolleFront.V(rI), NotenrolleFront.V(3), () =>
+        {
+            c.Set(rY, NotenrolleFront.M(8, 0, NotenrolleFront.V(rI)));
+            c.OpSet(rH, "xor", NotenrolleFront.V(rY));
+            c.OpSet(rH, "mul", NotenrolleFront.C(KernLayout.K_Fnv2));
+            c.OpSet(rI, "add", NotenrolleFront.C(1));
+        });
+        c.Set(0, NotenrolleFront.V(rH));//返回状态在v0
+        return c.Finish();
+    }
+
+    //64位摘要内核 单元8 材料在M[0..v3) 头8字节是进入的FNV-1a64状态 逐字节续算 结果写M[0x20..0x28)
+    public static byte[] Fnv64UnitN()
+    {
+        var c = new NotenrolleFront.Core();
+        int rH = c.Var(0, 64), rI = c.Var(1, 32), rY = c.Var(4, 32);
+        c.Ld(64, 0, null, rH);//进入状态(8字节)
+        c.Set(rI, NotenrolleFront.C(8));//数据从第8字节起
+        c.While("cs", NotenrolleFront.V(rI), NotenrolleFront.V(3), () =>
+        {
+            c.Set(rY, NotenrolleFront.M(8, 0, NotenrolleFront.V(rI)));
+            c.OpSet(rH, "xor", NotenrolleFront.V(rY));
+            c.OpSet(rH, "mul", NotenrolleFront.C64(0x100000001B3UL));
+            c.OpSet(rI, "add", NotenrolleFront.C(1));
+        });
+        c.St(64, KernLayout.Key, null, NotenrolleFront.V(rH));
+        return c.Finish();
+    }
+
+    static NotenrolleFront.Ex C(int v) => NotenrolleFront.C((ulong)(uint)v);//工厂只吃ulong 这里补齐int与uint的写法
+    static NotenrolleFront.Ex C(uint v) => NotenrolleFront.C(v);
+    static NotenrolleFront.Ex V(int r) => NotenrolleFront.V(r);
+    static NotenrolleFront.Ex M(int iBits, int iBase) => NotenrolleFront.M(iBits, iBase);
+    static NotenrolleFront.Ex M(int iBits, int iBase, NotenrolleFront.Ex exIdx) => NotenrolleFront.M(iBits, iBase, exIdx);
+    static NotenrolleFront.Ex Op(string sOp, NotenrolleFront.Ex a, NotenrolleFront.Ex b) => NotenrolleFront.Op(sOp, a, b);
+
+    //ChaCha12单元是roll的流单元 槽9 全w32且状态常驻材料 因为引擎只有v0到v11十二个寄存器放不下16个字
+    //每64B一块ctr每块自增 尾块按长度截断 逐字节异或天然支持任意长度
+    public static byte[] ChaCha12UnitN()
+    {
+        var c = new NotenrolleFront.Core();
+        int rP = c.Var(0, 32);//数据字节指针 相对数据区起点 内层逐字节前进 外层按块前进
+        int rQ = c.Var(1, 32);//四分之一轮序号 0..47
+        int rT = c.Var(2, 32);
+        int rA = c.Var(4, 32), rB = c.Var(5, 32), rC = c.Var(6, 32), rD = c.Var(7, 32);
+
+        c.St(32, ChLayout.In, null, C(ChLayout.C0));//前导 把16个初始字铺进私有In 常量4加材料key8加材料ctr加材料nonce3
+        c.St(32, ChLayout.In + 4, null, C(ChLayout.C1));
+        c.St(32, ChLayout.In + 8, null, C(ChLayout.C2));
+        c.St(32, ChLayout.In + 12, null, C(ChLayout.C3));
+        for (int j = 0; j < 8; j++) c.St(32, ChLayout.In + 16 + 4 * j, null, M(32, ChLayout.Key + 4 * j));
+        c.St(32, ChLayout.In + 48, null, M(32, ChLayout.Slot + 12));//ctr
+        for (int j = 0; j < 3; j++) c.St(32, ChLayout.In + 52 + 4 * j, null, M(32, ChLayout.Slot + 4 * j));//nonce
+
+        c.St(32, ChLayout.Len, null, C(0));//数据长度等于材料长度v3减去数据区偏移v3不足一个头时按0 链推进用空材料执行本单元时走这条
+        c.If("cc", V(3), C(ChLayout.Data), () => c.St(32, ChLayout.Len, null, Op("sub", V(3), C(ChLayout.Data))));
+        c.Set(rP, C(0));
+        c.While("cs", V(rP), M(32, ChLayout.Len), () =>
+        {
+            c.St(32, ChLayout.Cb, null, C(64));//本块字节数cb取64与剩余长度的较小值
+            c.If("cs", Op("sub", M(32, ChLayout.Len), V(rP)), C(64),
+                () => c.St(32, ChLayout.Cb, null, Op("sub", M(32, ChLayout.Len), V(rP))));
+            c.St(32, ChLayout.BlkBase, null, V(rP));
+
+            c.Set(rT, C(0));//初始状态取In的16个字 逐块重铺ctr在In[12]里自增
+            c.While("cs", V(rT), C(16), () =>
+            {
+                c.St(32, ChLayout.State, Op("shl", V(rT), C(2)), M(32, ChLayout.In, Op("shl", V(rT), C(2))));
+                c.OpSet(rT, "add", C(1));
+            });
+            c.Set(rQ, C(0));//12轮等于48个四分之一轮 状态下标从IdxTbl查表 展开会让字节码超出VM代码窗0x1000
+            c.While("cs", V(rQ), C(48), () => Qr(c, rA, rB, rC, rD, rQ));
+            c.Set(rT, C(0));//输出字等于状态字加初始字 再拆字节进密钥流缓冲In[12]已是本块计数器
+            c.While("cs", V(rT), C(16), () =>
+            {
+                c.Set(rA, M(32, ChLayout.State, Op("shl", V(rT), C(2))));
+                c.OpSet(rA, "add", M(32, ChLayout.In, Op("shl", V(rT), C(2))));
+                for (int j = 0; j < 4; j++)
+                    c.St(8, ChLayout.Ks, Op("add", Op("shl", V(rT), C(2)), C(j)), j == 0 ? V(rA) : Op("shr", V(rA), C(8 * j)));
+                c.OpSet(rT, "add", C(1));
+            });
+            c.While("cs", Op("sub", V(rP), M(32, ChLayout.BlkBase)), M(32, ChLayout.Cb), () =>//逐字节异或rP从块基址走到块尾 顺带完成外层前进
+            {
+                c.Ld(8, ChLayout.Ks, Op("sub", V(rP), M(32, ChLayout.BlkBase)), rT);
+                c.Ld(8, ChLayout.Data, V(rP), rA);
+                c.OpSet(rT, "xor", V(rA));
+                c.St(8, ChLayout.Data, V(rP), V(rT));
+                c.OpSet(rP, "add", C(1));
+            });
+            c.Set(rT, M(32, ChLayout.In, C(48)));//In[12]每块自增一次
+            c.OpSet(rT, "add", C(1));
+            c.St(32, ChLayout.In, C(48), V(rT));
+        });
+
+        c.Set(rT, M(32, ChLayout.In, C(48)));
+        c.St(32, ChLayout.Slot, C(0), V(rT));//协议槽首4字节放新计数器 与驱动读M[0x20]的约定对齐
+        c.St(32, ChLayout.Slot, C(12), V(rT));//原位回写 下一次调用可从槽里续读
+        c.Set(0, V(rT));//返回值=结束计数器
+        return c.Finish();
+    }
+
+    static void Qr(NotenrolleFront.Core c, int rA, int rB, int rC, int rD, int rQ)//一个四分之一轮 4个状态字落在rA到rD 第q个QR的4个下标从IdxTbl逐字节取
+    {
+        NotenrolleFront.Ex Off(int j) => Op("shl", M(32, ChLayout.Tbl, Op("add", Op("shl", Op("and", V(rQ), C(7)), C(4)), C(4 * j))), C(2));//表项是状态下标 乘4等于State里的字节偏移
+        c.Ld(32, ChLayout.State, Off(0), rA);
+        c.Ld(32, ChLayout.State, Off(1), rB);
+        c.Ld(32, ChLayout.State, Off(2), rC);
+        c.Ld(32, ChLayout.State, Off(3), rD);
+        c.OpSet(rA, "add", V(rB));
+        c.OpSet(rD, "xor", V(rA));
+        c.OpSet(rD, "rol", C(16));
+        c.OpSet(rC, "add", V(rD));
+        c.OpSet(rB, "xor", V(rC));
+        c.OpSet(rB, "rol", C(12));
+        c.OpSet(rA, "add", V(rB));
+        c.OpSet(rD, "xor", V(rA));
+        c.OpSet(rD, "rol", C(8));
+        c.OpSet(rC, "add", V(rD));
+        c.OpSet(rB, "xor", V(rC));
+        c.OpSet(rB, "rol", C(7));
+        c.St(32, ChLayout.State, Off(0), V(rA));
+        c.St(32, ChLayout.State, Off(1), V(rB));
+        c.St(32, ChLayout.State, Off(2), V(rC));
+        c.St(32, ChLayout.State, Off(3), V(rD));
+        c.OpSet(rQ, "add", C(1));
+    }
+}
+
+//ChaCha12单元的材料布局 驱动写key与nonce与ctr 数据落在Q.VmMatData 0x900起是内核私有工作区逐调用零化
+public static class ChLayout
+{
+    public const int Key = 0x00;
+    public const int Slot = 0x20;
+    public const int Data = 0x30;//必须等于A0.Q.VmMatData
+    public const int DataMax = A0.QStream.dm;//驱动分块上限 0x30加1984等于0x7F0 小于私有区的0x900
+
+    public const int In = 0x900;//16个w32初始字 常量4加key8加ctr加nonce3 ctr在In[12]
+    public const int State = 0x940;//16个w32工作状态
+    public const int Ks = 0x980;//64B 密钥流字节缓冲
+    public const int Len = 0x9C0;//w32 数据长度
+    public const int Cb = 0x9C4;//w32 本块字节数
+    public const int BlkBase = 0x9C8;//w32 本块基址
+    public const int Tbl = A0.QStream.Tbl;//8乘4的w32四分之一轮状态下标表 调用方按QrTbl布好
+
+    public static byte[] QrTbl() => A0.QStream.TblBytes();//QR下标表的单一来源在A0.QStream
+
+    public const uint C0 = 0x61707865;//"expa"
+    public const uint C1 = 0x3320646E;//"nd 3"
+    public const uint C2 = 0x79622D32;//"2-by"
+    public const uint C3 = 0x6B206574;//"te k"
 }

@@ -3,7 +3,7 @@ namespace Lamarr.Packer;
 using System.Text;
 using System.Collections.Generic;
 
-public static class NotenrolleComp
+public static partial class NotenrolleComp
 {
     public enum EW { W8 = 0, W16 = 1, W32 = 2, W64 = 3 }//宽度码0=w8 1=w16 2=w32 3=w64
     public sealed class Asm
@@ -32,18 +32,18 @@ public static class NotenrolleComp
             w.Add((byte)(0xF0 + iWB)); w.Add((byte)(rd & 15));
         }
 
-        public void Bswap(int iWB, int rd)//单目字节序反转0x18+w只带一个寄存器w8是恒等w16=rol ax,8 w32/w64用x86 bswap
+        public void Bswap(int iWB, int rd)//单目字节序反转 操作码0x18+w 只带一个寄存器w8恒等w16用rol ax,8 w32与w64用bswap
         {
             w.Add((byte)(0x18 + iWB)); w.Add((byte)(rd & 15));
         }
 
-        public void AndMask(int rd, ulong uMask, int rTmp)//按宽度截断rd &= uMask掩码经临时寄存器rTmp载入
+        public void AndMask(int rd, ulong uMask, int rTmp)//按宽度截断rd与uMask 掩码经临时寄存器rTmp载入
         {
             EmitMovImm(w, rTmp, uMask, 3);
             w.Add(0x73); w.Add((byte)(((rTmp & 15) << 4) | (rd & 15)));
         }
 
-        public void Ld(int iWB, int rDst, int rAddr)//LD/ST操作数字节 高4位是地址寄存器 低4位是目标或数据寄存器
+        public void Ld(int iWB, int rDst, int rAddr)//LD与ST操作数字节 高4位是地址寄存器 低4位是目标或数据寄存器
         {
             w.Add((byte)(0x10 + iWB)); w.Add((byte)(((rAddr & 15) << 4) | (rDst & 15)));
         }
@@ -68,7 +68,7 @@ public static class NotenrolleComp
             w.Add(0x1E); w.Add((byte)iCond); rgFix.Add((w.Count, sLab, true)); w.Add(0); w.Add(0);
         }
 
-        public byte[] Finish()//末尾补END并回填跳转偏移目标 = 操作码位置 + off16
+        public byte[] Finish()//末尾补END并回填跳转偏移 目标是操作码位置加off16
         {
             w.Add(0x00);
             foreach (var (iPos, sLab, bJcc) in rgFix)
@@ -85,7 +85,7 @@ public static class NotenrolleComp
         }
     }
 
-    public static byte[] CompileJitKeyRoll()//jit密钥派生内核 常量在v0和v1 调用方置v2=0 v3=len M[0..len-1]=材料 返回h在v0
+    public static byte[] CompileJitKeyRoll()//jit密钥派生内核 常量在v0与v1 调用方置v2=0 v3=长度 材料放M 返回h在v0
     {
         var a = new Asm();
         a.Mov(0, 0x2F1E4B7DUL, 2);//v0=h0w32
@@ -108,60 +108,34 @@ public static class NotenrolleComp
         "asr" => 0xC0, "rol" => 0xD0, "ror" => 0xE0, _ => throw new InvalidOperationException(nm)
     };
 
-    public static byte[] BuildRollForSeed(ulong uSeed, uint uRollKey)//把jit密钥派生内核编成roll字节码 按种子选载体ISA编码 再叠at-rest加密
+    public static byte[] BuildRollForSeed(ulong uSeed, uint uRollKey, UnitRunner fnRun, out uint uChainTail)//把jit密钥派生内核编成roll字节码 按种子选载体ISA编码 再叠at-rest加密
     {
-        return BuildRoll(uSeed, uRollKey);
+        return BuildRoll(uSeed, uRollKey, fnRun, out uChainTail);
     }
 
-    public const int KernJitKey = 0, KernMask = 1, KernSeedKey = 2, KernK1 = 3, KernDisturb = 4, KernMx = 5, KernDec = 6;//内核序号从0开始 顺序与roll容器一致
+    //链推进必须真的执行前一枚单元 解不出或执行失败就返回false让打包失败关闭
+    public delegate bool UnitRunner(byte[] rgBlob, uint uKey, uint uChainIn, out uint uChainOut, out string sErr);
+
+    public const int KernJitKey = 0, KernMask = 1, KernSeedKey = 2, KernK1 = 3, KernDisturb = 4, KernMx = 5, KernDec = 6, KernFnvUnit = 7, KernFnv64Unit = 8, KernChaCha12 = 9;//roll单元号 顺序即容器内顺序
 
     static readonly Func<byte[]>[] KernTable = {//内核顺序即容器内顺序 加内核只改这里
         CompileJitKeyRoll, NotenrolleKernels.MaskKeyN, NotenrolleKernels.SeedKeyN,
         NotenrolleKernels.K1N, NotenrolleKernels.GenDisturbN, NotenrolleKernels.MxN,
-        NotenrolleKernels.DecN };
+        NotenrolleKernels.DecN, NotenrolleKernels.FnvUnitN, NotenrolleKernels.Fnv64UnitN, NotenrolleKernels.ChaCha12UnitN };
     public static int KernRollCount => KernTable.Length;
 
-    public static byte[] CompileKernRaw(int iKern) => KernTable[iKern]();//内核的原始字节码 不含CFG状态密钥插桩
-
-    public static string KernOpStats()//统计内核字节码能力格出现次数 w8可达要求引擎执行且编译期发过w8 ALU
-    {
-        int iW8 = 0, iW16 = 0, iNot = 0, iBs = 0;
-        var sb = new StringBuilder();
-        for (int i = 0; i < KernRollCount; i++)
-        {
-            byte[] rg = CompileKernRaw(i);
-            int i8 = 0, i16 = 0, iN = 0, iB = 0;
-            int p = 0;
-            for (; p < rg.Length;)
-            {
-                int iLen = NotenrolleCfg.ILen(rg, p);
-                if (iLen <= 0) break;
-                byte op = rg[p];
-                if (op >= 0x20 && op <= 0xEF) { if ((op & 15) == 0) i8++; else if ((op & 15) == 1) i16++; }
-                else if (op >= 0xF0 && op <= 0xF3) iN++;
-                else if (op >= 0x18 && op <= 0x1B) iB++;
-                p += iLen;
-            }
-            if (p != rg.Length) sb.AppendLine($"[kern-ops] kern {i} parse stopped at {p}/{rg.Length}");
-            sb.AppendLine($"[kern-ops] kern{i} len={rg.Length} aluW8={i8} aluW16={i16} not={iN} bswap={iB}");
-            iW8 += i8; iW16 += i16; iNot += iN; iBs += iB;
-        }
-        sb.AppendLine($"[kern-ops] total aluW8={iW8} aluW16={iW16} not={iNot} bswap={iBs}");
-        sb.AppendLine($"[kern-ops] reachable: w8-alu={iW8 > 0} (DecN/kernel6, ships with the artifact and runs in the engine)");
-        sb.AppendLine($"[kern-ops] not-yet-emitted: w16-alu={iW16 > 0} not={iNot > 0} bswap={iBs > 0}" +
-                      " (emitter wired for Asm.Bswap plus the Rev node of Front and the 0xFFFF of narrowing absorption;" +
-                      " BSWAP was once emitted in MaskKeyN but the runtime mask value is taken by jithook as an integrity" +
-                      " input, so it raised InvalidProgramException and was reverted)");
-        sb.AppendLine($"[kern-ops] RESULT: {(iW8 > 0 ? "PASS" : "FAIL")} (requires the w8 ALU to be emitted at least once)");
-        return sb.ToString();
-    }
-
-    public static byte[] CompileKern(int iKern) => CompileKern(iKern, 0);//按序编内部字节码 不含载体编码与at-rest加密 结构不认识时原样返回
+    public static byte[] CompileKern(int iKern) => CompileKern(iKern, 0);//按序编内部字节码 不含载体编码与at-rest加密 不认识的指令原样返回
 
     public static byte[] CompileKern(int iKern, ulong uSeed)
     {
         byte[] rg = KernTable[iKern]();
         return NotenrolleCfg.Apply(rg, KernLayout.Key, new System.Random(KernSeed(uSeed, iKern)), out _);
+    }
+
+    public static byte[] CompileUnit(Func<byte[]> fnUnit, ulong uSeed, int iSlot)//通用编译入口 任意字节码源走同一管线 带CFG状态键插桩
+    {
+        byte[] rg = fnUnit();
+        return NotenrolleCfg.Apply(rg, KernLayout.Key, new System.Random(KernSeed(uSeed, iSlot)), out _);
     }
 
     static int KernSeed(ulong uSeed, int iKern)//每个内核一条独立随机流
@@ -183,30 +157,69 @@ public static class NotenrolleComp
         _ => throw new InvalidOperationException($"roll encode failed: {sIsa}")
     };
 
-    //多内核容器 长度前缀明文 只在容器数据区内算各内核入口 不参与静态加密 每内核各自加密且流从头开始
-    public static byte[] BuildRoll(ulong uSeed, uint uRollKey)
+    //多内核容器 长度前缀明文 各内核入口只在容器数据区内算 不参与静态加密
+    //链式 单元0用纯roll钥匙 单元i的at-rest键等于roll钥匙异或前序执行输出 解出任一枚都必须先按序真的执行前序单元
+    public static byte[] BuildRoll(ulong uSeed, uint uRollKey, UnitRunner fnRun, out uint uChainTail)
     {
+        uChainTail = 0;
+        if (fnRun == null) throw new InvalidOperationException("roll chain requires an engine runner");
+        if (KernRollCount != A0.Q.iRollUnits) throw new InvalidOperationException($"roll unit count {KernRollCount} != Q.iRollUnits {A0.Q.iRollUnits}");
         string sIsa = IsaPool.CarrierIsa(uSeed, 0);
         OpTable.Begin(uSeed, sIsa);//设定本产物的置换与载体宽度码
         CarrierFmt.Begin(uSeed);
         bool bBe = sIsa != "rv64" && sIsa != "loongarch";
         var w = new List<byte>();
         PutU32(w, (uint)KernRollCount);
+        uint uChain = 0;
         for (int i = 0; i < KernRollCount; i++)
         {
             byte[] rgEnc = EncodeForIsa(sIsa, CompileKern(i, uSeed));
             if (rgEnc.Length == 0 || (rgEnc.Length & 3) != 0)
                 throw new InvalidOperationException($"roll blob {i} length {rgEnc.Length}");
             PutU32(w, (uint)rgEnc.Length);
-            PianolaEngine.AtRestCrypt(rgEnc, uRollKey, bBe);
+            PianolaEngine.AtRestCryptChain(rgEnc, uRollKey ^ uChain, bBe);
+            if (!fnRun(rgEnc, uRollKey, uChain, out uint uNext, out string sErr))
+                throw new InvalidOperationException($"roll chain unit {i} failed: {sErr}");
+            uChain = uNext;
             w.AddRange(rgEnc);
         }
+        uChainTail = uChain;//链终态 打包器随后把它与roll钥匙异或后写进roll尾部
         return w.ToArray();
     }
 
     static void PutU32(List<byte> w, uint uV)//长度前缀小端u32
     {
         for (int i = 0; i < 4; i++) w.Add((byte)(uV >> (8 * i)));
+    }
+
+    public static byte[] BuildPreKern(ulong uSeed, uint uKey, int iKern, UnitRunner fnRun) => BuildPreKern(uSeed, uKey, new[] { iKern }, fnRun);//单内核容器 等价于只装载一枚内核
+
+    //前置容器 与整条roll同格式 独立at-rest钥匙 只由不依赖roll钥匙的域量派生
+    //roll自身是单元宿主不能自举 所以掩码内核与ChaCha12流单元由前置容器装载 掩码内核解锁roll钥匙字段
+    //链式 单元i的键等于prek钥匙异或前序执行输出
+    public static byte[] BuildPreKern(ulong uSeed, uint uKey, int[] rgKern, UnitRunner fnRun)
+    {
+        if (fnRun == null) throw new InvalidOperationException("prekern chain requires an engine runner");
+        string sIsa = IsaPool.CarrierIsa(uSeed, 0);
+        OpTable.Begin(uSeed, sIsa);
+        CarrierFmt.Begin(uSeed);
+        bool bBe = sIsa != "rv64" && sIsa != "loongarch";
+        var w = new List<byte>();
+        PutU32(w, (uint)rgKern.Length);
+        uint uChain = 0;//单元0用纯prek钥匙 单元i的at-rest键等于prek钥匙异或前序执行输出
+        for (int i = 0; i < rgKern.Length; i++)
+        {
+            byte[] rgEnc = EncodeForIsa(sIsa, CompileKern(rgKern[i], uSeed));
+            if (rgEnc.Length == 0 || (rgEnc.Length & 3) != 0)
+                throw new InvalidOperationException($"prekern blob {i} length {rgEnc.Length}");
+            PutU32(w, (uint)rgEnc.Length);
+            PianolaEngine.AtRestCryptChain(rgEnc, uKey ^ uChain, bBe);
+            if (!fnRun(rgEnc, uKey, uChain, out uint uNext, out string sErr))
+                throw new InvalidOperationException($"prekern chain unit {i} failed: {sErr}");
+            uChain = uNext;
+            w.AddRange(rgEnc);
+        }
+        return w.ToArray();
     }
 
     public static void EmitMovImm(List<byte> w, int rd, ulong uV, int iWB)//MOVIMM [0x08][rd][w][imm LE bytes] w字节0=1B 1=2B 2=4B 3=8B

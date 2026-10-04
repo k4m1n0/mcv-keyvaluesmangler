@@ -18,8 +18,7 @@ internal partial class PeWriterAntheil
         var rgNames = new List<string>();
         byte[]? rgSigBlob = null;
         int iDecIdx = -1, iJitIdx = -1, iSigIdx = -1, iPheropodIdx = -1;
-        bool bLayout = Environment.GetEnvironmentVariable("LAMARR_LAYOUT") == "1";//构建侧布局摘要 只走stdout 不进产物
-        int iRngSeed = RngSeed(0x31u);
+        int iRngSeed = RngSeed(0x31u);//布局摘要开关由类级bLayout提供 发行构建恒false
         Random rng = new Random(iRngSeed);
         string RandName() => new string(Enumerable.Range(0, rng.Next(4, 16)).Select(_ => (char)('a' + rng.Next(26))).ToArray());
 
@@ -27,6 +26,7 @@ internal partial class PeWriterAntheil
             long lOndisk = rgCsz[iMainEntry] > 0 ? rgCsz[iMainEntry] : rgSz[iMainEntry];
             byte[] rgDll = new byte[lOndisk];
             Array.Copy(rgPayload, (int)(iBundleDataStart + rgRel[iMainEntry]), rgDll, 0, (int)lOndisk);
+            oScrubEntries[sMainName] = Convert.ToHexString(PeScrub.CaptureRestore(rgDll));//清痕前记原值
             PeScrub.Scrub(rgDll);
             if (bLayout) Console.WriteLine($"[layout] main ondisk={lOndisk} scrubbed={rgDll.Length} fnv={Fnv1aK1(rgDll):x8}");
             rgRaw.Add(rgDll); rgNames.Add(sMainName);
@@ -36,6 +36,7 @@ internal partial class PeWriterAntheil
             long lOndisk = rgCsz[i] > 0 ? rgCsz[i] : rgSz[i];
             byte[] rgDll = new byte[lOndisk];
             Array.Copy(rgPayload, (int)(iBundleDataStart + rgRel[i]), rgDll, 0, (int)lOndisk);
+            oScrubEntries[rgName[i]] = Convert.ToHexString(PeScrub.CaptureRestore(rgDll));//清痕前记原值
             PeScrub.Scrub(rgDll);
             rgRaw.Add(rgDll); rgNames.Add(rgName[i]);
         }
@@ -172,6 +173,14 @@ internal partial class PeWriterAntheil
                 rgTag.CopyTo(rgBody, 0);
                 Array.Copy(rgBlocks[i], 0, rgBody, 16, (int)uPcb);
                 rgBlocks[i] = rgBody;
+                if (i == 0)
+                {
+                    byte[] rgKeyB = VmSeedKeyOf(rgRollEnt);//第二层只盖主块的tag||comp本体 就地剥离按同一区段
+                    uint uMixB = MixAdj(rgKeyB);
+                    if (bLayout) Console.WriteLine($"[layout] fold key0=0x{BitConverter.ToUInt32(rgKeyB, 0):X8} mix=0x{uMixB:X8} h={Fnv64Of(rgBlocks[i], rgBlocks[i].Length):X16}");
+                    rgBlocks[i] = XorBytes(rgBlocks[i], rgKeyB, uMixB);
+                    if (bLayout) Console.WriteLine($"[layout] fold done h={Fnv64Of(rgBlocks[i], rgBlocks[i].Length):X16}");
+                }
                 rgCompLen[i] = (uint)(16 + uPcb);
                 if (i == 0 && rgDecoder.Length > 0)
                 {
@@ -250,6 +259,15 @@ uint uKey = LamKey(sSeed);
         LamWriteXor(rgLamApp, iHead + 4, cbOrigTotal, uKey);
         LamWriteXor(rgLamApp, iHead + 8, (uint)(iDataBase + iTblPos), uKey);
         LamWriteXor(rgLamApp, iHead + 12, (uint)(iDataBase + iNamePos), uKey);
+
+        //容器头前64B已就位且boot尚未嵌入 四个派生值由打包端单遍写入
+        {
+            byte[] rgSkB = SeedKey(Encoding.ASCII.GetBytes(sSeed));
+            byte[] rgDkB = GenDisturb(rgHead);
+            BakeBootValues(rgSkB, rgDkB, MixAdj(rgSkB), uKey);
+            Array.Clear(rgSkB, 0, rgSkB.Length);
+            Array.Clear(rgDkB, 0, rgDkB.Length);
+        }
 
         uint uPos = 0; int iG = 0;
         foreach (var (iKind, iIdx) in rgPhys)
@@ -445,7 +463,7 @@ uint uKey = LamKey(sSeed);
         return sPath;
     }
 
-    private void OpenZ0(string sPath)//诱饵与压缩端同源 已按种子改过落盘 这里只加载
+    private void OpenZ0(string sPath)//诱饵由压缩端按种子改写落盘 这里只加载
     {
         if (fnZ0 != null)
             return;

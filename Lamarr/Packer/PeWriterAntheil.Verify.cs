@@ -21,6 +21,7 @@ internal partial class PeWriterAntheil
             Console.WriteLine("[exp] N/A the artifact has no entry layer, the expectation contract does not apply");
             return 0;
         }
+        if (!AuditEntryLayer(rgExe, out string sAudit)) { Console.WriteLine($"[exp] FAIL entry layer audit: {sAudit}"); return 1; }
 
         int iSent = FindSentinelRun(ly.rgPlain);//哨兵没被覆盖=打包漏 比关系式先判 能指名位置
         if (iSent >= 0) { Console.WriteLine($"[exp] FAIL sentinel intact bootOff=0x{iSent:X}"); return 1; }
@@ -230,7 +231,14 @@ internal partial class PeWriterAntheil
         ly.iCipher = iCipher;
         byte[] rgHead = new byte[Math.Min(Q.iHeadSample, iLayer)];
         Array.Copy(rgExe, (int)lOff0, rgHead, 0, rgHead.Length);
-        byte[] rgKey = Q.KeyStream(rgHead, lSz0, iCipher, Q.TableDigest(rgSz));
+        int iRollLenV = BitConverter.ToInt32(rgExe, (int)(lOff0 + lSz0) - Q.iTailLen + 0);
+        int iEngLenV = BitConverter.ToInt32(rgExe, (int)(lOff0 + lSz0) - Q.iTailLen + 4);
+        int iPrekLenV = BitConverter.ToInt32(rgExe, (int)(lOff0 + lSz0) - Q.iTailLen + 16) ^ (int)Q.uPrekMask;
+        uint uRollKeyEnt = BitConverter.ToUInt32(rgExe, (int)(lOff0 + lSz0) - Q.iTailLen + 8) ^ Q.TailKeyMaskOf(PreKernEcho(rgHead, Q.uDomainSeed));//掩码含前置内核输出
+        uint uPolicyV = BitConverter.ToUInt32(rgExe, (int)(lOff0 + lSz0) - Q.iTailLen + 12) ^ Q.uLayoutMask;
+        Q.EntrySegmentOffsets(iLayer - iPrekLenV, iRollLenV, iEngLenV, uPolicyV, out int iRollOffV, out int iEngOffV);
+        ulong uSelfMix = Q.SelfMixRange(rgExe, (int)lOff0 + iRollOffV, iRollLenV, (int)lOff0 + iEngOffV, iEngLenV);
+        byte[] rgKey = Q.KeyStream(rgHead, lSz0, iCipher, Q.TableDigest(rgSz), VmMaskEcho(rgHead, Q.uDomainSeed, uRollKeyEnt), uSelfMix);
         byte[] rgBody = new byte[iCipher];
         Array.Copy(rgExe, (int)(lOff0 + iLayer), rgBody, 0, iCipher);
         ulong uGot = Q.Hash64(rgBody, 0, rgBody.Length);

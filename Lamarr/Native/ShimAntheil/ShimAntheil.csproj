@@ -30,7 +30,15 @@
     <DebuggerSupport>false</DebuggerSupport>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(LamarrTriageKnobs)' == '1'">
+    <DefineConstants>$(DefineConstants);LAMARR_TRIAGE</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup>
     <Compile Include="..\..\Packer\Q.cs" />
+    <Compile Include="..\..\Packer\QStream.cs" Link="QStream.cs" />
+    <Compile Include="..\..\Packer\Sha512.cs" Link="Sha512.cs" />
+    <Compile Include="..\..\Packer\ChaCha.cs" Link="ChaCha.cs" />
+    <Compile Include="..\..\Packer\ChMask.cs" Link="ChMask.cs" />
   </ItemGroup>
 </Project>

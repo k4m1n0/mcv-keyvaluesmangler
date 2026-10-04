@@ -32,4 +32,8 @@
   <ItemGroup>
     <Compile Include="..\..\Packer\BootExp.cs" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\..\Packer\Sha512.cs" Link="Sha512.cs" />
+    <Compile Include="..\..\Packer\Ed25519.cs" Link="Ed25519.cs" />
+  </ItemGroup>
 </Project>

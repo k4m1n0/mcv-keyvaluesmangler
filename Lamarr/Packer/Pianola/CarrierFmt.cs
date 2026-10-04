@@ -43,7 +43,7 @@ public static class CarrierFmt
 
     public static int WidthOf(int uField) => Inv[(uField >> 3) & 3];
 
-    public static byte WidthCode(int uBits) => uBits switch { 8 => Inv[0], 16 => Inv[1], 32 => Inv[2], 64 => Inv[3], _ => Inv[uBits & 3] };//位[4:3]存宽度码
+    public static byte WidthCode(int uBits) => uBits switch { 8 => Inv[0], 16 => Inv[1], 32 => Inv[2], 64 => Inv[3], _ => Inv[uBits & 3] };
 
     public static string Dump() =>
         $"[carrier-fmt] ver={Ver} code={Code[0]},{Code[1]},{Code[2]},{Code[3]} (field[4:3]=width code, field[2:0]=noise)";

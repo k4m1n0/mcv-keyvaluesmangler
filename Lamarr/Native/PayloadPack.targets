@@ -1,4 +1,8 @@
 <Project>
+  <Target Name="LamarrSeedRetired" BeforeTargets="Publish" Condition="'$(LamarrSeed)' != ''">
+    <Error Text="LamarrSeed is not supported; pass -p:LamarrKey=&lt;64hex&gt; (or -p:LamarrKeyFile=)" />
+  </Target>
+
   <PropertyGroup>
     <LamarrNativeDir>$(MSBuildThisFileDirectory)</LamarrNativeDir>
     <LamarrPackerDir>$(MSBuildThisFileDirectory)..\Packer\</LamarrPackerDir>
@@ -17,10 +21,14 @@
     <LamarrShimArg Condition="'$(LamarrNoEntryLayer)' != '1'">-Shim &quot;$(ShimDll)&quot;</LamarrShimArg>
     <PackerTfm Condition="'$(PackerTfm)' == ''">$(TargetFramework)</PackerTfm>
     <LamarrAntheilInnerArg Condition="'$(Packer)' == 'antheil'">-p:LamarrAntheil=1</LamarrAntheilInnerArg>
-    <LamarrSeed Condition="'$(LamarrSeed)' == '' And '$(Packer)' == 'antheil'">$([System.Guid]::NewGuid().ToString().Replace("-", "").Substring(0,16))</LamarrSeed>
-    <LamarrSeed Condition="'$(LamarrSeed)' == '' And '$(Packer)' != 'antheil'">5EED000100000000</LamarrSeed>
+    <LamarrKeyA Condition="'$(LamarrKey)' == '' And '$(LamarrKeyFile)' == '' And '$(Packer)' == 'antheil' And '$(LamarrReplay)' == ''">$([System.Guid]::NewGuid().ToString("N"))</LamarrKeyA>
+    <LamarrKeyB Condition="'$(LamarrKey)' == '' And '$(LamarrKeyFile)' == '' And '$(Packer)' == 'antheil' And '$(LamarrReplay)' == ''">$([System.Guid]::NewGuid().ToString("N"))</LamarrKeyB>
+    <LamarrKey Condition="'$(LamarrKey)' == '' And '$(LamarrKeyFile)' == '' And '$(Packer)' == 'antheil' And '$(LamarrReplay)' == ''">$(LamarrKeyA)$(LamarrKeyB)</LamarrKey>
     <PayloadMajor Condition="'$(PayloadMajor)' == ''">$([System.Text.RegularExpressions.Regex]::Match('$(TargetFramework)', '[0-9]+').Value)</PayloadMajor>
-    <LamarrSeedArg Condition="'$(Packer)' == 'antheil'">-Seed &quot;$(LamarrSeed)&quot;</LamarrSeedArg>
+    <LamarrKeyArg Condition="'$(Packer)' == 'antheil' And '$(LamarrKey)' != ''">-Key &quot;$(LamarrKey)&quot;</LamarrKeyArg>
+    <LamarrKeyFileArg Condition="'$(LamarrKeyFile)' != ''">-KeyFile &quot;$(LamarrKeyFile)&quot;</LamarrKeyFileArg>
+    <EngineKeyArg Condition="'$(LamarrKeyFile)' != '' And '$(LamarrReplay)' == ''">-KeyFile &quot;$(LamarrKeyFile)&quot;</EngineKeyArg>
+    <EngineKeyArg Condition="'$(LamarrKeyFile)' == '' And '$(LamarrKey)' != '' And '$(LamarrReplay)' == ''">-Key &quot;$(LamarrKey)&quot;</EngineKeyArg>
     <EngineDll Condition="'$(EngineDll)' == ''">$(LamarrNativeDir)out\engine.dll</EngineDll>
     <RtcTiered Condition="'$(RtcTiered)' == ''">default</RtcTiered>
     <LamarrTriageKnobs Condition="'$(LamarrTriageKnobs)' == ''"></LamarrTriageKnobs>
@@ -29,11 +37,25 @@
     <LamarrRuntimePackArg Condition="'$(EnableRuntimePackDownload)' != ''">-p:EnableRuntimePackDownload=$(EnableRuntimePackDownload)</LamarrRuntimePackArg>
     <LamarrNoMorphArg Condition="'$(LamarrNoMorph)' == '1'">-NoMorph</LamarrNoMorphArg>
     <LamarrNoCompressDepsArg Condition="'$(NoCompressDeps)' != ''">-NoCompressDeps &quot;$(NoCompressDeps)&quot;</LamarrNoCompressDepsArg>
-    <LamarrEscrowPlainArg Condition="'$(LamarrEscrowPlain)' == '1'">-EscrowPlain</LamarrEscrowPlainArg>
-    <LamarrEscrowArg Condition="'$(LamarrEscrow)' != ''">-Escrow &quot;$(LamarrEscrow)&quot; $(LamarrEscrowPlainArg)</LamarrEscrowArg>
-    <LamarrReplayArg Condition="'$(LamarrReplay)' != ''">-Replay &quot;$(LamarrReplay)&quot;</LamarrReplayArg>
+    <LamarrShimArgS Condition="'$(LamarrNoEntryLayer)' != '1'">-Shim '$(ShimDll)'</LamarrShimArgS>
+    <LamarrKeyArgS Condition="'$(Packer)' == 'antheil' And '$(LamarrKey)' != '' And '$(LamarrReplay)' == ''">-Key '$(LamarrKey)'</LamarrKeyArgS>
+    <LamarrKeyFileArgS Condition="'$(LamarrKeyFile)' != '' And '$(LamarrReplay)' == ''">-KeyFile '$(LamarrKeyFile)'</LamarrKeyFileArgS>
+    <LamarrNoCompressDepsArgS Condition="'$(NoCompressDeps)' != ''">-NoCompressDeps '$(NoCompressDeps)'</LamarrNoCompressDepsArgS>
+    <LamarrEscrowDiagArgS Condition="'$(LamarrEscrowDiag)' == '1'">-EscrowDiag</LamarrEscrowDiagArgS>
+    <LamarrEscrowPubKeyArgS Condition="'$(LamarrEscrowPubKey)' != ''">-EscrowPubKey '$(LamarrEscrowPubKey)'</LamarrEscrowPubKeyArgS>
+    <LamarrEscrowKeyArgS Condition="'$(LamarrEscrowKey)' != ''">-EscrowKey '$(LamarrEscrowKey)'</LamarrEscrowKeyArgS>
+    <LamarrEscrowArgS Condition="'$(LamarrEscrow)' != ''">-Escrow '$(LamarrEscrow)' $(LamarrEscrowDiagArgS) $(LamarrEscrowPubKeyArgS)</LamarrEscrowArgS>
+    <LamarrReplayArgS Condition="'$(LamarrReplay)' != ''">-Replay '$(LamarrReplay)' $(LamarrEscrowKeyArgS)</LamarrReplayArgS>
+    <LamarrEscrowDiagArg Condition="'$(LamarrEscrowDiag)' == '1'">-EscrowDiag</LamarrEscrowDiagArg>
+    <LamarrEscrowPubKeyArg Condition="'$(LamarrEscrowPubKey)' != ''">-EscrowPubKey &quot;$(LamarrEscrowPubKey)&quot;</LamarrEscrowPubKeyArg>
+    <LamarrEscrowKeyArg Condition="'$(LamarrEscrowKey)' != ''">-EscrowKey &quot;$(LamarrEscrowKey)&quot;</LamarrEscrowKeyArg>
+    <LamarrEscrowArg Condition="'$(LamarrEscrow)' != ''">-Escrow &quot;$(LamarrEscrow)&quot; $(LamarrEscrowDiagArg) $(LamarrEscrowPubKeyArg)</LamarrEscrowArg>
+    <LamarrReplayArg Condition="'$(LamarrReplay)' != ''">-Replay &quot;$(LamarrReplay)&quot; $(LamarrEscrowKeyArg)</LamarrReplayArg>
+    <LamarrReplayEngineArg Condition="'$(LamarrReplay)' != ''">-Replay &quot;$(LamarrReplay)&quot; $(LamarrEscrowKeyArg)</LamarrReplayEngineArg>
     <RtcVersion Condition="'$(RtcVersion)' == ''">$(PayloadMajor).0.0</RtcVersion>
     <RtcRollForward Condition="'$(RtcRollForward)' == ''"></RtcRollForward>
+    <LamarrRtcRollForwardArg Condition="'$(RtcRollForward)' != ''">-RtcRollForward &quot;$(RtcRollForward)&quot;</LamarrRtcRollForwardArg>
+    <LamarrEncryptDepsArg Condition="'$(EncryptDeps)' != ''">-EncryptDeps &quot;$(EncryptDeps)&quot;</LamarrEncryptDepsArg>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(LamarrTriageKnobs)' == '1'">
@@ -55,19 +77,19 @@
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(LamarrNativeDir)build_asm.ps1&quot; -AsmDir &quot;$(LamarrAsmDir)&quot; -OutDir &quot;$(LamarrNativeDir)out&quot; -Packer $(Packer) $(LamarrTriageKnobsArg) $(LamarrNoMorphArg) $(LamarrSeedArg)" />
     <RemoveDir Directories="$(LamarrPackerDir)bin\Release\$(PackerTfm);$(LamarrPackerDir)obj\Release\$(PackerTfm)" ContinueOnError="true" />
     <Error Condition="Exists('$(LamarrPackerDir)bin\Release\$(PackerTfm)\LamarrPacker.exe')" Text="packer wipe failed: LamarrPacker.exe survived the RemoveDir, the build would reuse a stale packer (file locked?)" />
-    <Exec Command="dotnet build &quot;$(LamarrPackerDir)Packer.csproj&quot; -c Release -v q -p:PackerTfm=$(PackerTfm) $(LamarrAntheilInnerArg)" />
+    <Exec Command="dotnet build &quot;$(LamarrPackerDir)Packer.csproj&quot; -c Release -v q -p:PackerTfm=$(PackerTfm) $(LamarrAntheilInnerArg) $(LamarrTriageKnobsInnerArg)" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(LamarrNativeDir)pe.ps1&quot; -ClearCet -Path &quot;$(LamarrPackerDir)bin\Release\$(PackerTfm)\LamarrPacker.exe&quot;" />
     <RemoveDir Directories="$(LamarrNativeDir)BootAntheil\bin\Release\$(BootTfm);$(LamarrNativeDir)BootAntheil\obj\Release\$(BootTfm)" ContinueOnError="true" Condition="'$(Packer)' == 'antheil'" />
     <Error Condition="'$(Packer)' == 'antheil' And Exists('$(LamarrNativeDir)BootAntheil\bin\Release\$(BootTfm)\$(BootName).dll')" Text="boot wipe failed: $(BootName).dll survived the RemoveDir, the build would reuse a stale boot image (file locked?)" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(LamarrNativeDir)build_boot.ps1&quot; -Build -BootName $(BootName) -BootTfm $(BootTfm) $(LamarrTriageKnobsArg) -Win32Res &quot;$(LamarrNativeDir)out\empty.res&quot;" Condition="'$(Packer)' == 'antheil'" />
-    <Exec Command="dotnet build &quot;$(LamarrNativeDir)ShimAntheil\ShimAntheil.csproj&quot; -c $(ShimConfig) -v q -p:ShimTfm=$(BootTfm) -p:ShimName=$(ShimName) -p:Version=$(ShimVersion) -p:FileVersion=$(ShimVersion) -p:Product=$(ShimProduct) -p:Company=$(ShimProduct) -p:AssemblyTitle=$(ShimProduct) -p:EnableRuntimePackDownload=false -p:Win32Resource=&quot;$(LamarrNativeDir)out\empty.res&quot;" Condition="'$(Packer)' == 'antheil'" />
+    <Exec Command="dotnet build &quot;$(LamarrNativeDir)ShimAntheil\ShimAntheil.csproj&quot; -c $(ShimConfig) -v q -p:ShimTfm=$(BootTfm) -p:ShimName=$(ShimName) -p:Version=$(ShimVersion) -p:FileVersion=$(ShimVersion) -p:Product=$(ShimProduct) -p:Company=$(ShimProduct) -p:AssemblyTitle=$(ShimProduct) -p:EnableRuntimePackDownload=false $(LamarrTriageKnobsInnerArg) -p:Win32Resource=&quot;$(LamarrNativeDir)out\empty.res&quot;" Condition="'$(Packer)' == 'antheil'" />
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(LamarrNativeDir)pe.ps1&quot; -Residue -Path &quot;$(ShimDll)&quot; -Quiet" Condition="'$(Packer)' == 'antheil'" />
     <RemoveDir Directories="$(LamarrNativeDir)Boot\bin\Release\$(BootTfm);$(LamarrNativeDir)Boot\obj\Release\$(BootTfm)" ContinueOnError="true" Condition="'$(Packer)' == 'native'" />
     <Error Condition="'$(Packer)' == 'native' And Exists('$(LamarrNativeDir)Boot\bin\Release\$(BootTfm)\LamarrBoot.dll')" Text="boot wipe failed: LamarrBoot.dll survived the RemoveDir, the build would reuse a stale boot image (file locked?)" />
     <Exec Command="dotnet build &quot;$(LamarrNativeDir)Boot\Boot.csproj&quot; -c Release -v q -p:BootTfm=$(BootTfm)" Condition="'$(Packer)' == 'native'" />
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(LamarrNativeDir)build_engine.ps1&quot; -OutDir &quot;$(LamarrNativeDir)out&quot; -Seed $(LamarrSeed) -Prod -PackerTfm $(PackerTfm)" Condition="'$(Packer)' == 'antheil'" />
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(LamarrNativeDir)build_asm.ps1&quot; -AsmDir &quot;$(LamarrAsmDir)&quot; -OutDir &quot;$(LamarrNativeDir)out&quot; -Packer antheil -Pack -InputPath &quot;$(PublishDir)$(AssemblyName).exe&quot; -Output &quot;$(PublishDir)$(AssemblyName)_packed.exe&quot; -Boot &quot;$(LamarrNativeDir)BootAntheil\bin\Release\$(BootTfm)\$(BootName).dll&quot; $(LamarrShimArg) -Decoder &quot;$(LamarrNativeDir)out\Iamdec.dll&quot; -JitHook &quot;$(LamarrNativeDir)out\jithook.dll&quot; -Pheropod &quot;$(LamarrNativeDir)out\z0.dll&quot; -Engine &quot;$(EngineDll)&quot; $(LamarrSeedArg) -AppName $(AssemblyName) -PackerTfm $(PackerTfm) -RtcRollForward &quot;$(RtcRollForward)&quot; -EncryptDeps &quot;$(EncryptDeps)&quot; $(LamarrNoCompressDepsArg) $(LamarrEscrowArg) $(LamarrReplayArg) -Mode antheil" Condition="'$(Packer)' == 'antheil'" />
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(LamarrNativeDir)build_asm.ps1&quot; -AsmDir &quot;$(LamarrAsmDir)&quot; -OutDir &quot;$(LamarrNativeDir)out&quot; -Packer native -Pack -InputPath &quot;$(PublishDir)$(AssemblyName).exe&quot; -Output &quot;$(PublishDir)$(AssemblyName)_packed.exe&quot; -Boot &quot;$(LamarrNativeDir)Boot\bin\Release\$(BootTfm)\LamarrBoot.dll&quot; -PackerTfm $(PackerTfm) -RtcRollForward &quot;$(RtcRollForward)&quot; $(LamarrSeedArg) -Mode clean -StubVersion &quot;$(FileVersion)&quot;" Condition="'$(Packer)' == 'native'" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(LamarrNativeDir)build_engine.ps1&quot; -OutDir &quot;$(LamarrNativeDir)out&quot; $(LamarrReplayEngineArg) $(EngineKeyArg) -Prod -PackerTfm $(PackerTfm)" Condition="'$(Packer)' == 'antheil'" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -Command &quot;&amp; '$(LamarrNativeDir)build_asm.ps1' -AsmDir '$(LamarrAsmDir)' -OutDir '$(LamarrNativeDir)out' -Packer antheil -Pack -InputPath '$(PublishDir)$(AssemblyName).exe' -Output '$(PublishDir)$(AssemblyName)_packed.exe' -Boot '$(LamarrNativeDir)BootAntheil\bin\Release\$(BootTfm)\$(BootName).dll' $(LamarrShimArgS) -Decoder '$(LamarrNativeDir)out\Iamdec.dll' -JitHook '$(LamarrNativeDir)out\jithook.dll' -Pheropod '$(LamarrNativeDir)out\z0.dll' -Engine '$(EngineDll)' $(LamarrKeyArgS) $(LamarrKeyFileArgS) -AppName $(AssemblyName) -PackerTfm $(PackerTfm) $(LamarrRtcRollForwardArg) $(LamarrEncryptDepsArg) $(LamarrNoCompressDepsArgS) $(LamarrEscrowArgS) $(LamarrReplayArgS) -Mode antheil&quot;" Condition="'$(Packer)' == 'antheil'" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(LamarrNativeDir)build_asm.ps1&quot; -AsmDir &quot;$(LamarrAsmDir)&quot; -OutDir &quot;$(LamarrNativeDir)out&quot; -Packer native -Pack -InputPath &quot;$(PublishDir)$(AssemblyName).exe&quot; -Output &quot;$(PublishDir)$(AssemblyName)_packed.exe&quot; -Boot &quot;$(LamarrNativeDir)Boot\bin\Release\$(BootTfm)\LamarrBoot.dll&quot; -PackerTfm $(PackerTfm) $(LamarrRtcRollForwardArg) -Mode clean" Condition="'$(Packer)' == 'native'" />
     <Copy SourceFiles="$(PublishDir)$(AssemblyName)_packed.exe" DestinationFiles="$(PublishDir)$(AssemblyName).exe" OverwriteReadOnlyFiles="true" />
     <Delete Files="$(PublishDir)$(AssemblyName)_packed.exe" />
   </Target>

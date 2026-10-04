@@ -6,9 +6,13 @@ namespace Lamarr.Packer;
 
 public static class MethodEncryptor
 {
-    //这批方法的全局签名表起始序号 掩码域与解密密钥无函数关系
-private static readonly int iVariantShift =
+    //本批方法的全局签名表起始序号
+#if LAMARR_TRIAGE
+    private static readonly int iVariantShift =
         int.TryParse(Environment.GetEnvironmentVariable("LAMARR_VARIANT_SHIFT") ?? "", out int iVs) ? (iVs & 3) : 0;
+#else
+    private static readonly int iVariantShift = 0;//发行构建恒0 不可被环境变量位移
+#endif
 
     public static List<uint> EncryptAll(byte[] rgD, ulong uKey, ulong uMaskKey, IReadOnlyCollection<uint>? rgOnly = null, int iBase = 0, List<byte>? rgVariants = null, int[]? rgPerm = null, List<int>? rgSlots = null)
     {
@@ -50,7 +54,7 @@ private static readonly int iVariantShift =
             int iEb = EncryptBody(rgD, iOff, uKey);
             if (iEb > 0)
             {
-                //第二层密钥由钩子按全局序号现算 表里不存密钥 全局序号=本批序号+iBase 先过全空间置换再派生 缺省恒等
+                //第二层密钥由钩子按全局序号现算 表里不存密钥 序号先过全空间置换再派生 无置换时恒等
             if (rgPerm != null && (uint)(iBase + iLocal) >= (uint)rgPerm.Length) throw new InvalidOperationException("method index space exhausted (slot table too small)");
             int iSlot = rgPerm == null ? iBase + iLocal : rgPerm[iBase + iLocal];
             ulong uKey2 = DeriveKey2(uKey, (uint)iSlot);
@@ -64,6 +68,121 @@ private static readonly int iVariantShift =
             }
         }
         return rgCrcs;
+    }
+
+    //离线逆 槽位靠内容寻址恢复 表项是Crc32(层1输出)异或掩码
+    //候选明文重加密回去必须与密文体逐字节相同 否则换变体或换候选槽位
+    public static (int iEnc, int iOk, int iFail) DecryptAll(byte[] rgD, ulong uKey, ulong uMaskKey, byte[] rgSigBlob)
+    {
+        if (rgD.Length < 0x40) throw new InvalidDataException("too small");
+        int iPe = (int)ReadU32(rgD, 0x3C);
+        if (iPe <= 0 || iPe + 0x60 >= rgD.Length || ReadU32(rgD, iPe) != 0x4550)
+            throw new InvalidDataException("no PE signature");
+        ushort usNumSec = ReadU16(rgD, iPe + 6);
+        ushort usOptSize = ReadU16(rgD, iPe + 20);
+        ushort usMagic = ReadU16(rgD, iPe + 24);//0x10B/0x20B
+        int iDdStart = iPe + 24 + (usMagic == 0x20B ? 112 : 96);
+        if (ReadU32(rgD, iDdStart + 14 * 8) == 0) throw new InvalidDataException("no CLI header");
+
+        uint uMaskLo = (uint)MaskOf(uMaskKey);
+        var dic = new Dictionary<uint, List<int>>();
+        if (rgSigBlob != null && rgSigBlob.Length >= 8 && ReadU32(rgSigBlob, 0) == 0x32474953u)//"SIG2"
+        {
+            int iNSig = (int)ReadU32(rgSigBlob, 4);
+            if (iNSig <= 0 || 8L + (long)iNSig * 5 > rgSigBlob.Length)
+                throw new InvalidDataException($"SIG2 table bad: count={iNSig} len={rgSigBlob.Length}");
+            for (int i = 0; i < iNSig; i++)
+            {
+                uint u = ReadU32(rgSigBlob, 8 + i * 4);
+                if (!dic.TryGetValue(u, out var rgSlot)) { rgSlot = new List<int>(1); dic[u] = rgSlot; }
+                rgSlot.Add(i);
+            }
+        }
+
+        int iEnc = 0, iOk = 0, iFail = 0;
+        using var ms = new MemoryStream(rgD, writable: false);
+        using var per = new PEReader(ms);
+        var mr = per.GetMetadataReader();
+        foreach (var mdh in mr.MethodDefinitions)
+        {
+            var md = mr.GetMethodDefinition(mdh);
+            uint uRva = (uint)md.RelativeVirtualAddress;
+            if (uRva == 0) continue;//平台调用与抽象与接口方法无方法体
+            int iOff = RvaToOffset(rgD, iPe, usOptSize, usNumSec, uRva);
+            byte b0 = rgD[iOff];
+            int iIlStart = ((b0 & 3) == 2) ? iOff + 1 : iOff + 12;//tiny头1字节 fat头12字节
+            int iEb = (b0 & 3) == 2 ? (b0 >> 2) : ((b0 & 3) == 3 ? (int)ReadU32(rgD, iOff + 4) : 0);
+            if (iEb <= 0 || iEb > 0x00FFFFFF || iIlStart + iEb > rgD.Length) continue;
+
+            byte[] rgSav = new byte[iEb];
+            Array.Copy(rgD, iIlStart, rgSav, 0, iEb);
+            uint uCrc = Crc32(rgD, iIlStart, iEb) ^ uMaskLo;
+            if (!dic.TryGetValue(uCrc, out var rgCand)) continue;//不在表里 = 该体从未加密
+            iEnc++;
+            bool bDone = false;
+            foreach (int iSlot in rgCand)
+            {
+                ulong uKey2 = DeriveKey2(uKey, (uint)iSlot);
+                int iVx0 = ((int)(uKey2 ^ uKey) + iVariantShift) & 3;//变体号由key2与key加位移导出
+                for (int iT = 0; iT < 4 && !bDone; iT++)
+                {
+                    int iVx = (iVx0 + iT) & 3;
+                    byte[] rgT = (byte[])rgSav.Clone();
+                    DeXor(rgT, 0, iEb, uKey2, iVx, 1);//先层1后层0 与加密顺序相反
+                    DeXor(rgT, 0, iEb, uKey, 0, 0);
+                    byte[] rgV = (byte[])rgT.Clone();
+                    Xor(rgV, 0, iEb, uKey, 0, 0);//重加密回密文
+                    Xor(rgV, 0, iEb, uKey2, iVx, 1);
+                    bool bSame = true;
+                    for (int k = 0; k < iEb; k++) if (rgV[k] != rgSav[k]) { bSame = false; break; }
+                    if (!bSame) continue;
+                    Array.Copy(rgT, 0, rgD, iIlStart, iEb);
+                    bDone = true;
+                }
+            }
+            if (bDone) iOk++; else iFail++;
+        }
+        return (iEnc, iOk, iFail);
+    }
+
+    private static void DeXor(byte[] rgD, int iOff, int iLen, ulong uKey, int iV, int iLayer)//Xor的逆 因为nibble置换表不是自逆 解密要用GenPerm产出的逆表
+    {
+        byte[] rgPH, rgPL, rgIH, rgIL;
+        GenPerm(uKey, out rgPH, out rgPL, out rgIH, out rgIL);
+        byte[] ckey = KdfChaCha(uKey);
+        byte[] rgNonce = new byte[12];
+        if (iLayer == 1)
+        {
+            W32(rgNonce, 0, (uint)(uKey & 0xFFFFFFFFu));
+            W32(rgNonce, 4, (uint)(uKey >> 32));
+            W32(rgNonce, 8, 0x2B7E1516u ^ (uint)iV);
+        }
+        else
+        {
+            W32(rgNonce, 0, (uint)(uKey & 0xFFFFFFFFu));
+            W32(rgNonce, 4, 0);
+            W32(rgNonce, 8, 0xC2B2AE35u);
+        }
+        byte[] ks = new byte[64];
+        uint uCounter = 0;
+        int ki = 0;
+        ChaCha.Block(ckey, rgNonce, uCounter, ks, 20);
+        ulong uPrev = 0;
+        for (int i = 0; i < iLen; i++)
+        {
+            if (ki >= 64)
+            {
+                uCounter++;
+                ChaCha.Block(ckey, rgNonce, uCounter, ks, 20);
+                ki = 0;
+            }
+            byte byK = (byte)(ks[ki] ^ uPrev);
+            byte byC = rgD[iOff + i];//uPrev与加密侧同为前一个密文字节 所以必须先读后写
+            byte byM = (byte)((rgIH[byC >> 4] << 4) | rgIL[byC & 0xF]);
+            rgD[iOff + i] = (byte)(byM ^ byK);
+            uPrev = byC;
+            ki++;
+        }
     }
 
     private static int RvaToOffset(byte[] rgD, int iPe, ushort usOptSize, ushort usNumSec, uint uRva)
@@ -102,7 +221,7 @@ private static readonly int iVariantShift =
         return 0;
     }
 
-    private static void Xor(byte[] rgD, int iOff, int iLen, ulong uKey, int iV, int iLayer)//ChaCha20 keystream先nibble置换再XOR带CFB轮数由变体选
+    private static void Xor(byte[] rgD, int iOff, int iLen, ulong uKey, int iV, int iLayer)//ChaCha20密钥流先nibble置换再异或 走CFB 轮数由变体选
     {
         byte[] rgPH, rgPL, rgIH, rgIL;
         GenPerm(uKey, out rgPH, out rgPL, out rgIH, out rgIL);
@@ -124,14 +243,14 @@ private static readonly int iVariantShift =
         byte[] ks = new byte[64];
         uint uCounter = 0;
         int ki = 0;
-        ChaChaBlock(ckey, rgNonce, uCounter, ks, iRounds);
+        ChaCha.Block(ckey, rgNonce, uCounter, ks, iRounds);
         ulong uPrev = 0;
         for (int i = 0; i < iLen; i++)
         {
             if (ki >= 64)
             {
                 uCounter++;
-                ChaChaBlock(ckey, rgNonce, uCounter, ks, iRounds);
+                ChaCha.Block(ckey, rgNonce, uCounter, ks, iRounds);
                 ki = 0;
             }
             byte byK = (byte)(ks[ki] ^ uPrev);
@@ -143,51 +262,7 @@ private static readonly int iVariantShift =
         }
     }
 
-    private static void ChaChaBlock(byte[] rgKey, byte[] rgNonce, uint uCounter, byte[] rgOut, int iRounds)//RFC8439 ChaCha20块生成rounds=8/12/20
-    {
-        uint[] st = new uint[16];
-        st[0] = 0x61707865; st[1] = 0x3320646e; st[2] = 0x79622d32; st[3] = 0x6b206574;
-        for (int i = 0; i < 8; i++) st[4 + i] = ReadU32(rgKey, i * 4);
-        st[12] = uCounter;
-        st[13] = ReadU32(rgNonce, 0); st[14] = ReadU32(rgNonce, 4); st[15] = ReadU32(rgNonce, 8);
-        uint[] ws = (uint[])st.Clone();
-        int iDr = iRounds / 2;
-        for (int r = 0; r < iDr; r++)
-        {
-            Qr(ref ws[0], ref ws[4], ref ws[8], ref ws[12]);
-            Qr(ref ws[1], ref ws[5], ref ws[9], ref ws[13]);
-            Qr(ref ws[2], ref ws[6], ref ws[10], ref ws[14]);
-            Qr(ref ws[3], ref ws[7], ref ws[11], ref ws[15]);
-            Qr(ref ws[0], ref ws[5], ref ws[10], ref ws[15]);
-            Qr(ref ws[1], ref ws[6], ref ws[11], ref ws[12]);
-            Qr(ref ws[2], ref ws[7], ref ws[8], ref ws[13]);
-            Qr(ref ws[3], ref ws[4], ref ws[9], ref ws[14]);
-        }
-        for (int i = 0; i < 16; i++) ws[i] += st[i];
-        for (int i = 0; i < 16; i++) W32(rgOut, i * 4, ws[i]);
-    }
-
-    private static void Qr(ref uint a, ref uint b, ref uint c, ref uint d)
-    {
-        a += b; d ^= a; d = (d << 16) | (d >> 16);
-        c += d; b ^= c; b = (b << 12) | (b >> 20);
-        a += b; d ^= a; d = (d << 8) | (d >> 24);
-        c += d; b ^= c; b = (b << 7) | (b >> 25);
-    }
-
-    internal static byte[] KdfChaCha(ulong uKey)//KDF取ChaCha块的key=0 counter=0 nonce=[key,域常数] 前32字节
-    {
-        byte[] key0 = new byte[32];
-        byte[] rgNonce = new byte[12];
-        W32(rgNonce, 0, (uint)(uKey & 0xFFFFFFFFu));
-        W32(rgNonce, 4, (uint)(uKey >> 32));
-        W32(rgNonce, 8, 0x017A9C53u);
-        byte[] blk = new byte[64];
-        ChaChaBlock(key0, rgNonce, 0, blk, 20);
-        byte[] rgOut = new byte[32];
-        Array.Copy(blk, 0, rgOut, 0, 32);
-        return rgOut;
-    }
+    internal static byte[] KdfChaCha(ulong uKey) => ChaCha.Kdf(uKey);//核心在ChaCha 这里只是对外的薄包装
 
     private static void W32(byte[] rg, int iOff, uint uV)
     {
@@ -252,7 +327,7 @@ private static readonly int iVariantShift =
 
     private static ulong Rol64(ulong uV, int iN) => (uV << iN) | (uV >> (64 - iN));
 
-    private static ulong MaskOf(ulong uKey) => uKey ^ (uKey >> 16) ^ (uKey << 13) ^ 0x9E3779B97F4A7C15UL;
+    internal static ulong MaskOf(ulong uKey) => uKey ^ (uKey >> 16) ^ (uKey << 13) ^ 0x9E3779B97F4A7C15UL;
 
     internal static ulong DeriveKey2(ulong uKey, uint uId)//与方法的全局序号绑定 常量要小于2^31 便于asm用imm32
     {

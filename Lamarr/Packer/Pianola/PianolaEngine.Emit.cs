@@ -27,7 +27,7 @@ public static partial class PianolaEngine
         sb.AppendLine("    inc rsi");
         sb.AppendLine("    movzx eax, byte ptr [rsi]");
         sb.AppendLine("    inc rsi");
-        sb.AppendLine("    movzx r8d, al       ; width");
+        sb.AppendLine("    movzx r8d, al ; width");
         sb.AppendLine("    cmp r8d, 0");
         sb.AppendLine("    je mi_8");
         sb.AppendLine("    cmp r8d, 1");
@@ -120,7 +120,7 @@ public static partial class PianolaEngine
                 break;
             case "shl": case "shr": case "asr": case "rol": case "ror"://移位与旋转值按宽度取 计数先按位宽取模再移
             {
-                sb.AppendLine("    mov r9, rcx        ; preserve rd (cl is reused for the count)");
+                sb.AppendLine("    mov r9, rcx ; preserve rd (cl is reused for the count)");
                 sb.AppendLine(RdReg(w, "rax", "r9", nm == "asr"));
                 sb.AppendLine("    mov cl, byte ptr [rbx+r10*8]");
                 string sMod = CntMod(w);
@@ -203,13 +203,13 @@ static void EmitBranch(StringBuilder sb)
         sb.AppendLine("    jmp main_loop");
 
         sb.AppendLine("h_call:");
-        sb.AppendLine("    ; V1: the return address goes onto the VM stack inside M (host stack holds no VM state)");
+        sb.AppendLine("    ; the return address goes onto the VM stack inside M (host stack holds no VM state)");
         sb.AppendLine("    movsx rax, word ptr [rsi]");
         sb.AppendLine("    add rsi, 2");
         sb.AppendLine("    inc r15");
-        sb.AppendLine($"    cmp r15, {CallMax}            ; depth cap, runaway recursion stops at h_bad");
+        sb.AppendLine($"    cmp r15, {CallMax} ; depth cap, runaway recursion stops at h_bad");
         sb.AppendLine("    ja h_bad");
-        sb.AppendLine("    lea rdx, [rbp-8]      ; push: the VM stack must stay at or above the data page base");
+        sb.AppendLine("    lea rdx, [rbp-8] ; push: the VM stack must stay at or above the data page base");
         sb.AppendLine("    cmp rdx, rdi");
         sb.AppendLine("    jb h_bad");
         sb.AppendLine("    mov [rdx], rsi");
@@ -219,9 +219,9 @@ static void EmitBranch(StringBuilder sb)
         sb.AppendLine("    jmp main_loop");
 
         sb.AppendLine("h_jcc:");
-        sb.AppendLine("    movzx ecx, byte ptr [rsi]   ; cond");
+        sb.AppendLine("    movzx ecx, byte ptr [rsi] ; cond");
         sb.AppendLine("    inc rsi");
-        sb.AppendLine("    movsx rax, word ptr [rsi]   ; off (signed 64)");
+        sb.AppendLine("    movsx rax, word ptr [rsi] ; off (signed 64)");
         sb.AppendLine("    add rsi, 2");
         sb.AppendLine("    mov r8, rax");
         sb.AppendLine("    cmp ecx, 0");
@@ -248,13 +248,13 @@ static void EmitBranch(StringBuilder sb)
         sb.AppendLine("    jz jcc_take");
         sb.AppendLine("    jmp main_loop");
         sb.AppendLine("jcc_take:");
-        sb.AppendLine("    lea rsi, [rsi+r8-4]    ; rsi=opcode+4 (1 opcode+1 cond+2 off); target=opcode+off");
+        sb.AppendLine("    lea rsi, [rsi+r8-4] ; rsi=opcode+4 (1 opcode+1 cond+2 off); target=opcode+off");
         sb.AppendLine("    jmp main_loop");
         sb.AppendLine("h_ret:");
-        sb.AppendLine("    ; V1: pop the return address off the VM stack; depth in r15, an unbalanced RET goes to h_bad");
+        sb.AppendLine("    ; pop the return address off the VM stack; depth in r15, an unbalanced RET goes to h_bad");
         sb.AppendLine("    cmp r15, 0");
         sb.AppendLine("    jbe h_bad");
-        sb.AppendLine("    lea rdx, [rbp+8]      ; the VM stack top must stay inside the data page");
+        sb.AppendLine("    lea rdx, [rbp+8] ; the VM stack top must stay inside the data page");
         sb.AppendLine("    lea rcx, [rdi+1000h]");
         sb.AppendLine("    cmp rdx, rcx");
         sb.AppendLine("    ja h_bad");
@@ -277,14 +277,27 @@ static void EmitLdSt(StringBuilder sb)
     static void EmitMem(StringBuilder sb, string sDir, int w)
     {
         DecPair(sb);//ecx=rd, r10=rs
-        sb.AppendLine("    mov rax, [rbx+r10*8]   ; addr");
+        sb.AppendLine("    mov rax, [rbx+r10*8] ; addr");
         sb.AppendLine("    mov r8, rax");
-        sb.AppendLine("    cmp r8, 1000h          ; V1: the address itself must stay inside the data page, a negative value wraps past this test");
+        sb.AppendLine("    cmp r8, 1000h ; the address itself must stay inside the data page, a negative value wraps past this test");
         sb.AppendLine("    jae h_bad");
         int nb = new[] { 1, 2, 4, 8 }[w];//边界检查addr+size<=cbM
         sb.AppendLine($"    lea rax, [r8+{nb}]");
-        sb.AppendLine("    cmp rax, 1000h         ; V1: data page limit (code window / host ctx are not VM addressable)");
+        sb.AppendLine("    cmp rax, 1000h ; data page limit (code window / host ctx are not VM addressable)");
         sb.AppendLine("    ja h_bad");
+        sb.AppendLine("    ; page-window translation. The data page is carved into 2^10 byte slots; ctx[172]");
+        sb.AppendLine("    ; points at a per-run permutation table (0 = identity, i.e. the pre-permutation mapping).");
+        sb.AppendLine("    mov r9, qword ptr [rbx+172]");
+        sb.AppendLine("    test r9, r9");
+        sb.AppendLine($"    jz ldstv_{sDir}{w}");
+        sb.AppendLine("    mov rax, r8");
+        sb.AppendLine("    shr rax, 10");
+        sb.AppendLine("    mov eax, dword ptr [r9+rax*4]");
+        sb.AppendLine("    and eax, 3");
+        sb.AppendLine("    shl eax, 10");
+        sb.AppendLine("    and r8, 3FFh");
+        sb.AppendLine("    or r8, rax");
+        sb.AppendLine($"ldstv_{sDir}{w}:");
         if (sDir == "ld")
         {
             string sSzr = w == 0 ? "byte" : w == 1 ? "word" : w == 2 ? "dword" : "qword";

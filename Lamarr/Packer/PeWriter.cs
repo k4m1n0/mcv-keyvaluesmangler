@@ -32,16 +32,13 @@ internal class PeWriter
     private int iIdxDeps = -1, iIdxRtc = -1;
     private long lOrigDepsLoc, lOrigRtcLoc;
     private readonly HashSet<string> rgStripDeps = new(StringComparer.OrdinalIgnoreCase);
-    //null=不改版本
-    private string? sRtcVersion = null;
+    private string? sRtcVersion = null;//null=不改版本
     public void SetRtcVersion(string sV) { sRtcVersion = string.IsNullOrEmpty(sV) ? null : sV; }
     private string sTiered = "default";
     public void SetTiered(string sM) { sTiered = sM; }
-    //载荷TFM主版本=桩的首要主版本 由构建链传入
-    private int iPayloadMajor = 0;
+    private int iPayloadMajor = 0;//载荷TFM主版本等于桩的首要主版本 由构建链传入
     public void SetPayloadMajor(int iV) { iPayloadMajor = iV; }
-    //null=沿用载荷值 否则取该主版本最新运行时 缺失取更高一级
-    private string? sRollForward = null;
+    private string? sRollForward = null;//null=取载荷值 否则取该主版本最新运行时 缺失取更高一级
     public void SetRollForward(string? sV) { sRollForward = string.IsNullOrEmpty(sV) ? null : sV; }
     internal const string sRollForwardDefault = "Major";
     private int iEntryCount;
@@ -59,8 +56,7 @@ internal class PeWriter
     private byte[]? rgRes;
     private uint uResRva, uResLen, uResDirOff, uResDirSize;
 
-    //8字节头部偏移加32字节签名
-    private static readonly byte[] rgSignature = new byte[]
+    protected static readonly byte[] rgSignature = new byte[]//.NET单文件bundle的公开签名 只用于解析输入载荷 自己的锚点用派生键rgSigOut 不要拿公开常量当锚点
     {
         0x8b,0x12,0x02,0xb9,0x6a,0x61,0x20,0x38,0x72,0x7b,0x93,0x02,0x14,0xd7,0xa0,0x32,
         0x13,0xf5,0xb9,0xe6,0xef,0xae,0x33,0x18,0xee,0x3b,0x2d,0xce,0x24,0xb3,0x6a,0xae
@@ -68,6 +64,8 @@ internal class PeWriter
 
     #endregion
     #region 入口
+
+    //输出标记的签名恒为公开bundle签名 真native重建走构建侧产物
 
     public void LoadStub(string sPath)
     {
@@ -92,28 +90,7 @@ internal class PeWriter
         rgStubCode = new byte[uVs];
         Array.Copy(rgStub, (int)uRaw, rgStubCode, 0, (int)uVs);
 
-        int iOptStub = iPe + 24;
-        uint uResDirRva = BitConverter.ToUInt32(rgStub, iOptStub + 0x70 + 2 * 8);
-        uResDirSize = BitConverter.ToUInt32(rgStub, iOptStub + 0x70 + 2 * 8 + 4);
-        if (uResDirRva != 0 && uResDirSize != 0)
-        {
-            for (int i = 0; i < usCnt; i++)
-            {
-                int iOff = iS + i * 40;
-                uint ua = BitConverter.ToUInt32(rgStub, iOff + 12);
-                uint uv = BitConverter.ToUInt32(rgStub, iOff + 8);
-                uint ur = BitConverter.ToUInt32(rgStub, iOff + 20);
-                uint urs = BitConverter.ToUInt32(rgStub, iOff + 16);
-                if (ua == 0 || uResDirRva < ua || uResDirRva >= ua + Math.Max(uv, urs)) continue;
-                uResRva = ua;
-                uResLen = Math.Max(uv, urs);
-                uResDirOff = uResDirRva - uResRva;
-                rgRes = new byte[uResLen];
-                long lCopy = Math.Min(uResLen, Math.Max(0, rgStub.Length - (int)ur));
-                Array.Copy(rgStub, (int)ur, rgRes, 0, (int)lCopy);
-                break;
-            }
-        }
+        //桩是纯结构宿主不自带.rsrc 产物的.rsrc一律来自载荷 载荷没有就不写该节
 
         //push rbp mov rbp,rsp
         int iFound = -1;
@@ -134,7 +111,97 @@ internal class PeWriter
     public void LoadPayload(string sPath)
     {
         sPayloadPath = sPath;
-        rgPayload = File.ReadAllBytes(sPath);
+        LoadPayloadCore(File.ReadAllBytes(sPath), $"{Path.GetFileNameWithoutExtension(sPath)}.dll");
+    }
+
+    //零件合成输入载体 供离线重建native同载荷产物 头区取产物自身的PE头 条目必须按产物自身的顺序与字节原样给
+    //合成结果直接喂给载荷解析核心 不自创格式也不分叉行为
+    public void LoadPayloadFromParts(string sMainName, byte[] rgHdrDonor,
+        IReadOnlyList<(string sName, byte[] rgData, byte bType)> rgParts, byte[]? rgBundlePrefix)
+    {
+        int iPeD = BitConverter.ToInt32(rgHdrDonor, 0x3C);
+        if (iPeD <= 0 || iPeD + 0x60 >= rgHdrDonor.Length || BitConverter.ToUInt32(rgHdrDonor, iPeD) != 0x4550)
+            throw new InvalidOperationException("header donor is not a PE");
+        uint uFileAlignD = BitConverter.ToUInt32(rgHdrDonor, iPeD + 24 + 36);
+        if (uFileAlignD == 0) uFileAlignD = 0x200;
+
+        byte[] rgPrefix = rgBundlePrefix ?? BuildPartsPrefix(sMainName);
+        if (rgPrefix.Length < 12) throw new InvalidOperationException("bundle prefix too small");
+        uint uMajor = BitConverter.ToUInt32(rgPrefix, 0);
+        int iPos = 0;
+        ReadU32(rgPrefix, ref iPos);
+        ReadU32(rgPrefix, ref iPos);
+        ReadI32(rgPrefix, ref iPos);
+        ReadStr(rgPrefix, ref iPos);
+        int iDepsPos = -1, iRtcPos = -1;
+        if (uMajor >= 2)
+        {
+            iDepsPos = iPos; iPos += 16;   //deps loc + size
+            iRtcPos = iPos; iPos += 16;    //rtc loc + size
+            iPos += 8;                     //flags
+        }
+        int iEntryStart = iPos;
+        BitConverter.GetBytes(rgParts.Count).CopyTo(rgPrefix, 8);
+
+        int iDataStart = (int)AlignUp((uint)rgHdrDonor.Length, uFileAlignD);
+        using var ms = new MemoryStream();
+        ms.Write(rgHdrDonor, 0, rgHdrDonor.Length);
+        Pad(ms, iDataStart - rgHdrDonor.Length);
+        var rgAbs = new long[rgParts.Count];
+        for (int i = 0; i < rgParts.Count; i++)
+        {
+            rgAbs[i] = ms.Position;
+            ms.Write(rgParts[i].rgData, 0, rgParts[i].rgData.Length);
+        }
+        //前缀里的deps与rtc的loc与size必须指向本载体的条目 认不出就会绕过依赖剥离与运行时配置改写
+        for (int i = 0; i < rgParts.Count; i++)
+        {
+            string sNmP = rgParts[i].sName;//按后缀认清单条目 用Contains会让runtimeconfig.dev.json也命中同一个槽
+            int iAt = sNmP.EndsWith(".deps.json", StringComparison.OrdinalIgnoreCase) ? iDepsPos
+                : sNmP.EndsWith(".runtimeconfig.json", StringComparison.OrdinalIgnoreCase) ? iRtcPos : -1;
+            if (iAt < 0) continue;
+            BitConverter.GetBytes(rgAbs[i]).CopyTo(rgPrefix, iAt);
+            BitConverter.GetBytes((long)rgParts[i].rgData.Length).CopyTo(rgPrefix, iAt + 8);
+        }
+        long lHdr = ms.Position;
+        if (uMajor >= 2 && iEntryStart <= 12) throw new InvalidOperationException("bundle prefix layout mismatch");
+        ms.Write(rgPrefix, 0, rgPrefix.Length);
+        for (int i = 0; i < rgParts.Count; i++)
+        {
+            ms.Write(BitConverter.GetBytes(rgAbs[i]));
+            ms.Write(BitConverter.GetBytes((long)rgParts[i].rgData.Length));
+            if (uMajor >= 6) ms.Write(new byte[8]);//csz为0表示原样存放 合成条目不压缩
+            ms.WriteByte(rgParts[i].bType);
+            byte[] rgN = Encoding.UTF8.GetBytes(rgParts[i].sName);
+            WriteBundleStr(ms, rgN);
+        }
+        ms.Write(BitConverter.GetBytes(lHdr));
+        ms.Write(rgSignature, 0, 32);
+
+        sPayloadPath = "(synthesized parts)";
+        LoadPayloadCore(ms.ToArray(), sMainName);
+        Console.WriteLine($"  parts carrier: hdr=0x{lHdr:X} data=0x{iDataStart:X} entries={rgParts.Count} major={uMajor}");
+    }
+
+    private static byte[] BuildPartsPrefix(string sMainName)//产物自身bundle头取不到时的回退major=2 minor=0 flags=0 bundleId=主程序集名去扩展名
+    {
+        string sId = Path.GetFileNameWithoutExtension(sMainName);
+        using var ms = new MemoryStream();
+        ms.Write(BitConverter.GetBytes(2u));
+        ms.Write(BitConverter.GetBytes(0u));
+        ms.Write(BitConverter.GetBytes(0));
+        WriteBundleStr(ms, Encoding.UTF8.GetBytes(sId));
+        ms.Write(new byte[40]);
+        return ms.ToArray();
+    }
+
+    private static readonly byte[] rgZeroPad = new byte[0x1000];//Pad用块写 省掉每字节一次流调用
+    private static void PadCore(int iN, Action<int> w) { while (iN > 0) { int n = Math.Min(iN, rgZeroPad.Length); w(n); iN -= n; } }
+    private static void Pad(MemoryStream ms, int iN) => PadCore(iN, n => ms.Write(rgZeroPad, 0, n));
+
+    private void LoadPayloadCore(byte[] rg, string sMainNameIn)
+    {
+        rgPayload = rg;
         iPeOff = BitConverter.ToInt32(rgPayload, 0x3C);
         if (iPeOff + 0x18 >= rgPayload.Length || BitConverter.ToUInt32(rgPayload, iPeOff) != 0x4550)
             throw new InvalidOperationException("Input is not a PE");
@@ -151,7 +218,40 @@ internal class PeWriter
         iBundleDataStart = (int)ParseBundleFirstEntryOffset(rgPayload, lBundleHeaderOffset);
         if (iBundleDataStart <= 0 || iBundleDataStart >= rgPayload.Length)
             throw new InvalidOperationException("Invalid bundle layout");
-        sMainName = $"{Path.GetFileNameWithoutExtension(sPath)}.dll";
+        sMainName = sMainNameIn;
+        //框架设置的真源是载荷自己的runtimeconfig 调用方显式给的优先
+        bool bRtcEntry = false;//区分没有rtc条目可容忍与条目在但解析失败必须响亮失败
+        try
+        {
+            if (FindRtcEntry(rgPayload, out int iOfs, out int iSz, out int iCsz))
+            {
+                bRtcEntry = true;
+                byte[] rgJson = ReadMember(rgPayload, iOfs, iSz, iCsz);
+                if (rgJson.Length > 0 && ParseRtc(rgJson, out int iMj, out string? sVer, out string sTier))
+                {
+                    if (iPayloadMajor == 0 && iMj > 0) iPayloadMajor = iMj;
+                    if (sRtcVersion == null) sRtcVersion = sVer;
+                    if (sTier == "off") sTiered = "off";
+                    Console.WriteLine($"  payload rtc: major={iMj} version={sVer ?? "-"} tiered={sTier}");
+                }
+            }
+        }
+        catch (Exception eRtc)
+        {
+            if (bRtcEntry) throw new InvalidOperationException("payload rtc entry was found but could not be parsed (payload/schema changed?): " + eRtc.Message, eRtc);
+            Console.WriteLine($"  payload rtc derive skipped ({eRtc.Message})");
+        }
+        //产物的.rsrc与载荷整节继承 载荷没有就不写该节 来源只有载荷这一处 离线重建由SetResourceOverride覆盖
+        if (TryExtractRes(rgPayload, out byte[]? rgResP, out uint uRvaP, out uint uLenP, out uint uDirOffP, out uint uDirSizeP))
+        {
+            rgRes = rgResP; uResRva = uRvaP; uResLen = uLenP; uResDirOff = uDirOffP; uResDirSize = uDirSizeP;
+            Console.WriteLine($"  payload .rsrc: rva=0x{uRvaP:X} len={uLenP} dirOff=0x{uDirOffP:X} dirSize={uDirSizeP}");
+        }
+        else
+        {
+            rgRes = null; uResRva = 0; uResLen = 0; uResDirOff = 0; uResDirSize = 0;
+            Console.WriteLine("  payload .rsrc: none (artifact will carry no .rsrc section, DD2=0)");
+        }
     }
 
     public void LoadBoot(string sPath)
@@ -202,7 +302,7 @@ internal class PeWriter
     //从载荷runtimeconfig派生 框架主版本/版本/分层设置 未显式传参时用
     public static bool PeekPayload(string sPath, out int iMajor, out string? sVersion, out string? sTiered)
     {
-        iMajor = 0; sVersion = null; sTiered = null;
+        iMajor = 0; sVersion = null; sTiered = "default";
         try
         {
             byte[] rg = File.ReadAllBytes(sPath);
@@ -210,27 +310,60 @@ internal class PeWriter
             if (!pe.FindRtcEntry(rg, out int iOfs, out int iSize, out int iCsz)) return false;
             byte[] rgJson = ReadMember(rg, iOfs, iSize, iCsz);
             if (rgJson.Length == 0) return false;
-            using var doc = JsonDocument.Parse(rgJson);
-            if (!doc.RootElement.TryGetProperty("runtimeOptions", out JsonElement oRt)) return false;
-            if (oRt.TryGetProperty("framework", out JsonElement oFw) && oFw.TryGetProperty("version", out JsonElement oVer) && oVer.ValueKind == JsonValueKind.String)
-            {
-                sVersion = oVer.GetString();
-                if (!string.IsNullOrEmpty(sVersion))
-                {
-                    int iDot = sVersion!.IndexOf('.');
-                    if (iDot > 0 && int.TryParse(sVersion.Substring(0, iDot), out int iMj)) iMajor = iMj;
-                }
-            }
-            sTiered = "default";
-            if (oRt.TryGetProperty("configProperties", out JsonElement oCfg) && oCfg.ValueKind == JsonValueKind.Object
-                && oCfg.TryGetProperty("System.Runtime.TieredCompilation", out JsonElement oT) && oT.ValueKind == JsonValueKind.False)
-                sTiered = "off";
-            return sVersion != null || iMajor > 0;
+            return ParseRtc(rgJson, out iMajor, out sVersion, out sTiered);
         }
         catch (Exception)
         {
             return false;
         }
+    }
+
+    //runtimeconfig.json给出框架主版本与版本与分层
+    //主版本取tfm优先否则取框架版本首段 版本收framework与frameworks两种形状并优先NETCore.App 分层取TieredCompilation开关
+    private static bool ParseRtc(byte[] rgJson, out int iMajor, out string? sVersion, out string sTiered)
+    {
+        //局部量 本地函数里不能碰out参数 最后统一写回
+        int iMj = 0;
+        string? sVer = null;
+        string sTier = "default";
+        using var doc = JsonDocument.Parse(rgJson);
+        if (doc.RootElement.TryGetProperty("runtimeOptions", out JsonElement oRt))
+        {
+            if (oRt.TryGetProperty("tfm", out JsonElement oTfm) && oTfm.ValueKind == JsonValueKind.String)
+            {
+                string sT = oTfm.GetString() ?? "";
+                if (sT.StartsWith("net", StringComparison.OrdinalIgnoreCase))
+                {
+                    int k = 3;
+                    bool bAny = false;
+                    while (k < sT.Length && char.IsDigit(sT[k])) { iMj = iMj * 10 + (sT[k] - '0'); k++; bAny = true; }
+                    if (!bAny) iMj = 0;
+                }
+            }
+            void TakeFw(JsonElement oFw)
+            {
+                if (oFw.ValueKind != JsonValueKind.Object) return;
+                if (!oFw.TryGetProperty("version", out JsonElement oV) || oV.ValueKind != JsonValueKind.String) return;
+                string? sV = oV.GetString();
+                if (string.IsNullOrEmpty(sV)) return;
+                bool bCore = oFw.TryGetProperty("name", out JsonElement oNm) && oNm.ValueKind == JsonValueKind.String
+                    && (oNm.GetString() ?? "").Contains("Microsoft.NETCore.App", StringComparison.OrdinalIgnoreCase);
+                if (sVer == null || bCore) sVer = sV;
+                if (iMj == 0)
+                {
+                    int iDot = sV!.IndexOf('.');
+                    if (iDot > 0 && int.TryParse(sV.Substring(0, iDot), out int iOne)) iMj = iOne;
+                }
+            }
+            if (oRt.TryGetProperty("framework", out JsonElement oOne)) TakeFw(oOne);
+            if (oRt.TryGetProperty("frameworks", out JsonElement oMany) && oMany.ValueKind == JsonValueKind.Array)
+                foreach (JsonElement oFw in oMany.EnumerateArray()) TakeFw(oFw);
+            if (oRt.TryGetProperty("configProperties", out JsonElement oCfg) && oCfg.ValueKind == JsonValueKind.Object
+                && oCfg.TryGetProperty("System.Runtime.TieredCompilation", out JsonElement oT) && oT.ValueKind == JsonValueKind.False)
+                sTier = "off";
+        }
+        iMajor = iMj; sVersion = sVer; sTiered = sTier;
+        return sVersion != null || iMajor > 0;
     }
 
     private bool FindRtcEntry(byte[] rg, out int iOfs, out int iSize, out int iCsz)//定位单文件bundle里的runtimeconfig成员
@@ -258,7 +391,10 @@ internal class PeWriter
             ReadU8(rg, ref iPos);
             string sName = ReadStr(rg, ref iPos);
             if (!sName.EndsWith(".runtimeconfig.json", StringComparison.OrdinalIgnoreCase)) continue;
-            long lAbs = iDataStart + lRel;
+            //条目表里的偏移是绝对文件偏移SDK apphost与本仓重建同一约定 读时按绝对解释
+            //绝对解释越界时再试相对解释 将来某版宿主换成相对偏移也不会静默退化成0
+            long lAbs = lRel;
+            if (lAbs < 0 || lAbs >= rg.Length) lAbs = iDataStart + lRel;
             if (lAbs < 0 || lAbs >= rg.Length) return false;
             int iLen = (int)(lCsz > 0 && lCsz < lSz ? lCsz : lSz);
             if (iLen <= 0 || lAbs + iLen > rg.Length) return false;
@@ -774,22 +910,21 @@ internal class PeWriter
             RebaseRes(uResRvaNew - uResRva);//资源树data entry存绝对RVA 换段须整体平移
         }
         uint uNewImg = bRes
-            ? AlignUp(uResRvaNew + (uint)rgRes!.Length, uSectAlign)
+            ? AlignUp(uResRvaNew + uResLen, uSectAlign)
             : AlignUp(uLamAppRva + (uint)rgLamApp.Length, uSectAlign);
 
         byte[] rgHdrs = new byte[uNewHdrs];
         Array.Copy(rgPayload, 0, rgHdrs, 0, Math.Min(uSizeOfHdrs, rgHdrs.Length));
-        PeScrub.Scrub(rgHdrs);//产物头部同样清除构建特征
+        //native产物外层头不清痕 这块头区是从打包输入的宿主apphost整块拷来的 字段不归我们 清它不改尺寸也不改确定性
+        //真正必须清的只有因丢节而失配的16个数据目录 外层头清痕另算
         //桩没有重定位表与LoadConfig 这几个标志位置零
-        //0x0040 DYNAMIC_BASE 0x0020 HIGH_ENTROPY_VA 0x4000 GUARD_CF
         ushort usDllChar = (ushort)(BitConverter.ToUInt16(rgHdrs, iOptOff + 70) & ~(0x0040 | 0x0020 | 0x4000));
         BitConverter.GetBytes(usDllChar).CopyTo(rgHdrs, iOptOff + 70);
 
         BitConverter.GetBytes((ushort)(bRes ? 3 : 2)).CopyTo(rgHdrs, iPeOff + 6);
         BitConverter.GetBytes(uNewImg).CopyTo(rgHdrs, iOptOff + 56);
         BitConverter.GetBytes(uStubRva + uStubEntryOff).CopyTo(rgHdrs, iOptOff + 16);
-        //桩没有导入表与重定位表 入口自行解析
-        Array.Clear(rgHdrs, iOptOff + 0x70, Math.Min(16 * 8, rgHdrs.Length - (iOptOff + 0x70)));
+        Array.Clear(rgHdrs, iOptOff + 0x70, Math.Min(16 * 8, rgHdrs.Length - (iOptOff + 0x70)));//桩没有导入表与重定位表 入口自行解析
         if (bRes)
         {
             BitConverter.GetBytes(uResRvaNew + uResDirOff).CopyTo(rgHdrs, iOptOff + 0x70 + 2 * 8);
@@ -801,7 +936,7 @@ internal class PeWriter
         Array.Clear(rgHdrs, iSecOff, Math.Min(usSecCount * 40, rgHdrs.Length - iSecOff));
         WriteSection(rgHdrs, iSecOff, ".stub", uStubRva, (uint)rgStubCode.Length, uStubRawSize, uStubRaw);
         WriteSection(rgHdrs, iSecOff + 40, ".lamapp", uLamAppRva, (uint)rgLamApp.Length, uLamAppRawSize, uLamAppRaw);
-        if (bRes) WriteSection(rgHdrs, iSecOff + 80, ".rsrc", uResRvaNew, (uint)rgRes!.Length, AlignUp((uint)rgRes!.Length, uFileAlign), uResRaw);
+        if (bRes) WriteSection(rgHdrs, iSecOff + 80, ".rsrc", uResRvaNew, uResLen, AlignUp(uResLen, uFileAlign), uResRaw);
 
         using var fs = new FileStream(sOutPath, FileMode.Create);
         fs.Write(rgHdrs, 0, rgHdrs.Length);
@@ -821,23 +956,68 @@ internal class PeWriter
         if (bRes)
         {
             Pad(fs, (int)(uResRaw - (lBundleStart + rgBundleData.Length + rgNewHeader.Length)));
-            fs.Write(rgRes!, 0, rgRes!.Length);
+            fs.Write(rgRes!, 0, (int)uResLen);
         }
         fs.Flush(true);
+    }
+
+    internal static bool TryExtractRes(byte[] rgPe, out byte[]? rgOut, out uint uRva, out uint uLen, out uint uDirOff, out uint uDirSize)//从任意PE按DD2反查资源节并整节抽取 这是产物资源唯一的来源 返回false表示该PE没有资源节 属于允许的情形
+    {
+        rgOut = null; uRva = 0; uLen = 0; uDirOff = 0; uDirSize = 0;
+        int iPe = BitConverter.ToInt32(rgPe, 0x3C);
+        if (iPe <= 0 || iPe + 0x60 >= rgPe.Length || BitConverter.ToUInt32(rgPe, iPe) != 0x4550) return false;
+        ushort usCnt = BitConverter.ToUInt16(rgPe, iPe + 6);
+        ushort usOpt = BitConverter.ToUInt16(rgPe, iPe + 20);
+        int iS = iPe + 24 + usOpt;
+        int iOpt = iPe + 24;
+        uint uDirRva = BitConverter.ToUInt32(rgPe, iOpt + 0x70 + 2 * 8);//DD2是资源目录 每个数据目录8字节为RVA与Size
+        uDirSize = BitConverter.ToUInt32(rgPe, iOpt + 0x70 + 2 * 8 + 4);
+        if (uDirRva == 0 || uDirSize == 0) return false;
+        for (int i = 0; i < usCnt; i++)
+        {
+            int iOff = iS + i * 40;
+            uint ua = BitConverter.ToUInt32(rgPe, iOff + 12);
+            uint uv = BitConverter.ToUInt32(rgPe, iOff + 8);
+            uint ur = BitConverter.ToUInt32(rgPe, iOff + 20);
+            uint urs = BitConverter.ToUInt32(rgPe, iOff + 16);
+            if (ua == 0 || uDirRva < ua || uDirRva >= ua + Math.Max(uv, urs)) continue;
+            if (ur >= rgPe.Length) return false;
+            uRva = ua;
+            uLen = Math.Max(uv, urs);
+            uDirOff = uDirRva - uRva;
+            rgOut = new byte[uLen];
+            long lCopy = Math.Min(uLen, Math.Max(0, rgPe.Length - (int)ur));
+            Array.Copy(rgPe, (int)ur, rgOut, 0, (int)lCopy);
+            return true;
+        }
+        return false;
+    }
+
+    public void SetResourceOverride(byte[]? rgResIn, uint uRva, uint uDirOff, uint uDirSize)//离线重建用产物自身的资源节覆盖从载荷提取的结果 重建时的载荷载体是合成的提不出资源 旧产物无资源就传null
+    {
+        //三元组一致性DD2按RVA加目录偏移与Size落盘 越界组合必须当场拒绝
+        if (rgResIn != null && ((ulong)uDirOff + uDirSize > (ulong)rgResIn.Length))
+            throw new InvalidOperationException($"resource override is inconsistent: dirOff=0x{uDirOff:X} dirSize=0x{uDirSize:X} blob=0x{rgResIn.Length:X}");
+        rgRes = rgResIn;
+        uResRva = uRva;
+        uResLen = (uint)(rgResIn?.Length ?? 0);
+        uResDirOff = uDirOff;
+        uResDirSize = uDirSize;
     }
 
     private void RebaseRes(uint uDelta)//资源目录data entry存绝对RVA 换段后整体平移 目录内偏移相对不变
     {
         if (rgRes == null) return;
-        Walk(uResDirOff);
-        void Walk(uint uDirOff)
+        Walk(uResDirOff, 0);
+        void Walk(uint uDirOff, int iDepth)//两个分支都以资源目录基址为基准 子目录偏移与数据项偏移都相对它 另加深度上限以免畸形资源树爆栈
         {
+            if (iDepth > 8) throw new InvalidOperationException("resource directory nesting too deep (corrupt .rsrc?)");
             uint uN = (uint)(BitConverter.ToUInt16(rgRes, (int)uDirOff + 12) + BitConverter.ToUInt16(rgRes, (int)uDirOff + 14));
             for (uint i = 0; i < uN; i++)
             {
                 uint uEnt = uDirOff + 16 + i * 8;
                 uint uOff = BitConverter.ToUInt32(rgRes, (int)uEnt + 4);
-                if ((uOff & 0x80000000u) != 0) { Walk(uOff & 0x7FFFFFFFu); continue; }
+                if ((uOff & 0x80000000u) != 0) { Walk(uResDirOff + (uOff & 0x7FFFFFFFu), iDepth + 1); continue; }
                 uint uDe = uResDirOff + uOff;
                 BitConverter.GetBytes(BitConverter.ToUInt32(rgRes, (int)uDe) + uDelta).CopyTo(rgRes, (int)uDe);
             }
@@ -860,7 +1040,7 @@ internal class PeWriter
     #region 辅助
 
     private static uint AlignUp(uint uV, uint uA) => uA == 0 ? uV : (uV + uA - 1) & ~(uA - 1);
-    private static void Pad(FileStream fs, int iN) { while (iN-- > 0) fs.WriteByte(0); }
+    private static void Pad(FileStream fs, int iN) => PadCore(iN, n => fs.Write(rgZeroPad, 0, n));//块写
 
     private static uint ReadU32(byte[] rgB, ref int iPos) { uint uV = BitConverter.ToUInt32(rgB, iPos); iPos += 4; return uV; }
     private static int ReadI32(byte[] rgB, ref int iPos) { int iV = BitConverter.ToInt32(rgB, iPos); iPos += 4; return iV; }

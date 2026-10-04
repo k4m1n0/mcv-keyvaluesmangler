@@ -12,7 +12,6 @@ param(
     [string]$JitHook,
     [string]$Pheropod,
     [string]$Engine,
-    [string]$Seed,
     [string]$Mode,
     [string]$AppName = '',
     [string]$PackerTfm = '',
@@ -26,9 +25,13 @@ param(
     [string]$RtcRollForward = '',
     [string]$RtcTiered = '',
     [string]$Escrow = '',
+    [string]$EscrowPubKey = '',
+    [string]$EscrowKey = '',
+    [string]$Key = '',
+    [string]$KeyFile = '',
+    [string]$SeedHex = '',
     [string]$Replay = '',
-    # plain manifest, a reader can take vmSeed without LAMARR_ESCROW_PASS
-    [switch]$EscrowPlain,
+    [switch]$EscrowDiag,
     # dev-only code between ;%triage:begin and ;%triage:end, stripped from release builds
     [switch]$TriageKnobs,
     [switch]$SkipAsm,
@@ -36,7 +39,7 @@ param(
     [switch]$SlotMorph,
     [switch]$ForceAsm,
     [string]$SlotSeed = '5EED0001',
-    [string]$StubVersion = '',
+    [switch]$Pristine,
     [switch]$SkipResidue
 )
 $ErrorActionPreference = 'Stop'
@@ -70,52 +73,67 @@ if ($RC_EXE) {
     & $RC_EXE /nologo /fo $EMPTY_RES $sEmptyRc | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "rc(empty.res) failed ($LASTEXITCODE)" }
 }
-$STUB_RES = ''
-if ($StubVersion -and $RC_EXE) {
-    $rgVer = @($StubVersion.Split('.'))
-    while ($rgVer.Count -lt 4) { $rgVer += '0' }
-    $sVerResRc = Join-Path $OUT_DIR 'stub_ver.rc'
-    $sVerRes = Join-Path $OUT_DIR 'stub_ver.res'
-    $rgLine = @(
-        '1 VERSIONINFO'
-        ('FILEVERSION ' + ($rgVer[0..3] -join ','))
-        ('PRODUCTVERSION ' + ($rgVer[0..3] -join ','))
-        'FILEFLAGSMASK 0x3fL'
-        'FILEFLAGS 0x0L'
-        'FILEOS 0x40004L'
-        'FILETYPE 0x2L'
-        'FILESUBTYPE 0x0L'
-        'BEGIN'
-        '  BLOCK "StringFileInfo"'
-        '  BEGIN'
-        '    BLOCK "040904b0"'
-        '    BEGIN'
-        '      VALUE "CompanyName", "LamarrPacker"'
-        '      VALUE "FileDescription", "LamarrPacker"'
-        ('      VALUE "FileVersion", "' + $StubVersion + '"')
-        '      VALUE "InternalName", "lamarr_stub"'
-        '      VALUE "OriginalFilename", "lamarr_stub.dll"'
-        '      VALUE "ProductName", "LamarrPacker"'
-        ('      VALUE "ProductVersion", "' + $StubVersion + '"')
-        '    END'
-        '  END'
-        '  BLOCK "VarFileInfo"'
-        '  BEGIN'
-        '    VALUE "Translation", 0x409, 1200'
-        '  END'
-        'END'
-    )
-    Set-Content -Encoding Ascii -Path $sVerResRc -Value $rgLine
-    & $RC_EXE /nologo /fo $sVerRes $sVerResRc | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "rc(stub_ver.res) failed ($LASTEXITCODE)" }
-    $STUB_RES = $sVerRes
-}
 
-# seeds derive from the run seed, a new release seed yields new native code
-# no implicit random seed: with -Seed omitted the build falls back to a fixed one so it stays byte reproducible
-if (!$Seed) { $Seed = '5EED000100000000'; Write-Host "-- Seed not given, using the fixed fallback $Seed (pass -Seed to make a release unique)" }
+$bKeyArgGiven = [bool]$Key
+if ($KeyFile -and $bKeyArgGiven) { throw 'build_asm.ps1: -Key and -KeyFile are mutually exclusive (pass exactly one)' }
+$bKeyFallback = $false
+if ($KeyFile -and -not $Key) {
+    $rgKeyLn = @(Get-Content -Path $KeyFile -ErrorAction SilentlyContinue)
+    $Key = @($rgKeyLn | Where-Object { $_ -match '^\s*[0-9A-Fa-f]{64}\s*$' })[0]
+    if (-not $Key) {
+        $mKey = [regex]::Match(($rgKeyLn -join "`n"), '(?i)(?<![0-9A-F])[0-9A-F]{64}(?![0-9A-F])')
+        if ($mKey.Success) { $Key = $mKey.Value }
+    }
+    if (-not $Key) { throw ('build_asm.ps1: -KeyFile has no 64-hex key (LAMARR-KEY tagged or bare): ' + $KeyFile) }
+    $Key = $Key.Trim()
+}
+if ($Key -and $SeedHex) { throw 'build_asm.ps1: -Key/-KeyFile and -SeedHex are mutually exclusive (K = identity/sealing, S = shape only)' }
+if ($Replay -and $Key) { throw 'build_asm.ps1: -Replay must not be combined with -Key/-KeyFile (a reproduction involves no K)' }
+if ($SeedHex -and $SeedHex -notmatch '^[0-9A-Fa-f]{16}$') { throw 'build_asm.ps1: -SeedHex must be 16 hex chars (the escrow vmSeed)' }
+if (-not $SeedHex -and ($Replay -or $Key)) {
+    if ($Replay -and -not $EscrowKey) { throw 'build_asm.ps1: -Replay needs -EscrowKey <escrow private key file> (see Lamarr_VM_Design_M1.md section 16)' }
+    if (!$PackerTfm) {
+        $sProjPk = Join-Path $PSScriptRoot '..\Packer\Packer.csproj'
+        if (Test-Path $sProjPk) { $PackerTfm = (get_msbuild_prop $sProjPk @('PackerTfm')).PackerTfm }
+        if (!$PackerTfm) {
+            $rgGenPk = @(Get-ChildItem -Path (Join-Path $PSScriptRoot '..\Packer\bin\Release') -Filter 'LamarrPacker.exe' -Recurse -File -ErrorAction SilentlyContinue)
+            if ($rgGenPk.Count -eq 1) { $PackerTfm = Split-Path (Split-Path $rgGenPk[0].FullName -Parent) -Leaf }
+        }
+        if (!$PackerTfm) { throw 'shape seed: packer TFM unresolved, pass -PackerTfm <tfm>' }
+    }
+    $sGenPk = Join-Path $PSScriptRoot "..\Packer\bin\Release\$PackerTfm\LamarrPacker.exe"
+    if (!(Test-Path $sGenPk)) { throw ('shape seed: packer not built: ' + $sGenPk) }
+    if ($Replay) {
+        $sSeedRaw = ''
+        for ($iTry = 0; $iTry -lt 3 -and [string]::IsNullOrEmpty($sSeedRaw); $iTry++) {
+            $sSeedRaw = (& $sGenPk '--internal' 'shape' '--of-escrow' $Replay '--escrow-priv' $EscrowKey 2>$null | Out-String)
+            if ($LASTEXITCODE -ne 0) { $sSeedRaw = ''; Start-Sleep -Milliseconds 400 }
+        }
+        $rgSeedLn = @(($sSeedRaw -split "`r?`n") | Where-Object { $_ -and -not $_.TrimStart().StartsWith('[') })
+        $SeedHex = ''
+        if ($rgSeedLn.Count -gt 0) { $SeedHex = $rgSeedLn[0].Trim() }
+        if ([string]::IsNullOrEmpty($SeedHex)) { throw ('-Replay: replay-seed failed for ' + $Replay) }
+        if ($SeedHex -notmatch '^[0-9A-Fa-f]{16}$') { throw ('-Replay: packer output is not a clean 16-hex seed line (got ''{0}''): see Lamarr_VM_Design_M1.md section 17.7 example 4' -f $SeedHex) }
+        Write-Host "-- Replay: shape seed S=$SeedHex extracted from the escrow (K not used anywhere)"
+    }
+    else {
+        $sSeedRaw = ''
+        for ($iTry = 0; $iTry -lt 3 -and [string]::IsNullOrEmpty($sSeedRaw); $iTry++) {
+            $sSeedRaw = (& $sGenPk '--internal' 'shape' '--of-key' $Key 2>$null | Out-String)
+            if ($LASTEXITCODE -ne 0) { $sSeedRaw = ''; Start-Sleep -Milliseconds 400 }
+        }
+        $rgSeedLn = @(($sSeedRaw -split "`r?`n") | Where-Object { $_ -and -not $_.TrimStart().StartsWith('[') })
+        $SeedHex = ''
+        if ($rgSeedLn.Count -gt 0) { $SeedHex = $rgSeedLn[0].Trim() }
+        if ([string]::IsNullOrEmpty($SeedHex)) { throw 'seed-of-key failed' }
+        if ($SeedHex -notmatch '^[0-9A-Fa-f]{16}$') { throw ('shape seed from K is not a clean 16-hex line (got ''{0}''): see Lamarr_VM_Design_M1.md section 17.7 example 4' -f $SeedHex) }
+        Write-Host "-- Shape seed S=$SeedHex derived from K (the same string the replay side reads out of the escrow)"
+    }
+}
+if ($SeedHex) { $ShapeTok = $SeedHex }
+else { $bKeyFallback = $true; $Key = '5EED0001000000005EED0001000000005EED0001000000005EED000100000000'; $ShapeTok = $Key; Write-Host "-- Key/shape seed not given: the fixed non-secret value is used for the morph/name *shape* only"; Write-Host "--   -> --key is NOT passed, so the packer generates a random K (not reproducible; with -Escrow, replayable only via that escrow)" }
 $MORPH_BASE = [int64]7
-foreach ($ch in $Seed.ToCharArray()) { $MORPH_BASE = (($MORPH_BASE * 131) + [int][char]$ch) % 2147483647 }
+foreach ($ch in $ShapeTok.ToCharArray()) { $MORPH_BASE = (($MORPH_BASE * 131) + [int][char]$ch) % 2147483647 }
 function morph_seed([string]$tag) {
     $h = $MORPH_BASE
     foreach ($ch in $tag.ToCharArray()) { $h = (($h * 131) + [int][char]$ch) % 2147483647 }
@@ -125,7 +143,7 @@ function morph_seed([string]$tag) {
 # names must derive from the seed or two runs differ byte for byte
 function seed_token([string]$tag) {
     [uint64]$h = 2166136261
-    foreach ($b in [Text.Encoding]::ASCII.GetBytes("$Seed|$tag")) { $h = (($h -bxor $b) * 16777619) % 4294967296 }
+    foreach ($b in [Text.Encoding]::ASCII.GetBytes("$ShapeTok|$tag")) { $h = (($h -bxor $b) * 16777619) % 4294967296 }
     return $h.ToString('x8')
 }
 
@@ -261,8 +279,8 @@ if ($Pack -or $Configure) {
     if ($Configure) {
         $sRepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
         $sPayloadProj = get_payload_project $sRepoRoot
-        $sCfgArgs = @('-D', $sRepoRoot, '-Configure', '-Target', $sPayloadProj, '--mode', $Packer)
-        if ($Fresh) { $sCfgArgs += '-Fresh' }
+        $sCfgArgs = @('--workdir', $sRepoRoot, '--configure', '--target', $sPayloadProj, '--mode', $Packer)
+        if ($Fresh) { $sCfgArgs += '--fresh' }
         & (Join-Path $PSScriptRoot "..\Packer\bin\Release\$PackerTfm\LamarrPacker.exe") @sCfgArgs
         exit $LASTEXITCODE
     }
@@ -278,7 +296,7 @@ if (!$K32_LIB) { throw 'kernel32.lib not found (Windows SDK needed)' }
 
 Write-Host "-- Found ml64: $ML64_EXE`n-- OutDir: $OUT_DIR"
 
-function build_stub_dll([string]$AsmName, [string]$DllName, [switch]$Page, [string]$Exports, [string]$RenameExport, [switch]$RenameExports, [switch]$Nodefaultlib, [string[]]$ExportRaw = @(), [string]$TempTag = '', [switch]$Variant, [string]$Res = '')
+function build_stub_dll([string]$AsmName, [string]$DllName, [switch]$Page, [string]$Exports, [string]$RenameExport, [switch]$RenameExports, [switch]$Nodefaultlib, [string[]]$ExportRaw = @(), [string]$TempTag = '', [switch]$Variant, [string]$Res = '', [switch]$Pristine)
 {
     $ASM_PATH = Join-Path $ASM_DIR $AsmName
     if (!(Test-Path $ASM_PATH)) { throw "asm not found: $ASM_PATH" }
@@ -287,7 +305,8 @@ function build_stub_dll([string]$AsmName, [string]$DllName, [switch]$Page, [stri
     $DLL_FILE = Join-Path $OUT_DIR $DllName
     $rgTmp = @()
     $SRC_FILE = $ASM_PATH
-    $bPristine = ($NoMorph -or $Packer -ne 'antheil')
+    $bPristine = ($NoMorph -or $Packer -ne 'antheil' -or $Pristine)
+    if ($bPristine -and $Variant) { Write-Host "-- pristine target: no per-seed morph, seed-free output name" }
     if ($Variant -and -not $bPristine) {
         $SRC_FILE = Join-Path $OUT_DIR ($sBase + '_var.asm')
         invoke_morph -AsmPath $ASM_PATH -OutPath $SRC_FILE -Seed (morph_seed $DllName)
@@ -352,7 +371,7 @@ function build_stub_dll([string]$AsmName, [string]$DllName, [switch]$Page, [stri
 
 if (-not $SkipAsm)
 {
-build_stub_dll 'lamarr_stub.asm' 'lamarr_stub.dll' -Variant -Res $STUB_RES
+build_stub_dll 'lamarr_stub.asm' 'lamarr_stub.dll' -Variant -Pristine
 if ($Packer -eq 'antheil')
 {
     build_stub_dll 'antheil_stub.asm' 'antheil_stub.dll' -Variant
@@ -370,6 +389,19 @@ if ($Pack)
     $PACKER_EXE = Join-Path $PSScriptRoot "..\Packer\bin\Release\$PackerTfm\LamarrPacker.exe"
     if (!(Test-Path $PACKER_EXE)) { throw "packer not found: $PACKER_EXE (build it with -p:PackerTfm=$PackerTfm or pass -PackerTfm matching the TFM it was built for)" }
 
+    $bPackTri = $false
+    $sVerTxt = (& $PACKER_EXE '--version' 2>$null | Out-String)
+    if ($LASTEXITCODE -eq 0) {
+        foreach ($sLn in ($sVerTxt -split "`n")) { if ($sLn -match '^\s*triage\s*:\s*([01])') { $bPackTri = ($Matches[1] -eq '1') } }
+        if ($TriageKnobs -and -not $bPackTri) {
+            throw 'packer is a RELEASE build (triage=0) but -TriageKnobs was requested: the triage knobs would be silently ignored. Rebuild with -p:LamarrAntheil=1 -p:LamarrTriageKnobs=1 (see Lamarr_VM_Design_M1.md section 18.7-2)'
+        }
+        if (-not $TriageKnobs -and $bPackTri) {
+            Write-Host '[triage] WARNING the packer is a TRIAGE build (triage=1): this artifact is not a release-shaped artifact'
+        }
+    }
+    else { Write-Host ('[triage] WARNING cannot read the packer triage state (--version rc=' + $LASTEXITCODE + '), skipping the pairing check') }
+
     if (!$SkipAsm -and !$ForceAsm) {
         $rgOut = @('lamarr_stub.dll', 'antheil_stub.dll', 'Iamdec.dll', 'z0.dll', 'jithook.dll') |
             ForEach-Object { Join-Path $OUT_DIR $_ } | Where-Object { Test-Path $_ }
@@ -386,7 +418,8 @@ if ($Pack)
             $sPath = Join-Path $OUT_DIR $sDll
             if (!(Test-Path $sPath)) { continue }
             Write-Host ("-- Slot morph: " + $sDll)
-            & $PACKER_EXE '--slot-morph' $sPath '--seed' $SlotSeed '--tag' $sDll '--check'
+            if ($SeedHex) { & $PACKER_EXE '--internal' 'slot-morph' $sPath '--shape' $ShapeTok '--tag' $sDll '--check' }
+            else { & $PACKER_EXE '--internal' 'slot-morph' $sPath '--of-key' $Key '--tag' $sDll '--check' }
             if ($LASTEXITCODE -ne 0) { throw ("slot morph failed on " + $sDll) }
         }
     }
@@ -399,7 +432,7 @@ if ($Pack)
         else { throw '-Output required when -Pack is used without -PublishDir' }
     }
 
-    $PACK_ARGS = @('--stub', $STUB_DLL, '--input', $InputPath, '--output', $Output)
+    $PACK_ARGS = @($(if ($Replay) { '--replay' } else { '--pack' }), '--stub', $STUB_DLL, '--input', $InputPath, '--output', $Output)
     if ($EncryptDeps) { $PACK_ARGS += @('--encrypt-deps', $EncryptDeps) }
     if (!$MethodDict) { $m = Join-Path $ASM_DIR 'boot_method_names.txt'; if (Test-Path $m) { $MethodDict = $m } }
     Write-Host "-- Method dict: $MethodDict"
@@ -411,15 +444,17 @@ if ($Pack)
     if ($JitHook) { $PACK_ARGS += @('--jithook', $JitHook) }
     if ($Pheropod) { $PACK_ARGS += @('--pheropod', $Pheropod) }
     if ($Engine) { $PACK_ARGS += @('--engine', $Engine) }
-    if ($Seed) { $PACK_ARGS += @('--seed', $Seed) }
+    if ($Replay) { $PACK_ARGS += @('--escrow', $Replay); if ($EscrowKey) { $PACK_ARGS += @('--escrow-priv', $EscrowKey) } }
+    elseif ($KeyFile) { $PACK_ARGS += @('--key-file', $KeyFile) }
+    elseif ($Key -and -not $bKeyFallback) { $PACK_ARGS += @('--key', $Key) }
     if ($Mode)    { $PACK_ARGS += @('--mode', $Mode) }
     if ($RtcVersion) { $PACK_ARGS += @('--rtc-version', $RtcVersion) }
     if ($PayloadMajor) { $PACK_ARGS += @('--payload-major', $PayloadMajor) }
     if ($RtcRollForward) { $PACK_ARGS += @('--rtc-rollforward', $RtcRollForward) }
     if ($RtcTiered) { $PACK_ARGS += @('--rtc-tiered', $RtcTiered) }
-    if ($Escrow) { $PACK_ARGS += @('--escrow', $Escrow) }
-    if ($EscrowPlain) { $PACK_ARGS += @('--escrowPlain') }
-    if ($Replay) { $PACK_ARGS += @('--replay', $Replay) }
+    if ($Escrow) { if ($Replay) { $PACK_ARGS += @('--escrow-out', $Escrow) } else { $PACK_ARGS += @('--escrow', $Escrow) } }
+    if ($EscrowPubKey) { $PACK_ARGS += @('--escrow-pub', $EscrowPubKey) }
+    if ($EscrowDiag) { $PACK_ARGS += @('--diag') }
 
     $RETRY_LOG = Join-Path $env:TEMP 'lamarr_pack_retry.log'
     $EXIT_CODE = 1

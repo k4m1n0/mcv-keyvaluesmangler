@@ -34,7 +34,6 @@ internal partial class PeWriterAntheil
             Console.WriteLine("[pheropod] mutate no byte changed: the input already carries this seed shape");
     }
 
-
     private static bool Z0Pe(byte[] rgPe, out int iPe, out int iOpt, out bool bPlus)
     {
         iPe = 0; iOpt = 0; bPlus = false;
@@ -274,28 +273,28 @@ internal partial class PeWriterAntheil
             return rgZ0Pool;
         var rg = new List<byte[]>
         {
-            new byte[] { 0x90 },                                          // nop
+            new byte[] { 0x90 },                                          //nop
             new byte[] { 0x66, 0x90 },
-            new byte[] { 0x0F, 0x1F, 0x00 },                              // 规范多字节nop 长度1到9
+            new byte[] { 0x0F, 0x1F, 0x00 },                              //规范多字节nop 长度1到9
             new byte[] { 0x0F, 0x1F, 0x40, 0x00 },
             new byte[] { 0x0F, 0x1F, 0x44, 0x00, 0x00 },
             new byte[] { 0x66, 0x0F, 0x1F, 0x44, 0x00, 0x00 },
             new byte[] { 0x0F, 0x1F, 0x80, 0x00, 0x00, 0x00, 0x00 },
             new byte[] { 0x0F, 0x1F, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00 },
             new byte[] { 0x66, 0x0F, 0x1F, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00 },
-            new byte[] { 0x66, 0x66, 0x90 },                              // 冗余前缀nop
+            new byte[] { 0x66, 0x66, 0x90 },                              //冗余前缀nop
             new byte[] { 0x66, 0x66, 0x66, 0x90 },
             new byte[] { 0x66, 0x66, 0x66, 0x66, 0x90 },
         };
         for (int i = 0; i < 16; i++)
         {
-            byte uRex = (byte)(i >= 8 ? 0x4D : 0x48);// REX.W 加 r8以上需要的 R 与 B
+            byte uRex = (byte)(i >= 8 ? 0x4D : 0x48);//REX.W 加 r8以上需要的 R 与 B
             byte uReg = (byte)(i & 7);
             byte uMod = (byte)(0xC0 | (uReg << 3) | uReg);
-            rg.Add(new byte[] { uRex, 0x89, uMod });// mov rX,rX
-            rg.Add(new byte[] { uRex, 0x8B, uMod });// 同一语义的另一种编码
-            rg.Add(new byte[] { uRex, 0x87, uMod });// xchg rX,rX 寄存器形式不访存
-            if (uReg != 4 && uReg != 5)             // lea 需要内存操作数 mod=00 时 rsp rbp 不可直接寻址
+            rg.Add(new byte[] { uRex, 0x89, uMod });//mov rX,rX
+            rg.Add(new byte[] { uRex, 0x8B, uMod });//同一语义的另一种编码
+            rg.Add(new byte[] { uRex, 0x87, uMod });//xchg rX,rX 寄存器形式不访存
+            if (uReg != 4 && uReg != 5)             //lea 需要内存操作数 mod=00 时 rsp rbp 不可直接寻址
                 rg.Add(new byte[] { uRex, 0x8D, (byte)((uReg << 3) | uReg) });
         }
         rgZ0Pool = rg.ToArray();
@@ -463,7 +462,7 @@ internal partial class PeWriterAntheil
         for (int i = 0; i < iN; i += 2) uSum += BitConverter.ToUInt16(rgPe, i);
         if ((rgPe.Length & 1) != 0) uSum += rgPe[rgPe.Length - 1];
         for (int k = 0; k < 3; k++) uSum = (uSum & 0xFFFF) + (uSum >> 16);
-        while (uSum > 0xFFFF) uSum = (uSum & 0xFFFF) + (uSum >> 16);//折到不再进位 固定折三次会把进位丢掉
+        while (uSum > 0xFFFF) uSum = (uSum & 0xFFFF) + (uSum >> 16);//折到无进位 固定折三次会把进位丢掉
         uint uCk = (uint)uSum + (uint)rgPe.Length;
         Buffer.BlockCopy(BitConverter.GetBytes(uCk), 0, rgPe, iCk, 4);
     }
